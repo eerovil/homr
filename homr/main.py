@@ -41,6 +41,7 @@ from homr.staff_parsing import parse_staffs
 from homr.staff_position_save_load import load_staff_positions, save_staff_positions
 from homr.title_detection import detect_title, download_ocr_weights
 from homr.transformer.configs import Config, default_config
+from homr.transformer.vocabulary import EncodedSymbol
 from homr.type_definitions import NDArray
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -168,13 +169,11 @@ class ProcessingConfig:
     coreml_encoder: bool
 
 
-def process_image(
+def parse_image(
     image_path: str,
     config: ProcessingConfig,
-    xml_generator_args: XmlGeneratorArguments,
-) -> None:
+) -> tuple[list[list[EncodedSymbol]], str]:
     eprint("Processing " + image_path)
-    xml_file = replace_extension(image_path, ".musicxml")
     debug_cleanup: Debug | None = None
     try:
         if config.read_staff_positions:
@@ -188,6 +187,7 @@ def process_image(
                 debug, image, staff_position_files, config.selected_staff
             )
             title = ""
+            title_future = None
         else:
             multi_staffs, image, debug, title_future = detect_staffs_in_image(image_path, config)
         debug_cleanup = debug
@@ -204,12 +204,9 @@ def process_image(
             config=transformer_config,
         )
 
-        title = title_future.result(60)
+        if title_future is not None:
+            title = title_future.result(60)
         eprint("Found title:", title)
-
-        eprint("Writing XML", result_staffs)
-        xml = generate_xml(xml_generator_args, result_staffs, title)
-        xml.write(xml_file)
 
         eprint("Finished parsing " + str(len(result_staffs)) + " staves")
         teaser_file = replace_extension(image_path, "_teaser.png")
@@ -218,15 +215,131 @@ def process_image(
             save_staff_positions(multi_staffs, image.shape, staff_position_files)
         debug.write_teaser(teaser_file, multi_staffs)
         debug.clean_debug_files_from_previous_runs()
+        return result_staffs, title
+    finally:
+        if debug_cleanup is not None:
+            debug_cleanup.clean_debug_files_from_previous_runs()
 
+
+def combine_page_staffs(
+    page_staffs: list[list[list[EncodedSymbol]]], image_paths: list[str]
+) -> list[list[EncodedSymbol]]:
+    if not page_staffs:
+        raise InvalidProgramArgumentException("No pages provided")
+
+    expected_parts = len(page_staffs[0])
+    if expected_parts == 0:
+        raise InvalidProgramArgumentException(f"Page 1 ({image_paths[0]}) produced no parts")
+    joining_pages = len(page_staffs) > 1
+    expected_topology = _page_topology(page_staffs[0])
+    combined: list[list[EncodedSymbol]] = [[] for _ in range(expected_parts)]
+    for page_number, staffs in enumerate(page_staffs, start=1):
+        if len(staffs) != expected_parts:
+            raise InvalidProgramArgumentException(
+                f"Page {page_number} ({image_paths[page_number - 1]}) produced {len(staffs)} "
+                f"parts, but page 1 produced {expected_parts}; refusing to join them"
+            )
+        topology = _page_topology(staffs)
+        if topology != expected_topology:
+            raise InvalidProgramArgumentException(
+                f"Page {page_number} ({image_paths[page_number - 1]}) has part topology "
+                f"{topology}, but page 1 has {expected_topology}; refusing to join them"
+            )
+        if joining_pages:
+            empty_parts = [
+                part_number
+                for part_number, staff in enumerate(staffs, start=1)
+                if not _has_musical_content(staff)
+            ]
+            if empty_parts:
+                raise InvalidProgramArgumentException(
+                    f"Page {page_number} ({image_paths[page_number - 1]}) produced no music "
+                    f"for parts {empty_parts}; refusing to join an incomplete page"
+                )
+            expected_barlines = _barline_sequence(staffs[0])
+            for part_number, staff in enumerate(staffs[1:], start=2):
+                barlines = _barline_sequence(staff)
+                if barlines != expected_barlines:
+                    raise InvalidProgramArgumentException(
+                        f"Page {page_number} ({image_paths[page_number - 1]}) part "
+                        f"{part_number} has barlines {barlines}, but part 1 has "
+                        f"{expected_barlines}; refusing to join misaligned parts"
+                    )
+        for part_number, staff in enumerate(staffs):
+            page_staff = list(staff)
+            if joining_pages and not _ends_at_barline(page_staff):
+                raise InvalidProgramArgumentException(
+                    f"Page {page_number} ({image_paths[page_number - 1]}) part "
+                    f"{part_number + 1} does not end at a barline; refusing to guess "
+                    "at the page edge"
+                )
+            if joining_pages and page_number < len(page_staffs):
+                if not page_staff or page_staff[-1].rhythm != "newline":
+                    raise InvalidProgramArgumentException(
+                        f"Page {page_number} ({image_paths[page_number - 1]}) part "
+                        f"{part_number + 1} has no final system break"
+                    )
+                page_staff[-1] = EncodedSymbol("pagebreak")
+            combined[part_number].extend(page_staff)
+    return combined
+
+
+def _page_topology(staffs: list[list[EncodedSymbol]]) -> tuple[bool, ...]:
+    return tuple(any(symbol.position == "lower" for symbol in staff) for staff in staffs)
+
+
+def _has_musical_content(staff: list[EncodedSymbol]) -> bool:
+    return any(symbol.rhythm.startswith(("note", "rest")) for symbol in staff)
+
+
+def _barline_sequence(staff: list[EncodedSymbol]) -> list[str]:
+    return [
+        symbol.rhythm
+        for symbol in staff
+        if "barline" in symbol.rhythm or symbol.rhythm.startswith("repeat")
+    ]
+
+
+def _ends_at_barline(staff: list[EncodedSymbol]) -> bool:
+    for symbol in reversed(staff):
+        if symbol.rhythm == "newline":
+            continue
+        return "barline" in symbol.rhythm or symbol.rhythm.startswith("repeatEnd")
+    return False
+
+
+def process_images(
+    image_paths: list[str],
+    config: ProcessingConfig,
+    xml_generator_args: XmlGeneratorArguments,
+) -> None:
+    if not image_paths:
+        raise InvalidProgramArgumentException("No pages provided")
+
+    xml_file = replace_extension(image_paths[0], ".musicxml")
+    try:
+        parsed_pages = [parse_image(image_path, config) for image_path in image_paths]
+        result_staffs = combine_page_staffs(
+            [staffs for staffs, _title in parsed_pages], image_paths
+        )
+        title = parsed_pages[0][1]
+
+        eprint("Writing XML", result_staffs)
+        xml = generate_xml(xml_generator_args, result_staffs, title)
+        xml.write(xml_file)
         eprint("Result was written to", xml_file)
     except:
         if os.path.exists(xml_file):
             os.remove(xml_file)
         raise
-    finally:
-        if debug_cleanup is not None:
-            debug_cleanup.clean_debug_files_from_previous_runs()
+
+
+def process_image(
+    image_path: str,
+    config: ProcessingConfig,
+    xml_generator_args: XmlGeneratorArguments,
+) -> None:
+    process_images([image_path], config, xml_generator_args)
 
 
 def detect_staffs_in_image(
@@ -354,7 +467,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="homer", description="An optical music recognition (OMR) system"
     )
-    parser.add_argument("image", type=str, nargs="?", help="Path to the image to process")
+    parser.add_argument(
+        "images",
+        type=str,
+        nargs="*",
+        help="Ordered paths to pages of one score, or one directory to process as separate scores",
+    )
     parser.add_argument(
         "--init",
         action="store_true",
@@ -443,18 +561,18 @@ def main() -> None:
     else:
         ort.set_default_logger_severity(3)
 
-    if not args.image:
+    if not args.images:
         eprint("No image provided")
         parser.print_help()
         sys.exit(1)
-    elif os.path.isfile(args.image):
+    elif all(os.path.isfile(image) for image in args.images):
         try:
-            process_image(args.image, config, xml_generator_args)
+            process_images(args.images, config, xml_generator_args)
         except InvalidProgramArgumentException as e:
             eprint(str(e))
             sys.exit(2)
-    elif os.path.isdir(args.image):
-        image_files = get_all_image_files_in_folder(args.image)
+    elif len(args.images) == 1 and os.path.isdir(args.images[0]):
+        image_files = get_all_image_files_in_folder(args.images[0])
         eprint("Processing", len(image_files), "files:", image_files)
         error_files = []
         for image_file in image_files:
@@ -468,7 +586,7 @@ def main() -> None:
         if len(error_files) > 0:
             eprint("Errors occurred while processing the following files:", error_files)
     else:
-        eprint(f"{args.image} is not a valid file or directory")
+        eprint(f"{args.images} is not a valid list of image files or one directory")
         sys.exit(2)
 
 

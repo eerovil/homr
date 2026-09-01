@@ -19,7 +19,9 @@ You might also want to check out [Andromr](https://github.com/aicelen/Andromr), 
 The easiest way to get started is using `uvx` (`uv` must be installed). Note that is does not make use of the GPU.
 - `uvx homr <img>`
 - The resulting MusicXML file will be saved in the same directory as the input image
-- To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
+- This fork introduces ordered multi-page input: `uvx homr page-1.png page-2.png ...` writes
+  one score beside the first image. Incompatible part layouts or a page that does not end
+  at a recognized barline refuse the join instead of producing a plausible wrong score.
 
 ## Getting started (poetry)
 
@@ -30,7 +32,7 @@ The easiest way to get started is using `uvx` (`uv` must be installed). Note tha
   - Development: `poetry install`
 - Run the program using `poetry run homr <image>`
 - The resulting MusicXML file will be saved in the same directory as the input image
-- To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
+- This fork introduces ordered multi-page input: `poetry run homr page-1.png page-2.png ...`
 
 ## Example
 

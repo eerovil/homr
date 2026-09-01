@@ -185,6 +185,8 @@ def build_measures(
             is_last_measure = group_no == len(groups) - 1
             if not is_last_measure:
                 current_measure.add_child(mxl.XMLPrint(new_system="yes"))
+        elif rhythm == "pagebreak":
+            current_measure.add_child(mxl.XMLPrint(new_page="yes"))
         elif rhythm.startswith("clef"):
             attributes = build_or_get_attributes(current_measure, last_attributes, force_new=True)
             for should_be_clef in group.symbols:
