@@ -196,19 +196,20 @@ def process_image(
         transformer_config.use_gpu_inference = config.transformer_use_gpu
         transformer_config.use_coreml_encoder = config.coreml_encoder
 
-        result_staffs = parse_staffs(
+        parsed = parse_staffs(
             debug,
             multi_staffs,
             image,
             selected_staff=config.selected_staff,
             config=transformer_config,
         )
+        result_staffs = parsed.parts
 
         title = title_future.result(60)
         eprint("Found title:", title)
 
         eprint("Writing XML", result_staffs)
-        xml = generate_xml(xml_generator_args, result_staffs, title)
+        xml = generate_xml(xml_generator_args, result_staffs, title, parsed.system_sizes)
         xml.write(xml_file)
 
         eprint("Finished parsing " + str(len(result_staffs)) + " staves")

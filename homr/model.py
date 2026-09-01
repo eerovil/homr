@@ -525,3 +525,7 @@ class MultiStaff(DebugDrawable):
             staff.draw_onto_image(img, color)
         for connection in self.connections:
             connection.draw_onto_image(img, color)
+
+
+def have_same_staff_count(systems: list[MultiStaff]) -> bool:
+    return len({len(system.staffs) for system in systems}) <= 1

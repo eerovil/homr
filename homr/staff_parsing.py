@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
@@ -6,7 +7,7 @@ import numpy as np
 from homr import constants
 from homr.debug import Debug
 from homr.image_utils import crop_image_and_return_new_top
-from homr.model import MultiStaff, Staff
+from homr.model import MultiStaff, Staff, have_same_staff_count
 from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
@@ -16,39 +17,19 @@ from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
 
 
-def _have_all_the_same_number_of_staffs(staffs: list[MultiStaff]) -> bool:
-    for staff in staffs:
-        if len(staff.staffs) != len(staffs[0].staffs):
-            return False
-    return True
+@dataclass
+class ParsedStaffs:
+    """What was read off the page.
 
+    parts is one symbol stream per part, in the order they should be written out.
+    system_sizes is set only when the systems don't all hold the same number of
+    staffs: then a part covers a single staff of a single system, and the list
+    says how many parts each printed system contributed, so the reader can put
+    the system boundaries back.
+    """
 
-def _is_close_to_image_top_or_bottom(staff: MultiStaff, image: NDArray) -> bool:
-    tolerance = 50.0
-    closest_distance_to_top_or_bottom: list[float] = [
-        min(s.min_x, image.shape[0] - s.max_x) for s in staff.staffs
-    ]
-    return min(closest_distance_to_top_or_bottom) < tolerance
-
-
-def _ensure_same_number_of_staffs(staffs: list[MultiStaff], image: NDArray) -> list[MultiStaff]:
-    if _have_all_the_same_number_of_staffs(staffs):
-        return staffs
-    if len(staffs) > 2:
-        if _is_close_to_image_top_or_bottom(
-            staffs[0], image
-        ) and _have_all_the_same_number_of_staffs(staffs[1:]):
-            eprint("Removing first system from all voices, as it has a different number of staffs")
-            return staffs[1:]
-        if _is_close_to_image_top_or_bottom(
-            staffs[-1], image
-        ) and _have_all_the_same_number_of_staffs(staffs[:-1]):
-            eprint("Removing last system from all voices, as it has a different number of staffs")
-            return staffs[:-1]
-    result: list[MultiStaff] = []
-    for staff in staffs:
-        result.extend(staff.break_apart())
-    return sorted(result, key=lambda s: s.staffs[0].min_y)
+    parts: list[list[EncodedSymbol]]
+    system_sizes: list[int] | None = field(default=None)
 
 
 def _get_number_of_voices(staffs: list[MultiStaff]) -> int:
@@ -256,14 +237,56 @@ def parse_staff_image(
     return result
 
 
+def _parse_every_system_on_its_own(
+    debug: Debug, staffs: list[MultiStaff], image: NDArray, config: Config, selected_staff: int
+) -> ParsedStaffs:
+    """Read a score whose systems don't hold the same staffs.
+
+    Positional assembly is not available here: staff 1 of a two staff system and
+    staff 1 of a three staff system are different voices, so a part built out of
+    "index 1 everywhere" would be two voices spliced together. Nothing in the
+    image says which voice a system left out, so this reports what it saw - each
+    system's staffs, in order - and leaves the assembly to whoever knows the
+    music.
+    """
+    eprint(
+        "Systems hold different numbers of staffs:",
+        [len(system.staffs) for system in staffs],
+        "- reporting each system's staffs on their own",
+    )
+    parts: list[list[EncodedSymbol]] = []
+    system_sizes: list[int] = []
+    regions = StaffRegions(staffs)
+    i = 0
+    for system_index, system in enumerate(staffs):
+        if selected_staff >= 0 and system_index != selected_staff:
+            eprint("Ignoring system due to selected_staff argument", system_index)
+            i += len(system.staffs)
+            continue
+        parts_of_system = 0
+        for staff in system.staffs:
+            result_staff = parse_staff_image(debug, i, staff, image, regions, config)
+            i += 1
+            if len(result_staff) == 0:
+                eprint("Skipping empty staff", i - 1)
+                continue
+            result_staff.append(EncodedSymbol("newline"))
+            parts.append(remove_duplicated_symbols(result_staff))
+            parts_of_system += 1
+        if parts_of_system > 0:
+            system_sizes.append(parts_of_system)
+    return ParsedStaffs(parts, system_sizes)
+
+
 def parse_staffs(
     debug: Debug, staffs: list[MultiStaff], image: NDArray, config: Config, selected_staff: int = -1
-) -> list[list[EncodedSymbol]]:
+) -> ParsedStaffs:
     """
     Dewarps each staff and then runs it through an algorithm which extracts
     the rhythm and pitch information.
     """
-    staffs = _ensure_same_number_of_staffs(staffs, image)
+    if not have_same_staff_count(staffs):
+        return _parse_every_system_on_its_own(debug, staffs, image, config, selected_staff)
     # For simplicity we call every staff in a multi staff a voice,
     # even if it's part of a grand staff.
     number_of_voices = _get_number_of_voices(staffs)
@@ -288,4 +311,4 @@ def parse_staffs(
             i += 1
 
         voices.append(remove_duplicated_symbols(result_for_voice))
-    return voices
+    return ParsedStaffs(voices)

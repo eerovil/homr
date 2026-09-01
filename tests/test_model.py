@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from homr.bounding_boxes import RotatedBoundingBox
-from homr.model import MultiStaff, Staff, StaffPoint
+from homr.model import MultiStaff, Staff, StaffPoint, have_same_staff_count
 
 
 def make_staff(number: int) -> Staff:
@@ -90,3 +90,12 @@ class TestModel(unittest.TestCase):
         result = ms._select_grandstaffs([make_brace(0, 1, x_bias=500.0)])
 
         self.assertEqual(result, [])
+
+    def test_have_same_staff_count(self) -> None:
+        two = MultiStaff([make_staff(0), make_staff(1)], [])
+        three = MultiStaff([make_staff(0), make_staff(1), make_staff(2)], [])
+
+        self.assertTrue(have_same_staff_count([two, two, two]))
+        self.assertFalse(have_same_staff_count([two, three, two]))
+        self.assertTrue(have_same_staff_count([two]))
+        self.assertTrue(have_same_staff_count([]))

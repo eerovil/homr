@@ -4,7 +4,8 @@ import numpy as np
 from homr import constants
 from homr.bounding_boxes import RotatedBoundingBox
 from homr.debug import Debug
-from homr.model import MultiStaff, Staff
+from homr.model import MultiStaff, Staff, have_same_staff_count
+from homr.simple_logging import eprint
 from homr.type_definitions import NDArray
 
 
@@ -136,7 +137,22 @@ def _create_grandstaffs(
 ) -> list[MultiStaff]:
     if len(staffs) == 0:
         return staffs
-    return [s.create_grandstaffs(brace_dot) for s in staffs]
+    with_grandstaffs = [s.create_grandstaffs(brace_dot) for s in staffs]
+    if have_same_staff_count(with_grandstaffs):
+        return with_grandstaffs
+    # A pair is a guess made from brace-like ink, and getting it wrong welds two
+    # voices into one part - which reads as tidy music and is undetectable
+    # downstream. A page whose systems pair up differently is a page where that
+    # guess is not holding together, so the pairing is dropped and the brackets
+    # are believed. Nothing is lost by that: an unpaired grand staff is reported
+    # as the two staffs it is printed as.
+    eprint(
+        "Ignoring grand staff pairing:",
+        [len(s.staffs) for s in with_grandstaffs],
+        "staffs per system, while the brackets say",
+        [len(s.staffs) for s in staffs],
+    )
+    return staffs
 
 
 def find_braces_brackets_and_grand_staff_lines(
@@ -162,4 +178,6 @@ def find_braces_brackets_and_grand_staff_lines(
         if not any_connected_neighbor:
             result.append(MultiStaff([staff], []))
 
-    return _create_grandstaffs(_merge_multi_staff_if_they_share_a_staff(result), brace_dot)
+    connected = _merge_multi_staff_if_they_share_a_staff(result)
+    eprint("Brackets and braces connect the staffs as", [len(s.staffs) for s in connected])
+    return _create_grandstaffs(connected, brace_dot)

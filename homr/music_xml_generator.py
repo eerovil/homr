@@ -108,14 +108,17 @@ def build_identification() -> mxl.XMLIdentification:
 
 
 def generate_xml(
-    args: XmlGeneratorArguments, staffs: list[list[EncodedSymbol]], title: str
+    args: XmlGeneratorArguments,
+    staffs: list[list[EncodedSymbol]],
+    title: str,
+    system_sizes: list[int] | None = None,
 ) -> mxl.XMLElement:
     root = mxl.XMLScorePartwise(version="4.0")
     root.add_child(build_work(title))
     root.add_child(build_identification())
     root.add_child(build_defaults(args))
     has_two_staves_by_part = [_voice_has_two_staves(staff) for staff in staffs]
-    root.add_child(build_part_list(has_two_staves_by_part))
+    root.add_child(build_part_list(has_two_staves_by_part, system_sizes))
     for index, staff in enumerate(staffs):
         root.add_child(build_part(args, staff, index, has_two_staves_by_part[index]))
     return root
@@ -288,9 +291,36 @@ def _part_metadata(has_two_staves: bool) -> tuple[str, str, str, int]:
     return ("Voice", "Voice", "voice", 54)
 
 
-def build_part_list(has_two_staves_by_part: list[bool]) -> mxl.XMLPartList:
+def _build_system_group(number: int, type_: str) -> mxl.XMLPartGroup:
+    group = mxl.XMLPartGroup(type=type_, number=str(number))
+    if type_ == "start":
+        group.add_child(mxl.XMLGroupName(value_="System " + str(number)))
+        group.add_child(mxl.XMLGroupSymbol(value_="bracket"))
+    return group
+
+
+def _system_boundaries(system_sizes: list[int] | None) -> tuple[dict[int, int], dict[int, int]]:
+    """Which part each printed system starts and ends at, keyed by part index."""
+    if not system_sizes:
+        return {}, {}
+    starts: dict[int, int] = {}
+    ends: dict[int, int] = {}
+    part = 0
+    for number, size in enumerate(system_sizes, start=1):
+        starts[part] = number
+        part += size
+        ends[part - 1] = number
+    return starts, ends
+
+
+def build_part_list(
+    has_two_staves_by_part: list[bool], system_sizes: list[int] | None = None
+) -> mxl.XMLPartList:
     part_list = mxl.XMLPartList()
+    group_starts, group_ends = _system_boundaries(system_sizes)
     for part, has_two_staves in enumerate(has_two_staves_by_part):
+        if part in group_starts:
+            part_list.add_child(_build_system_group(group_starts[part], "start"))
         part_id = get_part_id(part)
         part_name_str, instrument_name_str, instrument_sound_str, midi_program = _part_metadata(
             has_two_staves
@@ -311,6 +341,8 @@ def build_part_list(has_two_staves_by_part: list[bool]) -> mxl.XMLPartList:
         midi_instrument.add_child(mxl.XMLPan(value_=0))
         score_part.add_child(midi_instrument)
         part_list.add_child(score_part)
+        if part in group_ends:
+            part_list.add_child(_build_system_group(group_ends[part], "stop"))
     return part_list
 
 
