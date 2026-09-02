@@ -3,7 +3,7 @@ import itertools
 import random
 import re
 from fractions import Fraction
-from typing import Iterable
+from typing import Any, Iterable
 
 from homr.simple_logging import eprint
 
@@ -289,6 +289,7 @@ class EncodedSymbol:
         slur: str = nonote,
         position: str = nonote,
         coordinates: tuple[float, float] | None = None,
+        confidence: dict[str, Any] | None = None,
     ) -> None:
         self.rhythm = rhythm
         self.pitch = pitch
@@ -303,6 +304,9 @@ class EncodedSymbol:
         # this ordering can be used to reject cases where attention-based coordinates
         # violate monotonic scan constraints and are therefore unreliable.
         self.coordinates = coordinates
+        # Optional decoder diagnostics. Keeping them on the symbol means the
+        # score post-processing decides which records reach the sidecar.
+        self.confidence = confidence
         self._duration: SymbolDuration | None = None
 
     def is_control_symbol(self) -> bool:

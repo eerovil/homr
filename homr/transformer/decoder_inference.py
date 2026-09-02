@@ -116,7 +116,11 @@ class ScoreDecoder:
             slursp = outputs[5].numpy()
             attention = outputs[6].numpy()
 
-            rhythm_sample = np.array([[rhythmsp[:, -1, :].argmax()]])
+            raw_rhythm_logits = rhythmsp[:, -1, :]
+            constrained_rhythm_logits = apply_rhythm_constraints(
+                raw_rhythm_logits, self.config.forbidden_rhythm_tokens
+            )
+            rhythm_sample = np.array([[constrained_rhythm_logits.argmax()]])
             pitch_sample = np.array([[pitchsp[:, -1, :].argmax()]])
             lift_sample = np.array([[liftsp[:, -1, :].argmax()]])
             articulation_sample = np.array([[articulationsp[:, -1, :].argmax()]])
@@ -133,6 +137,25 @@ class ScoreDecoder:
             if rhythm_sample[0][0] == self.eos_token:
                 break
 
+            confidence = None
+            if self.config.record_confidence:
+                confidence = {
+                    "rhythm": rhythm_confidence(
+                        raw_rhythm_logits,
+                        constrained_rhythm_logits,
+                        self.inv_rhythm_vocab,
+                    ),
+                    "pitch": confidence_for_logits(pitchsp[:, -1, :], self.inv_pitch_vocab),
+                    "lift": confidence_for_logits(liftsp[:, -1, :], self.inv_lift_vocab),
+                    "position": confidence_for_logits(
+                        positionsp[:, -1, :], self.inv_position_vocab
+                    ),
+                    "articulation": confidence_for_logits(
+                        articulationsp[:, -1, :], self.inv_articulation_vocab
+                    ),
+                    "slur": confidence_for_logits(slursp[:, -1, :], self.inv_slur_vocab),
+                }
+
             symbol = EncodedSymbol(
                 rhythm=rhythm_token[0],
                 pitch=pitch_token[0],
@@ -141,6 +164,7 @@ class ScoreDecoder:
                 slur=slur_token[0],
                 position=position_token[0],
                 coordinates=attention,
+                confidence=confidence,
             )
             symbols.append(symbol)
 
@@ -184,6 +208,46 @@ def detokenize(tokens: NDArray, vocab: dict[int, str]) -> list[str]:
     toks = [vocab[tok.item()] for tok in tokens]
     toks = [t for t in toks if t not in ("[BOS]", "[EOS]", "[PAD]")]
     return toks
+
+
+def confidence_for_logits(
+    logits: NDArray, vocab: dict[int, str], top_k: int = 3
+) -> dict[str, Any]:
+    """Return the selected token and its closest alternatives for one decoder head."""
+    scores = np.asarray(logits, dtype=np.float64).reshape(-1)
+    shifted = scores - np.max(scores)
+    probabilities = np.exp(shifted)
+    probabilities /= probabilities.sum()
+    choices = np.argsort(-probabilities, kind="stable")[:top_k]
+    return {
+        "value": vocab[int(choices[0])],
+        "probability": float(probabilities[choices[0]]),
+        "alternatives": [
+            {"value": vocab[int(choice)], "probability": float(probabilities[choice])}
+            for choice in choices
+        ],
+        "margin": float(probabilities[choices[0]] - probabilities[choices[1]])
+        if len(choices) > 1
+        else None,
+    }
+
+
+def apply_rhythm_constraints(logits: NDArray, forbidden: set[int]) -> NDArray:
+    """Mask opt-in forbidden rhythm tokens without touching control symbols."""
+    if not forbidden:
+        return logits
+    constrained = logits.copy()
+    constrained[..., list(forbidden)] = -np.inf
+    return constrained
+
+
+def rhythm_confidence(
+    raw_logits: NDArray, constrained_logits: NDArray, vocab: dict[int, str]
+) -> dict[str, Any]:
+    report = confidence_for_logits(constrained_logits, vocab)
+    if not np.array_equal(raw_logits, constrained_logits):
+        report["unconstrained"] = confidence_for_logits(raw_logits, vocab)
+    return report
 
 
 def get_decoder(config: Config) -> ScoreDecoder:
