@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 
 from homr.bounding_boxes import BoundingEllipse, RotatedBoundingBox
@@ -95,3 +96,27 @@ def test_a_chord_note_keeps_a_stem_drawn_alongside_it() -> None:
         [StemDirection.DOWN],
         [StemDirection.DOWN],
     ]
+
+
+def test_two_touching_noteheads_are_split_at_their_waist_not_by_height() -> None:
+    # Two heads a third apart: the ink is 2.6 noteheads tall, and dividing that
+    # by a notehead and rounding used to make three of them.
+    mask = np.zeros((120, 100), dtype=np.uint8)
+    cv2.ellipse(mask, (50, 44), (10, 7), 0, 0, 360, 1, -1)
+    cv2.ellipse(mask, (50, 58), (10, 7), 0, 0, 360, 1, -1)
+    clump = BoundingEllipse(((50, 51), (20, 28), 0), empty)
+
+    split = split_notehead_ellipse(clump, mask, 12)
+
+    assert len(split) == 2
+
+
+def test_a_notehead_with_a_ledger_line_stays_one_notehead() -> None:
+    mask = np.zeros((80, 120), dtype=np.uint8)
+    cv2.ellipse(mask, (50, 40), (10, 7), 0, 0, 360, 1, -1)
+    mask[39:42, 34:70] = 1
+    clump = BoundingEllipse(((52, 40), (36, 14), 0), empty)
+
+    split = split_notehead_ellipse(clump, mask, 12)
+
+    assert len(split) == 1

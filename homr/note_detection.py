@@ -11,6 +11,9 @@ from homr.type_definitions import NDArray
 # How far short of a notehead a stem may stop and still count as attached to
 # it: beam and staff-line removal leaves real stems a little short.
 ATTACHMENT_SLACK = 0.3
+# How much narrower than its shoulders the ink has to get before it counts as
+# the waist between two noteheads rather than one head's own rounded end.
+WAIST_DEPTH = 0.8
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -52,46 +55,75 @@ def get_center(bbox: cvt.Rect) -> tuple[int, int]:
 def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cvt.Rect]:
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    cen_x, _ = get_center(bbox)
     note_w = constants.NOTEHEAD_SIZE_RATIO * unit_size
     note_h = unit_size
 
     new_bbox: list[cvt.Rect] = []
-    if abs(w - note_w) > abs(w - note_w * 2):
-        # Contains at least two notes, one left and one right.
-        left_box: cvt.Rect = (bbox[0], bbox[1], cen_x, bbox[3])
-        right_box: cvt.Rect = (cen_x, bbox[1], bbox[2], bbox[3])
-
-        # Upper and lower bounds could have changed
-        left_box = adjust_bbox(left_box, noteheads)
-        right_box = adjust_bbox(right_box, noteheads)
-
-        # Check recursively
-        if left_box is not None:
-            new_bbox.extend(check_bbox_size(left_box, noteheads, unit_size))
-        if right_box is not None:
-            new_bbox.extend(check_bbox_size(right_box, noteheads, unit_size))
-
-    # Check height
-    if len(new_bbox) > 0:
-        tmp_new = []
-        for box in new_bbox:
-            tmp_new.extend(check_bbox_size(box, noteheads, unit_size))
-        new_bbox = tmp_new
+    region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
+    columns = (region > 0).sum(axis=0).astype(float) if region.size else np.zeros(0)
+    waists = [column for column in _waists(columns, note_w) if 0 < column < w]
+    if waists:
+        # Heads side by side: cut where the ink narrows between them, not down
+        # the middle, so a notehead with a ledger line growing out of it is not
+        # halved into two heads.
+        cuts = [0, *waists, w]
+        for left, right in zip(cuts, cuts[1:], strict=False):
+            part = adjust_bbox((bbox[0] + left, bbox[1], bbox[0] + right, bbox[3]), noteheads)
+            new_bbox.extend(check_bbox_size(part, noteheads, unit_size))
     else:
-        num_notes = int(round(h / note_h))
-        if num_notes > 0:
-            sub_h = h // num_notes
-            for i in range(num_notes):
-                sub_box = (
-                    bbox[0],
-                    round(bbox[1] + i * sub_h),
-                    bbox[2],
-                    round(bbox[1] + (i + 1) * sub_h),
-                )
-                new_bbox.append(sub_box)
+        new_bbox.extend(split_stack(bbox, noteheads, note_h))
 
     return new_bbox
+
+
+def split_stack(bbox: cvt.Rect, noteheads: NDArray, note_h: float) -> list[cvt.Rect]:
+    """Cut a column of touching noteheads apart where the ink narrows.
+
+    Two heads a third apart touch, and their blob is a figure of eight: wide,
+    narrow, wide.  Dividing its height by a notehead and rounding gets that
+    blob wrong -- 2.6 noteheads' worth of ink is two heads, not three -- so the
+    cut is made at the waist instead, and the count comes out of the shape.
+    Ink with no waist in it is one head, however tall it reads.
+    """
+    region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
+    if region.size == 0:
+        return []
+    profile = (region > 0).sum(axis=1).astype(float)
+    waists = [row for row in _waists(profile, note_h) if row > 0]
+    if not waists:
+        # No waist: trust the height only when there is far too much of it for
+        # one head, and fall back to the old even division.
+        count = int(round(len(profile) / note_h))
+        if count <= 1:
+            return [bbox]
+        step = len(profile) / count
+        waists = [int(step * index) for index in range(1, count)]
+    cuts = [0, *waists, len(profile)]
+    return [
+        (bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom)
+        for top, bottom in zip(cuts, cuts[1:], strict=False)
+        if bottom > top
+    ]
+
+
+def _waists(profile: NDArray, note_h: float) -> list[int]:
+    """The rows where a stack of noteheads pinches in between two of them."""
+    room = max(2, int(note_h * 0.4))
+    found: list[int] = []
+    for row in range(room, len(profile) - room):
+        window = profile[row - room : row + room + 1]
+        if profile[row] > window.min():
+            continue
+        above = profile[max(0, row - int(note_h)) : row].max(initial=0)
+        below = profile[row + 1 : row + 1 + int(note_h)].max(initial=0)
+        # A waist has a shoulder on both sides and is clearly narrower than
+        # both of them; a notehead's own rounded end is not.
+        if min(above, below) == 0 or profile[row] > min(above, below) * WAIST_DEPTH:
+            continue
+        if found and row - found[-1] < note_h * 0.5:
+            continue
+        found.append(row)
+    return found
 
 
 def split_clumps_of_noteheads(

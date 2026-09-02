@@ -11,34 +11,9 @@
           "id": "HS-s1-660p7"
         },
         {
-          "failure": "staff 1: m4 C5 at x=1558.0 expected ['down'] but detected ['none']",
+          "failure": "staff 1: m4 C5 at x=1568.0 expected ['down'] but detected ['none']",
           "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
-          "id": "HS-s1-1558p6"
-        },
-        {
-          "failure": "staff 1: extra notehead at x=660.0 position 6.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "HS-s1-660p6"
-        },
-        {
-          "failure": "staff 1: extra notehead at x=1558.0 position 6.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "HS-s1-1579p6"
-        },
-        {
-          "failure": "staff 1: extra notehead at x=1558.0 position 7.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "HS-s1-1622p7"
-        },
-        {
-          "failure": "staff 2: extra notehead at x=676.0 position 1.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "HS-s2-697p1"
-        },
-        {
-          "failure": "staff 2: extra notehead at x=1599.0 position 6.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "HS-s2-1599p6"
+          "id": "HS-s1-1568p6"
         }
       ]
     },
@@ -60,16 +35,6 @@
           "failure": "staff 3: no detected notehead for m3 F4 at x=501.48",
           "reason": "the segmentation finds no notehead at this place",
           "id": "KK-s3-1007p2"
-        },
-        {
-          "failure": "staff 4: extra notehead at x=285.0 position -1.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "KK-s4-299p-1"
-        },
-        {
-          "failure": "staff 4: extra notehead at x=962.0 position -1.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "KK-s4-974p-1"
         }
       ]
     },
@@ -78,9 +43,9 @@
       "reference": "sammon-ryosto.musicxml",
       "known_gaps": [
         {
-          "failure": "staff 1: extra notehead at x=534.0 position 7.0 with stems ['none']",
-          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint",
-          "id": "SR-s1-554p7"
+          "failure": "staff 1: no detected notehead for m2 C4 at x=264.17",
+          "reason": "the segmentation finds no notehead at this place",
+          "id": "SR-s1-544p6"
         }
       ]
     },
