@@ -38,6 +38,24 @@ Then see the resulting MusicXML:
 - The resulting MusicXML file will be saved in the same directory as the input image
 - To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
 
+### Optional score settings
+
+When you know notation facts about one score, keep them in a JSON file and opt in for that run:
+
+```json
+{"decoder": {"minimum_duration": "16", "allow_tuplets": true, "allow_grace_notes": true}}
+```
+
+```bash
+poetry run homr page.png --score-settings page.score-settings.json --output-confidence
+```
+
+`minimum_duration` is the shortest written base note value, so `16` permits dotted
+16ths and 16th-note tuplets but excludes 32nds. `--output-confidence` writes a
+`.confidence.json` sidecar with the selected decoder tokens, their probabilities,
+and their nearest alternatives. When a constraint changes a rhythm choice, that
+record also retains the unconstrained result.
+
 ## Example
 
 The example below provides an overview of the current performance of the implementation. While some errors are present

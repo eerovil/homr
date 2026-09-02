@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -43,6 +44,8 @@ from homr.staff_parsing import parse_staffs
 from homr.staff_position_save_load import load_staff_positions, save_staff_positions
 from homr.title_detection import detect_title, download_ocr_weights
 from homr.transformer.configs import Config, default_config
+from homr.transformer.score_settings import RhythmSettings
+from homr.transformer.vocabulary import EncodedSymbol
 from homr.type_definitions import NDArray
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -158,6 +161,8 @@ class ProcessingConfig:
     enable_debug: bool
     enable_cache: bool
     write_staff_positions: bool
+    write_confidence: bool
+    score_settings: str | None
     read_staff_positions: bool
     selected_staff: int
     # The transformer (encoder/decoder) only benefits from CUDA/ROCm: its fp16 "GPU"
@@ -206,6 +211,11 @@ def process_image(
         transformer_config = Config()
         transformer_config.use_gpu_inference = config.transformer_use_gpu
         transformer_config.use_coreml_encoder = config.coreml_encoder
+        transformer_config.record_confidence = config.write_confidence
+        if config.score_settings:
+            transformer_config.forbidden_rhythm_tokens = _load_score_settings(
+                config.score_settings, transformer_config.vocab.rhythm
+            )
 
         result_staffs = parse_staffs(
             debug,
@@ -222,6 +232,10 @@ def process_image(
         eprint("Writing XML", result_staffs)
         xml = generate_xml(xml_generator_args, result_staffs, title)
         ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
+        if config.write_confidence:
+            confidence_file = replace_extension(image_path, ".confidence.json")
+            _write_confidence(confidence_file, result_staffs)
+            eprint("Confidence was written to", confidence_file)
 
         eprint("Finished parsing " + str(len(result_staffs)) + " staves")
         teaser_file = replace_extension(image_path, "_teaser.png")
@@ -239,6 +253,53 @@ def process_image(
     finally:
         if debug_cleanup is not None:
             debug_cleanup.clean_debug_files_from_previous_runs()
+
+
+def _write_confidence(path: str, staffs: list[list[EncodedSymbol]]) -> None:
+    """Write scores for the symbols that survived score post-processing."""
+    records = []
+    for staff_index, symbols in enumerate(staffs):
+        for symbol_index, symbol in enumerate(symbols):
+            if symbol.confidence is None:
+                continue
+            coordinates = None
+            if symbol.coordinates is not None:
+                values = np.asarray(symbol.coordinates).reshape(-1)
+                if len(values) >= 2 and np.isfinite(values[:2]).all():
+                    coordinates = [float(values[0]), float(values[1])]
+            records.append(
+                {
+                    "staff": staff_index,
+                    "symbol": symbol_index,
+                    "token": {
+                        "rhythm": symbol.rhythm,
+                        "pitch": symbol.pitch,
+                        "lift": symbol.lift,
+                        "position": symbol.position,
+                        "articulation": symbol.articulation,
+                        "slur": symbol.slur,
+                    },
+                    "attention": coordinates,
+                    "confidence": symbol.confidence,
+                }
+            )
+    with open(path, "w") as file:
+        json.dump({"version": 1, "symbols": records}, file, indent=2)
+        file.write("\n")
+
+
+def _load_score_settings(path: str, rhythm_vocabulary: dict[str, int]) -> set[int]:
+    try:
+        with open(path) as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise InvalidProgramArgumentException(f"Could not read score settings {path}: {error}") from error
+    if not isinstance(data, dict):
+        raise InvalidProgramArgumentException("score settings must be a JSON object")
+    try:
+        return RhythmSettings.from_json(data).forbidden_rhythm_tokens(rhythm_vocabulary)
+    except ValueError as error:
+        raise InvalidProgramArgumentException(f"Invalid score settings: {error}") from error
 
 
 def detect_staffs_in_image(
@@ -381,6 +442,15 @@ def main() -> None:
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument(
+        "--output-confidence",
+        action="store_true",
+        help="Writes decoder token confidences to a .confidence.json sidecar",
+    )
+    parser.add_argument(
+        "--score-settings",
+        help="JSON file with opt-in decoder constraints, such as no 32nd notes",
+    )
+    parser.add_argument(
         "--cache", action="store_true", help="Read an existing cache file or create a new one"
     )
     parser.add_argument(
@@ -449,6 +519,8 @@ def main() -> None:
         args.debug,
         args.cache,
         args.write_staff_positions,
+        args.output_confidence,
+        args.score_settings,
         args.read_staff_positions,
         -1,
         transformer_use_gpu,
