@@ -13,10 +13,12 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from homr.main import load_and_preprocess_predictions  # noqa: E402
+from homr.main import load_and_preprocess_predictions, predict_symbols  # noqa: E402
+from stem_blame import Quiet, verdict  # noqa: E402
 from tests.fixture_matching import (  # noqa: E402
     Column,
     Head,
@@ -158,14 +160,14 @@ def findings(name: str) -> list[dict]:
     return found
 
 
-def crop(image, finding: dict, path: Path) -> None:
+def crop(image, finding: dict, path: Path, marks: bool = True) -> None:
     """The scan around one case: the head in question red, its neighbours blue."""
     x, y = int(finding["at"][0]), int(finding["at"][1])
     top, bottom = max(0, y - PAD_Y), min(image.shape[0], y + PAD_Y)
     left, right = max(0, x - PAD_X), min(image.shape[1], x + PAD_X)
     band = cv2.cvtColor(image[top:bottom, left:right], cv2.COLOR_GRAY2BGR)
     band = cv2.resize(band, None, fx=ZOOM, fy=ZOOM, interpolation=cv2.INTER_CUBIC)
-    for other in finding["others"]:
+    for other in finding["others"] if marks else []:
         if other is None:
             continue
         cv2.circle(
@@ -175,7 +177,8 @@ def crop(image, finding: dict, path: Path) -> None:
             (200, 120, 0),
             3,
         )
-    cv2.circle(band, ((x - left) * ZOOM, (y - top) * ZOOM), 8 * ZOOM, (0, 0, 220), 3)
+    if marks:
+        cv2.circle(band, ((x - left) * ZOOM, (y - top) * ZOOM), 8 * ZOOM, (0, 0, 220), 3)
     cv2.imwrite(str(path), band)
 
 
@@ -187,7 +190,6 @@ h2 { font-size: 18px; margin: 32px 0 4px; }
 p.lead { color: #555; margin-top: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 figure { margin: 0; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
-figure img { display: block; width: 100%; background: #fff; }
 figcaption { padding: 10px 12px; font-size: 13px; border-top: 1px solid #eee; }
 .tag { display: inline-block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
        padding: 2px 7px; border-radius: 999px; margin-bottom: 6px; }
@@ -198,6 +200,11 @@ a.id { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #0b
        text-decoration: none; margin-right: 8px; }
 a.id:hover { text-decoration: underline; }
 figure:target { outline: 3px solid #0b6; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #eee; }
+.pair img { display: block; width: 100%; background: #fff; }
+p.blame { margin: 8px 0 0; padding: 6px 8px; border-radius: 5px; font-size: 12px; }
+p.blame.model { background: #f3e7fb; color: #5b2277; }
+p.blame.code { background: #e8f4ea; color: #1c5c2c; }
 .what { color: #555; }
 .what b { color: #1a1a1a; font-weight: 600; }
 """
@@ -228,25 +235,39 @@ def main() -> None:
         old.unlink()
     manifest = json.loads((FIXTURES / "stem-direction-fixtures.json").read_text())
     counts = {"wrong": 0, "missing": 0, "extra": 0}
+    blame: dict[str, int] = {}
     sections = []
     for name in sorted(manifest["fixtures"]):
         image_path = FIXTURES / manifest["fixtures"][name]["image"]
         predictions, _ = load_and_preprocess_predictions(str(image_path), False, False, False)
+        symbols = predict_symbols(Quiet(), predictions)
+        unit = float(np.median([notehead.size[1] for notehead in symbols.noteheads]))
         image = predictions.preprocessed
         cards = []
         for finding in findings(name):
             counts[finding["kind"]] += 1
+            whose, why, how = verdict(finding, predictions, unit)
+            blame[whose] = blame.get(whose, 0) + 1
             picture = f"{finding['id']}.png"
+            mask_picture = f"{finding['id']}-mask.png"
             crop(image, finding, OUT / picture)
+            crop(
+                255 - getattr(predictions, how["mask"]) * 255,
+                finding,
+                OUT / mask_picture,
+                marks=False,
+            )
             cards.append(
                 f"""<figure id="{finding['id']}">
-  <img src="{picture}" alt="">
+  <div class="pair"><img src="{picture}" alt="the scan">
+  <img src="{mask_picture}" alt="what the model segmented"></div>
   <figcaption>
     <a class="id" href="#{finding['id']}">{finding['id']}</a>
     <span class="tag {finding['kind']}">{finding['kind']}</span><br>
     <b>staff {finding['staff']} &middot; {html.escape(finding['title'])}</b><br>
     <span class="what">page: <b>{html.escape(finding['expected'])}</b><br>
     homr: <b>{html.escape(finding['detected'])}</b></span>
+    <p class="blame {whose}"><b>{whose}</b> &mdash; {html.escape(why)}</p>
   </figcaption>
 </figure>"""
             )
@@ -268,6 +289,12 @@ does not print. Each picture is the scan as homr reads it, with the notehead in
 question circled in red -- and, where homr read more heads in that moment than
 the page prints, the rest of them in blue. Each case has a fixed name -- fixture, printed staff, and
 where it sits across the scan -- so nothing is renumbered when one is fixed.</p>
+<p class="lead">Right of each scan is what the segmentation model actually produced
+there -- its notehead mask, or its stems mask where the question is about a stem.
+That is what decides whose failure each one is: the model's when its mask has
+nothing usable, and the code's when the ink is there and the geometry after it
+threw the answer away. On these four fixtures it is
+<b>{blame.get('code', 0)} code</b> against <b>{blame.get('model', 0)} model</b>.</p>
 {''.join(sections)}
 </body></html>"""
     (OUT / "index.html").write_text(page)
