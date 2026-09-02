@@ -259,10 +259,17 @@ def prepare_staff_image(
     eprint("Dewarping staff", index, "done")
 
     staff_image = remove_black_contours_at_edges_of_image(staff_image, staff.average_unit_size)
+    before_canvas = staff_image.shape
     staff_image = center_image_on_canvas(staff_image, image_dimensions)
+    # Follow the staff through the last steps as well, so the coordinates handed
+    # back describe the image handed back.  The dewarp and the second crop move a
+    # staff by tens of pixels on a grand staff, which is where this went
+    # unnoticed: nothing but the debug drawing used to read them.
+    transformed_staff = _onto_canvas(
+        _dewarp_staff(staff, dewarp, top_left, scaling_factor), before_canvas, image_dimensions
+    )
     debug.write_image_with_fixed_suffix(f"_staff-{index}_input.jpg", staff_image)
     if debug.debug:
-        transformed_staff = _dewarp_staff(staff, dewarp, top_left, scaling_factor)
         transformed_staff_image = staff_image.copy()
         for symbol in transformed_staff.symbols:
             center = symbol.center
@@ -279,7 +286,19 @@ def prepare_staff_image(
         debug.write_image_with_fixed_suffix(
             f"_staff-{index}_debug_annotated.jpg", transformed_staff_image
         )
-    return staff_image, staff
+    return staff_image, transformed_staff
+
+
+def _onto_canvas(staff: Staff, before: tuple[int, ...], canvas: NDArray) -> Staff:
+    """Move a staff onto the fixed canvas the same way its image was moved."""
+    scale_x = canvas[0] / before[1]
+    scale_y = canvas[1] / before[0]
+    offset_y = (tr_omr_max_height - canvas[1]) // 2
+
+    def transform(point: tuple[float, float]) -> tuple[float, float]:
+        return point[0] * scale_x, point[1] * scale_y + offset_y
+
+    return staff.transform_coordinates(transform)
 
 
 def _dewarp_staff(

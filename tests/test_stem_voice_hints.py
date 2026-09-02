@@ -19,15 +19,34 @@ def _symbol(x: float, y: float) -> EncodedSymbol:
     return EncodedSymbol("note_4", pitch="C4", position="upper", coordinates=(x, y))
 
 
-def test_geometry_hints_calibrate_without_ground_truth() -> None:
+def test_a_decoded_note_takes_the_stem_of_the_notehead_it_is_at() -> None:
+    """Both sides are in the staff image's coordinates, so this is a lookup.
+
+    It used to be a fit: the coordinates handed to this module stopped short of
+    the transforms the image went through, so an affine was recovered to undo
+    the difference.  With the staff transformed the whole way there is nothing
+    to undo, and all that is left of the decoder is a few pixels of jitter.
+    """
     notes = [
         _note(20 + index * 30, 50 if index % 2 == 0 else 80, [StemDirection.UP])
         for index in range(8)
     ]
-    symbols = [_symbol(1.05 * note.center[0] + 2, note.center[1]) for note in notes]
+    jitter = [3, -2, 1, 4, -3, 0, 2, -1]
+    symbols = [
+        _symbol(note.center[0] + shift, note.center[1] - shift)
+        for note, shift in zip(notes, jitter, strict=True)
+    ]
 
     assert add_stem_voice_hints(symbols, notes) == 8
     assert [symbol.stem_direction for symbol in symbols] == ["up"] * 8
+
+
+def test_a_decoded_note_nowhere_near_a_notehead_gets_no_stem() -> None:
+    notes = [_note(20, 50, [StemDirection.UP])]
+    symbols = [_symbol(200, 50)]
+
+    assert add_stem_voice_hints(symbols, notes) == 0
+    assert symbols[0].stem_direction is None
 
 
 def test_geometry_hints_refuse_shared_or_ambiguous_noteheads() -> None:
