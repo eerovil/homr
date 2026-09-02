@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from homr.main import load_and_preprocess_predictions  # noqa: E402
 from tests.fixture_matching import (  # noqa: E402
+    Column,
     Head,
     detected_columns,
     match,
@@ -29,6 +30,14 @@ ROOT = Path(__file__).parent
 FIXTURES = ROOT / "fixtures"
 OUT = ROOT / "stem-failures"
 ZOOM = 3
+# Short, stable names to talk about a case by: the fixture, the printed staff,
+# and where it is across the scan.  Nothing renumbers when a case is fixed.
+CODES = {
+    "hanget-soi": "HS",
+    "kolme-kakea": "KK",
+    "sammon-ryosto": "SR",
+    "system4": "S4",
+}
 PAD_X = 95
 PAD_Y = 90
 
@@ -57,6 +66,38 @@ def place(head: Head, pairs: list[tuple[Head | None, Head | None]]) -> tuple[flo
     )
 
 
+def finding_id(name: str, staff: int, head: Head, at: tuple[float, float]) -> str:
+    return f"{CODES.get(name, name)}-s{staff}-{round(at[0])}p{head.position:g}"
+
+
+def _moment(
+    other: Head, columns: list[Column], pairs: list[tuple[Head | None, Head | None]]
+) -> tuple[list[Head], list[Head]]:
+    """The whole printed moment a detected notehead sits in.
+
+    An "extra" is not a notehead invented out of white paper -- it is one head
+    too many in a column that does hold noteheads, usually a clump the splitter
+    cut into three where the page prints two.  So a card has to show the column,
+    not just the one head, or it reads as a claim nobody can believe.
+    """
+    def where(head: Head) -> tuple[float, float] | None:
+        return head.scan
+
+    column = next(
+        (group for group in columns if any(where(head) == where(other) for head in group.heads)),
+        None,
+    )
+    if column is None:
+        return [other], []
+    inside = {where(head) for head in column.heads}
+    printed = [
+        reference
+        for reference, found in pairs
+        if reference is not None and found is not None and where(found) in inside
+    ]
+    return column.heads, printed
+
+
 def findings(name: str) -> list[dict]:
     probe = json.loads((FIXTURES / f"{name}.fixture-probe.json").read_text())
     reference = reference_staffs(FIXTURES / f"{name}.musicxml")
@@ -64,31 +105,40 @@ def findings(name: str) -> list[dict]:
     for index in range(max(len(reference), len(probe["detected"]))):
         notes = reference[index]["notes"] if index < len(reference) else []
         detected = probe["detected"][index] if index < len(probe["detected"]) else []
-        pairs = match(reference_columns(notes), detected_columns(detected))
+        columns = detected_columns(detected)
+        pairs = match(reference_columns(notes), columns)
         for head, other in pairs:
             if head is not None and other is not None and head.stems == other.stems:
                 continue
+            staff = index + 1
             if head is None:
                 assert other is not None and other.scan is not None
+                read, printed = _moment(other, columns, pairs)
+                names = ", ".join(item.label.split(" ")[-1] for item in printed) or "nothing"
                 found.append(
                     {
                         "kind": "extra",
-                        "title": f"a notehead the page does not print, at staff position {other.position:g}",
-                        "expected": "nothing",
-                        "detected": stems(other),
+                        "title": f"one notehead too many at staff position {other.position:g}",
+                        "expected": f"{len(printed)} notehead(s) here ({names})",
+                        "detected": f"{len(read)}, this one included",
                         "at": other.scan,
-                        "staff": index + 1,
+                        "others": [item.scan for item in read if item is not other],
+                        "staff": staff,
+                        "id": finding_id(name, staff, other, other.scan),
                     }
                 )
             elif other is None:
+                at = place(head, pairs)
                 found.append(
                     {
                         "kind": "missing",
-                        "title": f"{head.label} was not detected at all",
-                        "expected": stems(head),
-                        "detected": "no notehead",
-                        "at": place(head, pairs),
-                        "staff": index + 1,
+                        "title": f"{head.label} is not detected at all",
+                        "expected": f"a notehead with {stems(head)}",
+                        "detected": "nothing here",
+                        "at": at,
+                        "others": [],
+                        "staff": staff,
+                        "id": finding_id(name, staff, head, at),
                     }
                 )
             else:
@@ -100,19 +150,32 @@ def findings(name: str) -> list[dict]:
                         "expected": stems(head),
                         "detected": stems(other),
                         "at": other.scan,
-                        "staff": index + 1,
+                        "others": [],
+                        "staff": staff,
+                        "id": finding_id(name, staff, head, other.scan),
                     }
                 )
     return found
 
 
-def crop(image, at: tuple[float, float], path: Path) -> None:
-    x, y = int(at[0]), int(at[1])
+def crop(image, finding: dict, path: Path) -> None:
+    """The scan around one case: the head in question red, its neighbours blue."""
+    x, y = int(finding["at"][0]), int(finding["at"][1])
     top, bottom = max(0, y - PAD_Y), min(image.shape[0], y + PAD_Y)
     left, right = max(0, x - PAD_X), min(image.shape[1], x + PAD_X)
     band = cv2.cvtColor(image[top:bottom, left:right], cv2.COLOR_GRAY2BGR)
     band = cv2.resize(band, None, fx=ZOOM, fy=ZOOM, interpolation=cv2.INTER_CUBIC)
-    cv2.circle(band, ((x - left) * ZOOM, (y - top) * ZOOM), 16 * ZOOM // 2, (0, 0, 220), 3)
+    for other in finding["others"]:
+        if other is None:
+            continue
+        cv2.circle(
+            band,
+            ((int(other[0]) - left) * ZOOM, (int(other[1]) - top) * ZOOM),
+            8 * ZOOM,
+            (200, 120, 0),
+            3,
+        )
+    cv2.circle(band, ((x - left) * ZOOM, (y - top) * ZOOM), 8 * ZOOM, (0, 0, 220), 3)
     cv2.imwrite(str(path), band)
 
 
@@ -131,9 +194,32 @@ figcaption { padding: 10px 12px; font-size: 13px; border-top: 1px solid #eee; }
 .wrong { background: #fde2e2; color: #8a1c1c; }
 .missing { background: #fdefd8; color: #8a5a10; }
 .extra { background: #e4e9fb; color: #26379a; }
+a.id { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #0b6; 
+       text-decoration: none; margin-right: 8px; }
+a.id:hover { text-decoration: underline; }
+figure:target { outline: 3px solid #0b6; }
 .what { color: #555; }
 .what b { color: #1a1a1a; font-weight: 600; }
 """
+
+
+def stamp_manifest(manifest: dict) -> None:
+    """Put each case's name on its entry in the manifest, so the two agree."""
+    for name, entry in manifest["fixtures"].items():
+        waiting = {kind: [] for kind in ("wrong", "missing", "extra")}
+        for finding in findings(name):
+            waiting[finding["kind"]].append(finding["id"])
+        for gap in entry.get("known_gaps", []):
+            kind = (
+                "missing"
+                if "no detected notehead" in gap["failure"]
+                else "extra"
+                if "extra notehead" in gap["failure"]
+                else "wrong"
+            )
+            gap["id"] = waiting[kind].pop(0)
+    path = FIXTURES / "stem-direction-fixtures.json"
+    path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def main() -> None:
@@ -148,18 +234,19 @@ def main() -> None:
         predictions, _ = load_and_preprocess_predictions(str(image_path), False, False, False)
         image = predictions.preprocessed
         cards = []
-        for number, finding in enumerate(findings(name), start=1):
+        for finding in findings(name):
             counts[finding["kind"]] += 1
-            picture = f"{name}-{number}.png"
-            crop(image, finding["at"], OUT / picture)
+            picture = f"{finding['id']}.png"
+            crop(image, finding, OUT / picture)
             cards.append(
-                f"""<figure>
+                f"""<figure id="{finding['id']}">
   <img src="{picture}" alt="">
   <figcaption>
+    <a class="id" href="#{finding['id']}">{finding['id']}</a>
     <span class="tag {finding['kind']}">{finding['kind']}</span><br>
     <b>staff {finding['staff']} &middot; {html.escape(finding['title'])}</b><br>
-    <span class="what">page says <b>{html.escape(finding['expected'])}</b>,
-    homr reads <b>{html.escape(finding['detected'])}</b></span>
+    <span class="what">page: <b>{html.escape(finding['expected'])}</b><br>
+    homr: <b>{html.escape(finding['detected'])}</b></span>
   </figcaption>
 </figure>"""
             )
@@ -178,11 +265,17 @@ def main() -> None:
 hand-corrected score: {counts['wrong']} with the wrong stems,
 {counts['missing']} noteheads never found, {counts['extra']} found that the page
 does not print. Each picture is the scan as homr reads it, with the notehead in
-question circled.</p>
+question circled in red -- and, where homr read more heads in that moment than
+the page prints, the rest of them in blue. Each case has a fixed name -- fixture, printed staff, and
+where it sits across the scan -- so nothing is renumbered when one is fixed.</p>
 {''.join(sections)}
 </body></html>"""
     (OUT / "index.html").write_text(page)
+    stamp_manifest(manifest)
     print(OUT / "index.html", total, counts)
+    for name in sorted(manifest["fixtures"]):
+        for finding in findings(name):
+            print(f"  {finding['id']:<14} {finding['kind']:<8} {finding['title']}")
 
 
 if __name__ == "__main__":
