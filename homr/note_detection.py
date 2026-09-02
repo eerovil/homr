@@ -196,9 +196,9 @@ def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bo
 def vertical_ink(source_image: NDArray) -> NDArray:
     """The scan's ink with staff lines and beams taken out, for stem recovery."""
     ink = (source_image < 180).astype(np.uint8)
-    horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 30), np.uint8))
+    horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 12), np.uint8))
     ink &= 1 - horizontal
-    return cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((1, 7), np.uint8))
+    return cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((1, 12), np.uint8))
 
 
 def _longest_run(
@@ -274,19 +274,26 @@ def belongs_to_another_notehead(
 ) -> bool:
     """Whether a stem starts at some other notehead rather than at this one.
 
-    Voices stacked in one column sit close enough that the head above can reach
-    the head below's stem: the gap it has to cross is smaller than the room a
-    real stem needs.  What tells them apart is where the stem begins -- the end
-    nearest this head lands on the other head instead.
+    Voices stacked in one column sit close enough that one head can reach the
+    next head's stem: the gap it has to cross is smaller than the room a real
+    stem needs.  A stem drawn *alongside* this head is its own or its chord's,
+    so only one that stops short of it is asked whose it is, and the answer is
+    whichever head its near end lands on.
     """
+    stem_top = stem.center[1] - stem.size[1] / 2
+    stem_bottom = stem.center[1] + stem.size[1] / 2
+    note_top = notehead.center[1] - notehead.size[1] / 2
+    note_bottom = notehead.center[1] + notehead.size[1] / 2
+    if stem_top <= note_bottom and stem_bottom >= note_top:
+        return False
     if stem_direction(notehead, stem) == StemDirection.UP:
-        near_y = stem.center[1] + stem.size[1] / 2
+        near_y = stem_bottom
     else:
-        near_y = stem.center[1] - stem.size[1] / 2
+        near_y = stem_top
     return any(
         other is not notehead
         and abs(other.center[0] - stem.center[0]) <= other.size[0] * 0.8
-        and abs(other.center[1] - near_y) <= other.size[1] * 0.75
+        and abs(other.center[1] - near_y) <= other.size[1]
         for other in noteheads
     )
 
@@ -302,7 +309,9 @@ def stems_of_notehead(
     candidates = [
         stem
         for stem in stems
-        if stem.is_overlapping(thickened_notehead) and is_plausible_stem(notehead, stem)
+        if stem.is_overlapping(thickened_notehead)
+        and is_plausible_stem(notehead, stem)
+        and not belongs_to_another_notehead(notehead, stem, noteheads or [])
     ]
     learned_directions = {stem_direction(notehead, stem) for stem in candidates}
     candidates.extend(
@@ -312,9 +321,6 @@ def stems_of_notehead(
         # and never for a stem that starts at a different notehead.
         if stem_direction(notehead, stem) not in learned_directions
         and not belongs_to_another_notehead(notehead, stem, noteheads or [])
-        # A second direction on one head is the unison case, and a stray
-        # fragment looks just like it, so the scan has to show a whole stem.
-        and stem.size[1] >= notehead.size[1]
     )
     longest = {
         direction: max(

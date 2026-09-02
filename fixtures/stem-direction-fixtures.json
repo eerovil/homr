@@ -7,11 +7,11 @@
       "known_gaps": [
         {
           "failure": "staff 1: m2 D5 at x=660.0 expected ['down'] but detected ['none']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim"
         },
         {
           "failure": "staff 1: m4 C5 at x=1558.0 expected ['down'] but detected ['none']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim"
         },
         {
           "failure": "staff 1: extra notehead at x=660.0 position 6.0 with stems ['none']",
@@ -68,14 +68,6 @@
         {
           "failure": "staff 1: extra notehead at x=534.0 position 7.0 with stems ['none']",
           "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
-        },
-        {
-          "failure": "staff 2: m3 E3 at x=1036.0 expected ['down'] but detected ['down', 'up']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
-        },
-        {
-          "failure": "staff 2: m4 E3 at x=1606.0 expected ['down'] but detected ['none']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
         }
       ]
     },
@@ -84,16 +76,12 @@
       "reference": "system4.musicxml",
       "known_gaps": [
         {
-          "failure": "staff 1: m2 C4 at x=1355.0 expected ['down', 'up'] but detected ['up']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
-        },
-        {
           "failure": "staff 2: m1 G3 at x=971.5 expected ['down', 'up'] but detected ['up']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim"
         },
         {
           "failure": "staff 2: m2 G3 at x=1354.4 expected ['up'] but detected ['none']",
-          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim"
         }
       ]
     }
