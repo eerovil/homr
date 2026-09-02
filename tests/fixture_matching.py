@@ -28,6 +28,8 @@ class Head:
     position: float
     stems: set[str] = field(default_factory=set)
     label: str = ""
+    # Where the notehead is in the scan, for a detected one.
+    scan: tuple[float, float] | None = None
 
 
 @dataclass
@@ -81,7 +83,12 @@ def detected_columns(notes: list[dict]) -> list[Column]:
         Column(
             x=min(note["x"] for note in group),
             heads=[
-                Head(x=note["x"], position=float(note["position"]), stems=set(note["stems"]))
+                Head(
+                    x=note["x"],
+                    position=float(note["position"]),
+                    stems=set(note["stems"]),
+                    scan=(note["x"], note["y"]),
+                )
                 for note in group
             ],
         )
@@ -198,7 +205,13 @@ def _pair_up(costs: list[list[float]]) -> list[tuple[int | None, int | None]]:
 def _column_heads(columns: list[Column]) -> list[Head]:
     """Every notehead, told the place of the moment it belongs to."""
     return [
-        Head(x=column.x, position=head.position, stems=head.stems, label=head.label)
+        Head(
+            x=column.x,
+            position=head.position,
+            stems=head.stems,
+            label=head.label,
+            scan=head.scan,
+        )
         for column in columns
         for head in column.heads
     ]
