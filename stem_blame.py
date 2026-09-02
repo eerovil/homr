@@ -91,6 +91,15 @@ def verdict(finding: dict, predictions, unit: float) -> tuple[str, str, dict]:
         # A notehead is wider than it is tall, so half of one is half of each
         # -- a tall thin sliver of an outline is not a head the code could use.
         wide, tall = (blob["box"][2:] if blob else (0, 0))
+        if blob is not None and wide >= unit * 1.286 * 1.5:
+            # Ink far too wide for one head, and nothing in its shape says
+            # where the join is: the model has run several heads together.
+            return (
+                "model",
+                f"the mask runs this head into its neighbours as one"
+                f" {wide}x{tall}px blob with no join in it",
+                {"mask": "notehead"},
+            )
         if blob is not None and wide >= unit * 1.286 * 0.5 and tall >= unit * 0.5:
             return (
                 "code",

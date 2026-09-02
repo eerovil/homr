@@ -75,9 +75,30 @@ def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> lis
             part = adjust_bbox((bbox[0] + left, bbox[1], bbox[0] + right, bbox[3]), noteheads)
             new_bbox.extend(check_bbox_size(part, noteheads, unit_size))
     else:
-        new_bbox.extend(split_stack(bbox, noteheads, note_h))
+        bands = split_stack(bbox, noteheads, note_h)
+        if len(bands) <= 1:
+            return bands
+        # A band cut off a stack keeps the whole clump's width, so trim it to
+        # its own ink and look across it again: three heads where one sits
+        # beside a stacked pair are two cuts, not one.
+        for band in bands:
+            trimmed = _trim(band, noteheads)
+            new_bbox.extend(
+                check_bbox_size(trimmed, noteheads, unit_size)
+                if trimmed[2] - trimmed[0] < w
+                else [trimmed]
+            )
 
     return new_bbox
+
+
+def _trim(bbox: cvt.Rect, noteheads: NDArray) -> cvt.Rect:
+    """Shrink a box sideways onto the ink it holds."""
+    region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
+    _, xs = np.where(region > 0)
+    if len(xs) == 0:
+        return bbox
+    return (int(np.min(xs) + bbox[0]), bbox[1], int(np.max(xs) + bbox[0] + 1), bbox[3])
 
 
 def split_stack(bbox: cvt.Rect, noteheads: NDArray, note_h: float) -> list[cvt.Rect]:
