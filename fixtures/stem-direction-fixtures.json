@@ -57,11 +57,6 @@
           "failure": "staff 2: m1 G3 at x=971.5 expected ['down', 'up'] but detected ['up']",
           "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
           "id": "S4-s2-972p8"
-        },
-        {
-          "failure": "staff 2: m2 G3 at x=1354.4 expected ['up'] but detected ['none']",
-          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
-          "id": "S4-s2-1357p8"
         }
       ]
     }

@@ -14,6 +14,8 @@ ATTACHMENT_SLACK = 0.3
 # How much narrower than its shoulders the ink has to get before it counts as
 # the waist between two noteheads rather than one head's own rounded end.
 WAIST_DEPTH = 0.8
+# The longest a stem can be, in noteheads, when joining its broken pieces.
+MAX_STEM_HEIGHT = 5.0
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -330,6 +332,64 @@ def belongs_to_another_notehead(
     )
 
 
+def join_stem_fragments(
+    stems: list[RotatedBoundingBox], unit: float
+) -> list[RotatedBoundingBox]:
+    """Put a stem back together where staff lines have cut it into pieces.
+
+    The segmentation loses a stem's ink where a staff line crosses it, so a long
+    stem arrives as two or three short boxes in one column -- each too short to
+    be believed on its own.  Pieces that line up and nearly touch are one stem.
+    Joining is repeated until nothing more joins, since a piece can bridge two
+    that were too far apart to reach each other.
+    """
+    joined = list(stems)
+    merged = True
+    while merged:
+        merged = False
+        for index, stem in enumerate(joined):
+            partner = _joinable(joined, index, stem, unit)
+            if partner is None:
+                continue
+            other = joined[partner]
+            top = min(other.center[1] - other.size[1] / 2, stem.center[1] - stem.size[1] / 2)
+            bottom = max(other.center[1] + other.size[1] / 2, stem.center[1] + stem.size[1] / 2)
+            joined[index] = RotatedBoundingBox(
+                (
+                    ((other.center[0] + stem.center[0]) / 2, (top + bottom) / 2),
+                    (max(other.size[0], stem.size[0]), bottom - top),
+                    0,
+                ),
+                np.empty((0, 2)),
+            )
+            joined.pop(partner)
+            merged = True
+            break
+    return joined
+
+
+def _joinable(
+    stems: list[RotatedBoundingBox], index: int, stem: RotatedBoundingBox, unit: float
+) -> int | None:
+    """The piece of stem this one continues, if any."""
+    if stem.size[0] > unit * 0.4:
+        return None
+    for other_index, other in enumerate(stems):
+        if other_index == index or other.size[0] > unit * 0.4:
+            continue
+        if abs(other.center[0] - stem.center[0]) > max(other.size[0], stem.size[0], 3):
+            continue
+        top = min(other.center[1] - other.size[1] / 2, stem.center[1] - stem.size[1] / 2)
+        bottom = max(other.center[1] + other.size[1] / 2, stem.center[1] + stem.size[1] / 2)
+        # A stem is a few noteheads long; ink that keeps going past that is a
+        # barline, or a stem joined to the next one down through a rest.
+        if bottom - top > unit * MAX_STEM_HEIGHT:
+            continue
+        if (bottom - top) - (other.size[1] + stem.size[1]) <= unit * 0.5:
+            return other_index
+    return None
+
+
 def stems_of_notehead(
     notehead: BoundingEllipse,
     stems: list[RotatedBoundingBox],
@@ -337,12 +397,14 @@ def stems_of_notehead(
     noteheads: list[BoundingEllipse] | None = None,
 ) -> list[RotatedBoundingBox]:
     """Every stem drawn on one notehead: at most one up and one down."""
-    thickened_notehead = notehead.make_box_thicker(15)
+    # Not "does the stem touch the notehead's outline": a head is drawn as an
+    # ellipse, so a stem alongside it can miss that curve by a pixel or two and
+    # be thrown out before any stem rule is asked.  The side and attachment
+    # rules already say whether a stem belongs to this head.
     candidates = [
         stem
         for stem in stems
-        if stem.is_overlapping(thickened_notehead)
-        and is_plausible_stem(notehead, stem)
+        if is_plausible_stem(notehead, stem)
         and not belongs_to_another_notehead(notehead, stem, noteheads or [])
     ]
     learned_directions = {stem_direction(notehead, stem) for stem in candidates}
@@ -375,6 +437,8 @@ def combine_noteheads_with_stems(
     what vertical lines are stems and which are bar lines.
     """
     ink = vertical_ink(source_image) if source_image is not None else None
+    unit = float(np.median([notehead.size[1] for notehead in noteheads])) if noteheads else 0.0
+    stems = join_stem_fragments(stems, unit)
     result = []
     for notehead in sorted(noteheads, key=lambda notehead: notehead.box[0][1]):
         found = stems_of_notehead(notehead, stems, ink, noteheads)

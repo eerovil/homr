@@ -120,3 +120,31 @@ def test_a_notehead_with_a_ledger_line_stays_one_notehead() -> None:
     split = split_notehead_ellipse(clump, mask, 12)
 
     assert len(split) == 1
+
+
+def test_a_stem_cut_into_pieces_by_staff_lines_is_read_as_one() -> None:
+    notehead = BoundingEllipse(((50, 50), (16, 12), 0), empty)
+    # One stem, lost where two staff lines crossed it.
+    pieces = [
+        RotatedBoundingBox(((58, 38), (2, 10), 0), empty),
+        RotatedBoundingBox(((58, 24), (2, 12), 0), empty),
+        RotatedBoundingBox(((58, 10), (2, 12), 0), empty),
+    ]
+
+    matched = combine_noteheads_with_stems([notehead], pieces)
+
+    assert matched[0].stem_direction == StemDirection.UP
+    assert matched[0].stem is not None
+    assert matched[0].stem.size[1] > 30
+
+
+def test_a_barline_is_not_joined_into_one_long_stem() -> None:
+    notehead = BoundingEllipse(((50, 50), (16, 12), 0), empty)
+    barline = [
+        RotatedBoundingBox(((58, 40), (2, 30), 0), empty),
+        RotatedBoundingBox(((58, 8), (2, 30), 0), empty),
+    ]
+
+    matched = combine_noteheads_with_stems([notehead], barline)
+
+    assert matched[0].stem is None or matched[0].stem.size[1] <= 12 * 5
