@@ -21,6 +21,8 @@ from homr.main import load_and_preprocess_predictions, predict_symbols  # noqa: 
 from stem_blame import Quiet, verdict  # noqa: E402
 from tests.fixture_matching import (  # noqa: E402
     Column,
+    check_fixture,
+    voice_failures,
     Head,
     detected_columns,
     match,
@@ -160,6 +162,28 @@ def findings(name: str) -> list[dict]:
     return found
 
 
+def scoreboard(name: str) -> dict:
+    """How this fixture stands: noteheads right, and voices right."""
+    probe = json.loads((FIXTURES / f"{name}.fixture-probe.json").read_text())
+    reference = reference_staffs(FIXTURES / f"{name}.musicxml")
+    detected = probe["detected"]
+    results = check_fixture(reference, detected)
+    right = sum(result.correct for result in results)
+    wrong = sum(len(result.failures) for result in results)
+    voices = [
+        failure
+        for index in range(min(len(reference), len(detected)))
+        for failure in voice_failures(index + 1, reference[index]["notes"], detected[index])
+    ]
+    return {
+        "staves": len(reference),
+        "right": right,
+        "checked": right + wrong,
+        "wrong": wrong,
+        "voices": voices,
+    }
+
+
 def crop(image, finding: dict, path: Path, marks: bool = True) -> None:
     """The scan around one case: the head in question red, its neighbours blue."""
     x, y = int(finding["at"][0]), int(finding["at"][1])
@@ -205,6 +229,10 @@ figure:target { outline: 3px solid #0b6; }
 p.blame { margin: 8px 0 0; padding: 6px 8px; border-radius: 5px; font-size: 12px; }
 p.blame.model { background: #f3e7fb; color: #5b2277; }
 p.blame.code { background: #e8f4ea; color: #1c5c2c; }
+table { border-collapse: collapse; margin: 18px 0 8px; font-size: 14px; }
+th, td { border: 1px solid #ddd; padding: 6px 12px; text-align: left; }
+th { background: #f6f6f6; font-weight: 600; }
+td.good { color: #1c5c2c; } td.bad { color: #8a1c1c; font-weight: 600; }
 .what { color: #555; }
 .what b { color: #1a1a1a; font-weight: 600; }
 """
@@ -273,9 +301,25 @@ def main() -> None:
             )
         if cards:
             sections.append(
-                f"<h2>{html.escape(name)}</h2>"
+                f"<h2 id=\"{html.escape(name)}\">{html.escape(name)}</h2>"
                 f"<div class=\"grid\">{''.join(cards)}</div>"
             )
+    scores = {name: scoreboard(name) for name in sorted(manifest["fixtures"])}
+    rows = "".join(
+        f"<tr><td><a href=\"#{html.escape(name)}\">{html.escape(name)}</a></td>"
+        f"<td>{score['staves']}</td>"
+        f"<td>{score['right']} / {score['checked']}</td>"
+        f"<td class=\"{'bad' if score['wrong'] else 'good'}\">"
+        f"{score['wrong'] or 'all right'}</td>"
+        f"<td class=\"{'bad' if score['voices'] else 'good'}\">"
+        f"{len(score['voices']) or 'all right'}</td></tr>"
+        for name, score in scores.items()
+    )
+    board = (
+        "<table><thead><tr><th>fixture</th><th>staves</th><th>noteheads right</th>"
+        "<th>stems wrong</th><th>voices wrong</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
     total = sum(counts.values())
     page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -295,6 +339,7 @@ That is what decides whose failure each one is: the model's when its mask has
 nothing usable, and the code's when the ink is there and the geometry after it
 threw the answer away. On these four fixtures it is
 <b>{blame.get('code', 0)} code</b> against <b>{blame.get('model', 0)} model</b>.</p>
+{board}
 {''.join(sections)}
 </body></html>"""
     (OUT / "index.html").write_text(page)
