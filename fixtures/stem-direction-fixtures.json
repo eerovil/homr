@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "fixtures": {
+    "hanget-soi": {
+      "image": "hanget-soi.png",
+      "reference": "hanget-soi.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: m2 D5 at x=660.0 expected ['down'] but detected ['none']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        },
+        {
+          "failure": "staff 1: m4 C5 at x=1558.0 expected ['down'] but detected ['none']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        },
+        {
+          "failure": "staff 1: extra notehead at x=660.0 position 6.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 1: extra notehead at x=1558.0 position 6.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 1: extra notehead at x=1558.0 position 7.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 2: extra notehead at x=676.0 position 1.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 2: extra notehead at x=1599.0 position 6.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        }
+      ]
+    },
+    "kolme-kakea": {
+      "image": "kolme-kakea.png",
+      "reference": "kolme-kakea.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: no detected notehead for m4 C5 at x=655.62",
+          "reason": "the segmentation finds no notehead at this place"
+        },
+        {
+          "failure": "staff 2: no detected notehead for m4 G4 at x=655.62",
+          "reason": "the segmentation finds no notehead at this place"
+        },
+        {
+          "failure": "staff 3: no detected notehead for m3 F4 at x=501.48",
+          "reason": "the segmentation finds no notehead at this place"
+        },
+        {
+          "failure": "staff 4: extra notehead at x=285.0 position -1.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 4: extra notehead at x=962.0 position -1.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        }
+      ]
+    },
+    "sammon-ryosto": {
+      "image": "sammon-ryosto.png",
+      "reference": "sammon-ryosto.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: extra notehead at x=534.0 position 7.0 with stems ['none']",
+          "reason": "notehead detection reads more heads here than the page prints; it carries no stem, so it produces no voice hint"
+        },
+        {
+          "failure": "staff 2: m3 E3 at x=1036.0 expected ['down'] but detected ['down', 'up']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        },
+        {
+          "failure": "staff 2: m4 E3 at x=1606.0 expected ['down'] but detected ['none']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        }
+      ]
+    },
+    "system4": {
+      "image": "system4.png",
+      "reference": "system4.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: m2 C4 at x=1355.0 expected ['down', 'up'] but detected ['up']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        },
+        {
+          "failure": "staff 2: m1 G3 at x=971.5 expected ['down', 'up'] but detected ['up']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        },
+        {
+          "failure": "staff 2: m2 G3 at x=1354.4 expected ['up'] but detected ['none']",
+          "reason": "the stem is drawn but the segmentation does not give a usable candidate for it"
+        }
+      ]
+    }
+  }
+}

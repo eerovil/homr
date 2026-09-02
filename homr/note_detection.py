@@ -1,3 +1,4 @@
+import cv2
 import cv2.typing as cvt
 import numpy as np
 
@@ -7,6 +8,10 @@ from homr.model import Note, Staff, StemDirection
 from homr.simple_logging import eprint
 from homr.type_definitions import NDArray
 
+# How far short of a notehead a stem may stop and still count as attached to
+# it: beam and staff-line removal leaves real stems a little short.
+ATTACHMENT_SLACK = 0.3
+
 
 class NoteheadWithStem(DebugDrawable):
     def __init__(
@@ -14,10 +19,12 @@ class NoteheadWithStem(DebugDrawable):
         notehead: BoundingEllipse,
         stem: RotatedBoundingBox | None,
         stem_direction: StemDirection | None = None,
+        stem_directions: list[StemDirection] | None = None,
     ):
         self.notehead = notehead
         self.stem = stem
         self.stem_direction = stem_direction
+        self.stem_directions = stem_directions or ([] if stem_direction is None else [stem_direction])
 
     def draw_onto_image(self, img: NDArray, color: tuple[int, int, int] = (255, 0, 0)) -> None:
         self.notehead.draw_onto_image(img, color)
@@ -93,63 +100,253 @@ def split_clumps_of_noteheads(
     """
     Note heads might be clumped together by the notehead detection algorithm.
     """
-    bbox = [
-        int(notehead.notehead.top_left[0]),
-        int(notehead.notehead.top_left[1]),
-        int(notehead.notehead.bottom_right[0]),
-        int(notehead.notehead.bottom_right[1]),
+    split_noteheads = split_notehead_ellipse(notehead.notehead, noteheads, staff.average_unit_size)
+    if len(split_noteheads) <= 1:
+        return [notehead]
+    return [
+        NoteheadWithStem(
+            split_notehead,
+            notehead.stem,
+            notehead.stem_direction,
+            notehead.stem_directions,
+        )
+        for split_notehead in split_noteheads
     ]
-    split_boxes = check_bbox_size(bbox, noteheads, staff.average_unit_size)
+
+
+def split_notehead_ellipse(
+    notehead: BoundingEllipse, noteheads: NDArray, unit_size: float
+) -> list[BoundingEllipse]:
+    bbox = [
+        int(notehead.top_left[0]),
+        int(notehead.top_left[1]),
+        int(notehead.bottom_right[0]),
+        int(notehead.bottom_right[1]),
+    ]
+    split_boxes = check_bbox_size(bbox, noteheads, unit_size)
     if len(split_boxes) <= 1:
         return [notehead]
-    result = []
+    result: list[BoundingEllipse] = []
     for box in split_boxes:
         center = get_center(box)
         size = (box[2] - box[0], box[3] - box[1])
-        notehead = NoteheadWithStem(
+        result.append(
             BoundingEllipse(
-                (center, size, 0), notehead.notehead.contours, notehead.notehead.debug_id
-            ),
-            notehead.stem,
-            notehead.stem_direction,
+                (center, size, 0), notehead.contours, notehead.debug_id
+            )
         )
-        result.append(notehead)
     return result
 
 
+def stem_direction(
+    notehead: BoundingEllipse, stem: RotatedBoundingBox
+) -> StemDirection | None:
+    """Which way a stem points, by the side of the notehead it is drawn on.
+
+    Standard engraving puts an up stem on the right of the head and a down stem
+    on the left, so one printed head can carry both when two voices meet on it.
+    """
+    side_offset = notehead.size[0] * 0.1
+    above = stem.center[1] < notehead.center[1]
+    right = stem.center[0] >= notehead.center[0] + side_offset
+    left = stem.center[0] <= notehead.center[0] - side_offset
+    if above and right:
+        return StemDirection.UP
+    if not above and left:
+        return StemDirection.DOWN
+    return None
+
+
+def is_attached(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bool:
+    """Whether a stem meets this notehead rather than merely passing nearby.
+
+    A stem runs alongside every notehead of its chord and past the last of
+    them, so what it must do is reach this head's middle -- not begin there.
+    The head below in a column fails that test against the head above's stem,
+    which is the case the two rules have to tell apart.  The slack is for
+    scans where beam and staff-line removal leaves the stem short.
+    """
+    if abs(stem.center[0] - notehead.center[0]) > notehead.size[0] * 0.75 + stem.size[0] / 2:
+        return False
+    slack = notehead.size[1] * ATTACHMENT_SLACK
+    stem_top = stem.center[1] - stem.size[1] / 2
+    stem_bottom = stem.center[1] + stem.size[1] / 2
+    note_top = notehead.center[1] - notehead.size[1] / 2
+    note_bottom = notehead.center[1] + notehead.size[1] / 2
+    if stem_direction(notehead, stem) == StemDirection.UP:
+        return stem_bottom >= note_top - slack and stem_top <= notehead.center[1]
+    return stem_top <= note_bottom + slack and stem_bottom >= notehead.center[1]
+
+
+def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bool:
+    """Reject tiny and horizontal fragments from the stems/rests segmentation class."""
+    stem_width, stem_height = stem.size
+    notehead_width, notehead_height = notehead.size
+    return (
+        stem_direction(notehead, stem) is not None
+        # Low-resolution scans often break a real stem into the notehead
+        # plus a remaining fragment about half a notehead high.  Side and
+        # attachment checks below still reject nearby rests and barlines.
+        and stem_height >= notehead_height * 0.5
+        and stem_width <= notehead_width * 0.75
+        and is_attached(notehead, stem)
+    )
+
+
+def vertical_ink(source_image: NDArray) -> NDArray:
+    """The scan's ink with staff lines and beams taken out, for stem recovery."""
+    ink = (source_image < 180).astype(np.uint8)
+    horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 30), np.uint8))
+    ink &= 1 - horizontal
+    return cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((1, 7), np.uint8))
+
+
+def _longest_run(
+    ink: NDArray,
+    notehead: BoundingEllipse,
+    columns: range,
+    rows: range,
+    direction: StemDirection,
+) -> RotatedBoundingBox | None:
+    x, y = map(int, notehead.center)
+    height = int(notehead.size[1])
+    best: tuple[int, int, int, int] | None = None
+    for column in columns:
+        if not 0 <= column < ink.shape[1]:
+            continue
+        values = ink[list(rows), column].astype(int)
+        changes = np.diff(np.pad(values, (1, 1)))
+        starts = np.flatnonzero(changes == 1)
+        ends = np.flatnonzero(changes == -1)
+        for start, end in zip(starts, ends, strict=True):
+            length = int(end - start)
+            top, bottom = rows[start], rows[end - 1]
+            if direction == StemDirection.UP:
+                gap = y - height // 2 - bottom
+            else:
+                gap = top - (y + height // 2)
+            # Beam and staff-line removal can leave a short white gap
+            # between a real source-image stem and its notehead.
+            attached = -max(2, height * 0.1) <= gap <= height * 0.65
+            if attached and (best is None or length > best[0]):
+                best = (length, column, top, bottom)
+    if best is None or not height * 0.5 <= best[0] <= height * 5:
+        return None
+    length, column, top, bottom = best
+    return RotatedBoundingBox(((column, (top + bottom) / 2), (3, length), 0), np.empty((0, 2)))
+
+
+def source_stem_candidates(
+    notehead: BoundingEllipse, ink: NDArray | None
+) -> list[RotatedBoundingBox]:
+    """Recover a visibly printed stem when its segmentation class is empty."""
+    if ink is None:
+        return []
+    x, y = map(int, notehead.center)
+    width, height = map(int, notehead.size)
+    found = [
+        _longest_run(
+            ink, notehead, range(x, x + width + 16), range(max(0, y - 80), y + 1), StemDirection.UP
+        ),
+        _longest_run(
+            ink,
+            notehead,
+            range(max(0, x - width - 16), x + 1),
+            range(y, min(ink.shape[0], y + 81)),
+            StemDirection.DOWN,
+        ),
+    ]
+    return [
+        candidate
+        for candidate in found
+        if candidate is not None
+        and stem_direction(notehead, candidate) is not None
+        and is_attached(notehead, candidate)
+        and candidate.size[1] >= notehead.size[1] * 0.5
+        and candidate.size[0] <= notehead.size[0] * 0.75
+    ]
+
+
+def belongs_to_another_notehead(
+    notehead: BoundingEllipse,
+    stem: RotatedBoundingBox,
+    noteheads: list[BoundingEllipse],
+) -> bool:
+    """Whether a stem starts at some other notehead rather than at this one.
+
+    Voices stacked in one column sit close enough that the head above can reach
+    the head below's stem: the gap it has to cross is smaller than the room a
+    real stem needs.  What tells them apart is where the stem begins -- the end
+    nearest this head lands on the other head instead.
+    """
+    if stem_direction(notehead, stem) == StemDirection.UP:
+        near_y = stem.center[1] + stem.size[1] / 2
+    else:
+        near_y = stem.center[1] - stem.size[1] / 2
+    return any(
+        other is not notehead
+        and abs(other.center[0] - stem.center[0]) <= other.size[0] * 0.8
+        and abs(other.center[1] - near_y) <= other.size[1] * 0.75
+        for other in noteheads
+    )
+
+
+def stems_of_notehead(
+    notehead: BoundingEllipse,
+    stems: list[RotatedBoundingBox],
+    ink: NDArray | None,
+    noteheads: list[BoundingEllipse] | None = None,
+) -> list[RotatedBoundingBox]:
+    """Every stem drawn on one notehead: at most one up and one down."""
+    thickened_notehead = notehead.make_box_thicker(15)
+    candidates = [
+        stem
+        for stem in stems
+        if stem.is_overlapping(thickened_notehead) and is_plausible_stem(notehead, stem)
+    ]
+    learned_directions = {stem_direction(notehead, stem) for stem in candidates}
+    candidates.extend(
+        stem
+        for stem in source_stem_candidates(notehead, ink)
+        # The scan is only consulted for a direction the segmentation missed,
+        # and never for a stem that starts at a different notehead.
+        if stem_direction(notehead, stem) not in learned_directions
+        and not belongs_to_another_notehead(notehead, stem, noteheads or [])
+        # A second direction on one head is the unison case, and a stray
+        # fragment looks just like it, so the scan has to show a whole stem.
+        and stem.size[1] >= notehead.size[1]
+    )
+    longest = {
+        direction: max(
+            (stem for stem in candidates if stem_direction(notehead, stem) == direction),
+            key=lambda candidate: candidate.size[1],
+            default=None,
+        )
+        for direction in StemDirection
+    }
+    return [longest[direction] for direction in StemDirection if longest[direction] is not None]
+
+
 def combine_noteheads_with_stems(
-    noteheads: list[BoundingEllipse], stems: list[RotatedBoundingBox]
+    noteheads: list[BoundingEllipse],
+    stems: list[RotatedBoundingBox],
+    source_image: NDArray | None = None,
 ) -> list[NoteheadWithStem]:
     """
     Combines noteheads with their stems as this tells us
     what vertical lines are stems and which are bar lines.
     """
-    def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bool:
-        """Reject tiny and horizontal fragments from the stems/rests segmentation class."""
-        stem_width, stem_height = stem.size
-        notehead_width, notehead_height = notehead.size
-        return (
-            stem_height >= max(notehead_height * 1.5, notehead_width)
-            and stem_width <= notehead_width * 0.75
-            and abs(stem.center[0] - notehead.center[0]) <= (notehead_width + stem_width) / 2
-        )
-
+    ink = vertical_ink(source_image) if source_image is not None else None
     result = []
-    noteheads = sorted(noteheads, key=lambda notehead: notehead.box[0][1])
-    for notehead in noteheads:
-        thickened_notehead = notehead.make_box_thicker(15)
-        candidates = [
-            stem
-            for stem in stems
-            if stem.is_overlapping(thickened_notehead) and is_plausible_stem(notehead, stem)
-        ]
-        if not candidates:
+    for notehead in sorted(noteheads, key=lambda notehead: notehead.box[0][1]):
+        found = stems_of_notehead(notehead, stems, ink, noteheads)
+        if not found:
             result.append(NoteheadWithStem(notehead, None, None))
             continue
-
-        stem = max(candidates, key=lambda candidate: candidate.size[1])
-        direction = StemDirection.UP if stem.center[1] < notehead.center[1] else StemDirection.DOWN
-        result.append(NoteheadWithStem(notehead, stem, direction))
+        directions = [stem_direction(notehead, stem) for stem in found]
+        stem = max(found, key=lambda candidate: candidate.size[1])
+        direction = directions[0] if len(directions) == 1 else None
+        result.append(NoteheadWithStem(notehead, stem, direction, directions))
     return result
 
 
@@ -170,7 +367,7 @@ def add_notes_to_staffs(
                 or notehead_chunk.notehead.size[1] < 0.5 * point.average_unit_size
             ):
                 continue
-            for notehead in split_clumps_of_noteheads(notehead_chunk, notehead_pred, staff):
+            for notehead in [notehead_chunk]:
                 point = staff.get_at(center[0])
                 if point is None:
                     continue
@@ -182,7 +379,13 @@ def add_notes_to_staffs(
                 ):
                     continue
                 position = point.find_position_in_unit_sizes(notehead.notehead)
-                note = Note(notehead.notehead, position, notehead.stem, notehead.stem_direction)
+                note = Note(
+                    notehead.notehead,
+                    position,
+                    notehead.stem,
+                    notehead.stem_direction,
+                    notehead.stem_directions,
+                )
                 result.append(note)
                 staff.add_symbol(note)
     number_of_notes = 0

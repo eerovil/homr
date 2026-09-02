@@ -29,10 +29,10 @@ from homr.brace_dot_detection import (
     prepare_brace_dot_image,
 )
 from homr.debug import Debug
-from homr.model import InputPredictions, MultiStaff
+from homr.model import InputPredictions, MultiStaff, Staff
 from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
 from homr.noise_filtering import filter_predictions
-from homr.note_detection import add_notes_to_staffs, combine_noteheads_with_stems
+from homr.note_detection import add_notes_to_staffs, combine_noteheads_with_stems, split_notehead_ellipse
 from homr.onnx_providers import coreml_available, cuda_available, rocm_available
 from homr.pdf_utils import render_pdf_to_image
 from homr.resize import resize_image
@@ -213,9 +213,11 @@ def process_image(
         transformer_config.use_coreml_encoder = config.coreml_encoder
         transformer_config.record_confidence = config.write_confidence
         if config.score_settings:
-            transformer_config.forbidden_rhythm_tokens = _load_score_settings(
-                config.score_settings, transformer_config.vocab.rhythm
+            score_settings = _load_score_settings(config.score_settings)
+            transformer_config.forbidden_rhythm_tokens = score_settings.forbidden_rhythm_tokens(
+                transformer_config.vocab.rhythm
             )
+            transformer_config.use_stem_voice_hints = score_settings.stem_voice_hints
 
         result_staffs = parse_staffs(
             debug,
@@ -288,7 +290,7 @@ def _write_confidence(path: str, staffs: list[list[EncodedSymbol]]) -> None:
         file.write("\n")
 
 
-def _load_score_settings(path: str, rhythm_vocabulary: dict[str, int]) -> set[int]:
+def _load_score_settings(path: str) -> RhythmSettings:
     try:
         with open(path) as file:
             data = json.load(file)
@@ -297,14 +299,20 @@ def _load_score_settings(path: str, rhythm_vocabulary: dict[str, int]) -> set[in
     if not isinstance(data, dict):
         raise InvalidProgramArgumentException("score settings must be a JSON object")
     try:
-        return RhythmSettings.from_json(data).forbidden_rhythm_tokens(rhythm_vocabulary)
+        return RhythmSettings.from_json(data)
     except ValueError as error:
         raise InvalidProgramArgumentException(f"Invalid score settings: {error}") from error
 
 
 def detect_staffs_in_image(
     image_path: str, config: ProcessingConfig
-) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], int]:
+) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], list[Staff]]:
+    """Detect staffs and their symbols.
+
+    The last element is the printed staffs as they were detected, before grand
+    staffs are merged, so a caller can still tell which printed staff a note was
+    assigned to.
+    """
     predictions, debug = load_and_preprocess_predictions(
         image_path, config.enable_debug, config.enable_cache, config.segnet_use_gpu
     )
@@ -314,7 +322,15 @@ def detect_staffs_in_image(
     debug.write_bounding_boxes("staff_fragments", symbols.staff_fragments)
     eprint("Found " + str(len(symbols.staff_fragments)) + " staff line fragments")
 
-    noteheads_with_stems = combine_noteheads_with_stems(symbols.noteheads, symbols.stems_rest)
+    unit_size = float(np.median([notehead.size[1] for notehead in symbols.noteheads]))
+    split_noteheads = [
+        split_notehead
+        for notehead in symbols.noteheads
+        for split_notehead in split_notehead_ellipse(notehead, predictions.notehead, unit_size)
+    ]
+    noteheads_with_stems = combine_noteheads_with_stems(
+        split_noteheads, symbols.stems_rest, predictions.preprocessed
+    )
     debug.write_bounding_boxes_alternating_colors("notehead_with_stems", noteheads_with_stems)
     eprint("Found " + str(len(noteheads_with_stems)) + " noteheads")
     if len(noteheads_with_stems) == 0:
@@ -371,7 +387,7 @@ def detect_staffs_in_image(
 
     debug.write_all_bounding_boxes_alternating_colors("notes", multi_staffs, notes)
 
-    return multi_staffs, predictions.preprocessed, debug, title_future, len(staffs)
+    return multi_staffs, predictions.preprocessed, debug, title_future, staffs
 
 
 def get_all_image_files_in_folder(folder: str) -> list[str]:
