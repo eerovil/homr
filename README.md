@@ -59,10 +59,18 @@ poetry run homr page.png --score-settings page.score-settings.json --output-conf
 and their nearest alternatives. When a constraint changes a rhythm choice, that
 record also retains the unconstrained result.
 
-`stem_voice_hints` is opt-in. HOMR uses a conservative geometry match between
-decoder attention and detected noteheads; a confident up stem becomes voice 1
-(or 5 on staff 2), and a down stem becomes voice 2 (or 6). Ambiguous matches
-leave the existing voice assignment unchanged.
+`stem_voice_hints` is **on** in this fork; set it to `false` to turn it off for a
+score. Each decoded note is matched to the notehead segmentation found for it,
+and where a staff is carrying two voices in a bar, a note drawn with an up stem
+becomes voice 1 (or 5 on staff 2) and a down stem voice 2 (or 6).
+
+A staff is taken to be carrying two voices when two notes sound at one moment
+with their stems drawn opposite ways, when a stem contradicts the note's height
+-- an up stem above the middle line, or a down stem below it -- or when one
+printed notehead carries both stems. Anywhere else, and wherever the match to a
+notehead is not clean, the existing voice assignment stands: on a staff carrying
+one voice the stems say how high the notes are, not which voice they are, and
+following them there would split that voice in half.
 
 ## Example
 
