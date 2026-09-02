@@ -124,25 +124,31 @@ def combine_noteheads_with_stems(
     Combines noteheads with their stems as this tells us
     what vertical lines are stems and which are bar lines.
     """
+    def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bool:
+        """Reject tiny and horizontal fragments from the stems/rests segmentation class."""
+        stem_width, stem_height = stem.size
+        notehead_width, notehead_height = notehead.size
+        return (
+            stem_height >= max(notehead_height * 1.5, notehead_width)
+            and stem_width <= notehead_width * 0.75
+        )
+
     result = []
     noteheads = sorted(noteheads, key=lambda notehead: notehead.box[0][1])
-    used_stems = set()
     for notehead in noteheads:
         thickened_notehead = notehead.make_box_thicker(15)
-        found_stem = False
-        for stem in stems:
-            if stem.is_overlapping(thickened_notehead):
-                is_stem_above = stem.center[1] < notehead.center[1]
-                if is_stem_above:
-                    direction = StemDirection.UP
-                else:
-                    direction = StemDirection.DOWN
-                result.append(NoteheadWithStem(notehead, stem, direction))
-                used_stems.add(stem)
-                found_stem = True
-                break
-        if not found_stem:
+        candidates = [
+            stem
+            for stem in stems
+            if stem.is_overlapping(thickened_notehead) and is_plausible_stem(notehead, stem)
+        ]
+        if not candidates:
             result.append(NoteheadWithStem(notehead, None, None))
+            continue
+
+        stem = max(candidates, key=lambda candidate: candidate.size[1])
+        direction = StemDirection.UP if stem.center[1] < notehead.center[1] else StemDirection.DOWN
+        result.append(NoteheadWithStem(notehead, stem, direction))
     return result
 
 
