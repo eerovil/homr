@@ -148,3 +148,41 @@ def test_a_barline_is_not_joined_into_one_long_stem() -> None:
     matched = combine_noteheads_with_stems([notehead], barline)
 
     assert matched[0].stem is None or matched[0].stem.size[1] <= 12 * 5
+
+
+def test_a_chord_shares_a_down_stem_that_only_sticks_out_below_it() -> None:
+    top = BoundingEllipse(((50, 40), (16, 12), 0), empty)
+    bottom = BoundingEllipse(((50, 52), (16, 12), 0), empty)
+    # All that is left of the chord's stem is the stub below the lowest head.
+    stub = RotatedBoundingBox(((42, 64), (2, 10), 0), empty)
+
+    matched = combine_noteheads_with_stems([top, bottom], [stub])
+
+    assert [note.stem_direction for note in matched] == [
+        StemDirection.DOWN,
+        StemDirection.DOWN,
+    ]
+
+
+def test_a_second_takes_the_stem_drawn_between_its_two_noteheads() -> None:
+    left = BoundingEllipse(((40, 51), (16, 12), 0), empty)
+    right = BoundingEllipse(((56, 45), (16, 12), 0), empty)
+    down_stem = RotatedBoundingBox(((47, 63), (2, 24), 0), empty)
+
+    matched = combine_noteheads_with_stems([left, right], [down_stem])
+
+    assert {note.stem_direction for note in matched} == {StemDirection.DOWN}
+
+
+def test_a_voice_beside_a_chord_does_not_take_its_stem() -> None:
+    top = BoundingEllipse(((50, 40), (16, 12), 0), empty)
+    bottom = BoundingEllipse(((50, 52), (16, 12), 0), empty)
+    beside = BoundingEllipse(((68, 40), (16, 12), 0), empty)
+    stub = RotatedBoundingBox(((42, 64), (2, 10), 0), empty)
+    its_own = RotatedBoundingBox(((76, 20), (2, 30), 0), empty)
+
+    matched = combine_noteheads_with_stems([top, bottom, beside], [stub, its_own])
+
+    directions = {note.notehead.center[0]: note.stem_direction for note in matched}
+    assert directions[68] == StemDirection.UP
+    assert directions[50] == StemDirection.DOWN

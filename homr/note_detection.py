@@ -16,6 +16,8 @@ ATTACHMENT_SLACK = 0.3
 WAIST_DEPTH = 0.8
 # The longest a stem can be, in noteheads, when joining its broken pieces.
 MAX_STEM_HEIGHT = 5.0
+# How many times a chord's stem may be handed on from one notehead to the next.
+CHORD_PASSES = 2
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -222,7 +224,7 @@ def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bo
         # plus a remaining fragment about half a notehead high.  Side and
         # attachment checks below still reject nearby rests and barlines.
         and stem_height >= notehead_height * 0.5
-        and stem_width <= notehead_width * 0.75
+        and stem_width <= notehead_width * 1.3
         and is_attached(notehead, stem)
     )
 
@@ -449,7 +451,63 @@ def combine_noteheads_with_stems(
         stem = max(found, key=lambda candidate: candidate.size[1])
         direction = directions[0] if len(directions) == 1 else None
         result.append(NoteheadWithStem(notehead, stem, direction, directions))
+    share_stems_within_chords(result)
     return result
+
+
+def share_stems_within_chords(noteheads: list[NoteheadWithStem]) -> None:
+    """Give a chord's other noteheads the stem drawn once for all of them.
+
+    A chord's stem runs from the head at its far end, and the part of it that
+    lies alongside the other heads is inside their ink, so the segmentation
+    often has only the stub sticking out past the last one.  A head with no
+    stem of its own therefore takes its chord-mate's.
+
+    Stacked heads are settled first and heads side by side after, because a
+    second between two voices and a second within one chord look alike from
+    above -- but a head that is part of a stack has already been answered by
+    the stack, and asking sideways as well is how it picks up the other voice's
+    stem instead.
+    """
+    for stacked in (True, False):
+        for _ in range(CHORD_PASSES):
+            for item in noteheads:
+                if item.stem_directions:
+                    continue
+                other = _chord_mate(item, noteheads, stacked)
+                if other is None:
+                    continue
+                item.stem_directions = list(other.stem_directions)
+                item.stem_direction = other.stem_directions[0]
+                item.stem = item.stem or other.stem
+
+
+def _chord_mate(
+    item: NoteheadWithStem, noteheads: list[NoteheadWithStem], stacked: bool
+) -> NoteheadWithStem | None:
+    """The notehead of the same chord whose stem this one should be given."""
+    for other in noteheads:
+        if other is item or len(other.stem_directions) != 1:
+            continue
+        width = max(item.notehead.size[0], other.notehead.size[0])
+        height = max(item.notehead.size[1], other.notehead.size[1])
+        sideways = abs(other.notehead.center[0] - item.notehead.center[0])
+        offset = item.notehead.center[1] - other.notehead.center[1]
+        # A chord's heads sit one above the other, except at an interval of a
+        # second, where the engraver puts one beside the other with the stem
+        # between them.
+        beside = sideways > width * 0.5
+        if beside == stacked or sideways > width * 1.1:
+            continue
+        if not 0 < abs(offset) <= height * (0.8 if beside else 1.3):
+            continue
+        # Only a down stem is handed upwards: it hangs below the chord, so the
+        # head that sees its stub is the lowest one.  An up stem already runs
+        # alongside the heads above it, and handing one downwards is exactly how
+        # a head steals the stem of the head above it.
+        if beside or (other.stem_directions[0] == StemDirection.DOWN and offset < 0):
+            return other
+    return None
 
 
 def add_notes_to_staffs(

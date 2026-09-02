@@ -4,18 +4,7 @@
     "hanget-soi": {
       "image": "hanget-soi.png",
       "reference": "hanget-soi.musicxml",
-      "known_gaps": [
-        {
-          "failure": "staff 1: m2 D5 at x=660.0 expected ['down'] but detected ['none']",
-          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
-          "id": "HS-s1-660p7"
-        },
-        {
-          "failure": "staff 1: m4 C5 at x=1568.0 expected ['down'] but detected ['none']",
-          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
-          "id": "HS-s1-1568p6"
-        }
-      ]
+      "known_gaps": []
     },
     "kolme-kakea": {
       "image": "kolme-kakea.png",
@@ -55,7 +44,7 @@
       "known_gaps": [
         {
           "failure": "staff 2: m1 G3 at x=971.5 expected ['down', 'up'] but detected ['up']",
-          "reason": "the stem is printed but the segmentation leaves no candidate this head can claim",
+          "reason": "the stems mask has no ink on that side of the head",
           "id": "S4-s2-972p8"
         }
       ]
