@@ -198,6 +198,44 @@ barline . . . . ."""
         self.assertEqual(self._read_note_voice(note5), "6")
         self.assertEqual(self._read_note_voice(note6), "5")
 
+    def test_rebalance_measure_voices_prefers_stem_direction_when_available(self) -> None:
+        measure = ET.Element("measure")
+        up = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(up, "stem").text = "up"
+        down = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(down, "stem").text = "down"
+        measure.extend([up, self._build_test_backup(duration=4), down])
+
+        rebalance_measure_voices(measure)
+
+        self.assertEqual(self._read_note_voice(up), "1")
+        self.assertEqual(self._read_note_voice(down), "2")
+
+    def test_rebalance_measure_voices_keeps_stem_direction_when_voice_is_busy(self) -> None:
+        measure = ET.Element("measure")
+        first = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(first, "stem").text = "down"
+        second = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(second, "stem").text = "down"
+        measure.extend([first, self._build_test_backup(duration=4), second])
+
+        rebalance_measure_voices(measure)
+
+        self.assertEqual(self._read_note_voice(first), "2")
+        self.assertEqual(self._read_note_voice(second), "2")
+
+    def test_rebalance_measure_voices_uses_the_agreeing_hinted_chord_tone(self) -> None:
+        measure = ET.Element("measure")
+        first = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(first, "stem").text = "down"
+        second = self._build_test_note(duration=4, staff=1, voice=1, is_chord=True)
+        measure.extend([first, second])
+
+        rebalance_measure_voices(measure)
+
+        self.assertEqual(self._read_note_voice(first), "2")
+        self.assertEqual(self._read_note_voice(second), "2")
+
     def _build_test_note(
         self, duration: int, staff: int, voice: int, is_chord: bool = False
     ) -> ET.Element:

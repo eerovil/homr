@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "fixtures": {
+    "hanget-soi": {
+      "image": "hanget-soi.png",
+      "reference": "hanget-soi.musicxml",
+      "known_gaps": []
+    },
+    "kolme-kakea": {
+      "image": "kolme-kakea.png",
+      "reference": "kolme-kakea.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: no detected notehead for m4 C5 at x=655.62",
+          "reason": "the segmentation has no usable notehead here, or runs it into its neighbours as one blob",
+          "id": "KK-s1-1279p6"
+        },
+        {
+          "failure": "staff 2: no detected notehead for m4 G4 at x=655.62",
+          "reason": "the segmentation has no usable notehead here, or runs it into its neighbours as one blob",
+          "id": "KK-s2-1280p3"
+        },
+        {
+          "failure": "staff 3: no detected notehead for m3 F4 at x=501.48",
+          "reason": "the segmentation has no usable notehead here, or runs it into its neighbours as one blob",
+          "id": "KK-s3-1007p2"
+        }
+      ]
+    },
+    "sammon-ryosto": {
+      "image": "sammon-ryosto.png",
+      "reference": "sammon-ryosto.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 1: no detected notehead for m2 C4 at x=264.17",
+          "reason": "the segmentation has no usable notehead here, or runs it into its neighbours as one blob",
+          "id": "SR-s1-544p6"
+        }
+      ]
+    },
+    "system4": {
+      "image": "system4.png",
+      "reference": "system4.musicxml",
+      "known_gaps": [
+        {
+          "failure": "staff 2: m1 G3 at x=971.5 expected ['down', 'up'] but detected ['up']",
+          "reason": "the stems mask has no ink on that side of the head",
+          "id": "S4-s2-972p8"
+        }
+      ],
+      "known_voice_gaps": [
+        {
+          "failure": "staff 2 bar 1: m1 G3 is printed in voice ['1', '2'] but its up stem would put it in voice 1",
+          "reason": "follows from the stem this head is missing, which the segmentation has no ink for"
+        }
+      ]
+    }
+  }
+}

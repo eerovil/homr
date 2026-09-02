@@ -43,7 +43,10 @@ Then see the resulting MusicXML:
 When you know notation facts about one score, keep them in a JSON file and opt in for that run:
 
 ```json
-{"decoder": {"minimum_duration": "16", "allow_tuplets": true, "allow_grace_notes": true}}
+{
+  "decoder": {"minimum_duration": "16", "allow_tuplets": true, "allow_grace_notes": true},
+  "postprocessing": {"stem_voice_hints": true}
+}
 ```
 
 ```bash
@@ -55,6 +58,11 @@ poetry run homr page.png --score-settings page.score-settings.json --output-conf
 `.confidence.json` sidecar with the selected decoder tokens, their probabilities,
 and their nearest alternatives. When a constraint changes a rhythm choice, that
 record also retains the unconstrained result.
+
+`stem_voice_hints` is opt-in. HOMR uses a conservative geometry match between
+decoder attention and detected noteheads; a confident up stem becomes voice 1
+(or 5 on staff 2), and a down stem becomes voice 2 (or 6). Ambiguous matches
+leave the existing voice assignment unchanged.
 
 ## Example
 

@@ -6,11 +6,12 @@ import numpy as np
 from homr import constants
 from homr.debug import Debug
 from homr.image_utils import crop_image_and_return_new_top
-from homr.model import MultiStaff, Staff
+from homr.model import MultiStaff, Note, Staff
 from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
+from homr.stem_voice_hints import add_stem_voice_hints
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
@@ -309,6 +310,10 @@ def parse_staff_image(
     )
     eprint("Running TrOmr inference on staff image", index)
     result = parse_staff_tromr(staff_image=staff_image, staff=transformed_staff, config=config)
+    if config.use_stem_voice_hints:
+        noteheads = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]
+        hinted = add_stem_voice_hints(result, noteheads)
+        eprint("Applied", hinted, "stem voice hints on staff", index)
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
