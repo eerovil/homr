@@ -22,7 +22,7 @@ import pytest
 from homr.main import ProcessingConfig, detect_staffs_in_image
 from homr.model import Note, Staff
 from homr.segmentation.config import segnet_path_onnx
-from tests.fixture_matching import check_fixture
+from tests.fixture_matching import check_fixture, voice_failures
 from tests.fixture_reference import reference_staffs
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -88,4 +88,33 @@ def test_stem_directions_match_the_reference_score(name: str) -> None:
     assert not unexpected, "\n".join([f"{name}: new stem-direction failures:", *unexpected])
     assert not fixed, "\n".join(
         [f"{name}: these known gaps are fixed, remove them from the manifest:", *sorted(fixed)]
+    )
+
+
+@pytest.mark.skipif(
+    not os.path.exists(segnet_path_onnx), reason="the segmentation model is not installed"
+)
+@pytest.mark.parametrize("name", fixture_names())
+def test_stems_put_the_notes_in_the_voices_the_page_prints(name: str) -> None:
+    """The stems are only worth detecting if they say which voice a note is.
+
+    This applies homr's own rule -- a stem decides a voice only in a bar where
+    the staff is carrying two -- and checks the answer against the voice the
+    reference prints.  Kolme kakea is the fixture that keeps it honest: one
+    voice per staff, stemmed by height, where every note must stay in voice 1.
+    """
+    entry = json.loads(MANIFEST.read_text())["fixtures"][name]
+    reference = reference_staffs(FIXTURES / entry["reference"])
+    detected = detect(FIXTURES / entry["image"])
+    allowed = {gap["failure"] for gap in entry.get("known_voice_gaps", [])}
+    failures = [
+        failure
+        for index in range(min(len(reference), len(detected)))
+        for failure in voice_failures(index + 1, reference[index]["notes"], detected[index])
+    ]
+    unexpected = [failure for failure in failures if failure not in allowed]
+    fixed = allowed - set(failures)
+    assert not unexpected, "\n".join([f"{name}: new voice failures:", *unexpected])
+    assert not fixed, "\n".join(
+        [f"{name}: these known voice gaps are fixed, remove them:", *sorted(fixed)]
     )

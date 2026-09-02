@@ -96,6 +96,7 @@ def reference_staffs(path: Path) -> list[dict]:
                         "moment": (index, round(onset / divisions, 4)),
                         "position": _staff_position(pitch, clefs.get(staff, ("G", 2, 0))),
                         "stem": element.findtext("stem"),
+                        "voice": element.findtext("voice", "1"),
                         "measure": measure.get("number"),
                         "step": pitch.findtext("step"),
                         "octave": pitch.findtext("octave"),

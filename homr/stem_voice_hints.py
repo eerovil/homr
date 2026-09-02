@@ -18,6 +18,8 @@ _ANCHOR_X_TOLERANCE = 8.0
 _MATCH_X_TOLERANCE = 12.0
 _MATCH_Y_TOLERANCE = 16.0
 _MIN_ANCHORS = 8
+#: Written on a notehead that carries an up stem and a down stem at once.
+SHARED = "both"
 
 
 def _note_coordinates(symbol: EncodedSymbol) -> tuple[float, float] | None:
@@ -93,7 +95,13 @@ def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int
         distance, note = matches[0]
         if len(matches) > 1 and matches[1][0] - distance < 16:
             continue
-        if len(note.stem_directions) != 1:
+        if not note.stem_directions:
+            continue
+        if len(note.stem_directions) > 1:
+            # Two voices meeting on one printed notehead.  Which voice this
+            # note is cannot be read off a head that carries both stems, but
+            # that the staff has two of them can.
+            symbol.stem_direction = SHARED
             continue
         direction = note.stem_directions[0]
         symbol.stem_direction = "up" if direction == StemDirection.UP else "down"

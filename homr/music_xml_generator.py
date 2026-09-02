@@ -10,6 +10,7 @@ import numpy as np
 
 from homr import constants
 from homr.simple_logging import eprint
+from homr.stem_voice_hints import SHARED
 from homr.transformer.vocabulary import (
     EncodedSymbol,
     SymbolDuration,
@@ -147,8 +148,11 @@ def build_measures(
     is_first_part: bool,
     has_two_staves: bool = False,
 ) -> list[ET.Element]:
+    clefs: dict[int, tuple[str, int, int]] = {}
+
     def close_current_measure() -> None:
-        rebalance_measure_voices(current_measure)
+        read_clefs(current_measure, clefs)
+        rebalance_measure_voices(current_measure, clefs)
         measures.append(current_measure)
 
     measure_number = 1
@@ -346,7 +350,46 @@ class TimedNoteEvent:
     notes: list[ET.Element]
 
 
-def rebalance_measure_voices(measure: ET.Element) -> None:
+_STEPS = "CDEFGAB"
+_CLEF_REFERENCE = {"G": ("G", 4), "F": ("F", 3), "C": ("C", 4)}
+# Staff positions count up from the bottom line, so the middle line is 5.
+_MIDDLE_LINE = 5
+
+
+def _diatonic(step: str, octave: int) -> int:
+    return 7 * octave + _STEPS.index(step)
+
+
+def read_clefs(measure: ET.Element, clefs: dict[int, tuple[str, int, int]]) -> None:
+    """Remember the clef each staff is reading in, as the measures go by."""
+    for attributes in measure.findall("attributes"):
+        for clef in attributes.findall("clef"):
+            sign = clef.findtext("sign", "G")
+            if sign not in _CLEF_REFERENCE:
+                continue
+            clefs[int(clef.get("number", "1"))] = (
+                sign,
+                int(clef.findtext("line", "2")),
+                int(clef.findtext("clef-octave-change", "0")),
+            )
+
+
+def _staff_position(note: ET.Element, clef: tuple[str, int, int]) -> int | None:
+    """Where a note sits on the staff: bottom line 1, one step per line or space."""
+    pitch = note.find("pitch")
+    if pitch is None:
+        return None
+    sign, line, octave_change = clef
+    reference_step, reference_octave = _CLEF_REFERENCE[sign]
+    step = pitch.findtext("step", "C")
+    octave = int(pitch.findtext("octave", "4"))
+    written = _diatonic(step, octave) - 7 * octave_change
+    return 2 * line - 1 + written - _diatonic(reference_step, reference_octave)
+
+
+def rebalance_measure_voices(
+    measure: ET.Element, clefs: dict[int, tuple[str, int, int]] | None = None
+) -> None:
     """Assign stable voices per staff, honoring opt-in physical stem hints."""
     timed_events: list[TimedNoteEvent] = []
     current_time = 0
@@ -392,7 +435,9 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
 
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
-        two_voices = _staff_carries_two_voices(sorted_events)
+        two_voices = _staff_carries_two_voices(
+            sorted_events, (clefs or {}).get(staff_num)
+        )
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -422,28 +467,56 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
                 voice_el = note.find("voice")
                 if voice_el is not None:
                     voice_el.text = xml_voice
+    for note in measure.findall("note"):
+        note.attrib.pop("stem-shared", None)
 
 
-def _staff_carries_two_voices(events: list[TimedNoteEvent]) -> bool:
+def _staff_carries_two_voices(
+    events: list[TimedNoteEvent], clef: tuple[str, int, int] | None
+) -> bool:
     """Whether this staff really has two voices in this measure.
 
     A stem says which voice a note is only when the staff has two of them to
     choose between.  On a staff carrying one voice the direction says how high
     the note is instead -- everything above the middle line stems down -- so
     honouring it there splits one voice in half.  Measured on Lemmen nosto,
-    where every staff has one voice: 31 notes moved into voice 2 over 16 bars,
-    and not once did the two sound together.
+    where every staff carries one voice: the setting moved 31 notes into voice 2
+    over 16 bars, and not once did the two sound together.
 
-    What two voices look like is two notes sounding at the same moment with
-    their stems drawn in opposite directions.
+    Two things give a second voice away, and the fixtures need both.  Two notes
+    sounding at one moment with their stems drawn opposite ways is the plain
+    case.  The other is a stem that contradicts the note's height -- an up stem
+    above the middle line, or a down stem below it -- because a lone voice never
+    does that, while a voice sharing a staff is stemmed by which voice it is.
+    A note *on* the middle line is neutral: it is stemmed either way even in one
+    voice.
     """
+    if any(_shares_a_notehead(note) for event in events for note in event.notes):
+        return True
     for index, event in enumerate(events):
         for other in events[index + 1 :]:
             if other.start >= event.end:
                 break
             if _direction(event) and _direction(other) and _direction(event) != _direction(other):
                 return True
+    if clef is None:
+        return False
+    for event in events:
+        direction = _direction(event)
+        for note in event.notes:
+            position = _staff_position(note, clef)
+            if position is None:
+                continue
+            if direction == "up" and position > _MIDDLE_LINE:
+                return True
+            if direction == "down" and position < _MIDDLE_LINE:
+                return True
     return False
+
+
+def _shares_a_notehead(note: ET.Element) -> bool:
+    """Whether this note was read off a head drawn with both stems."""
+    return note.get("stem-shared") == "yes"
 
 
 def _direction(event: TimedNoteEvent) -> str | None:
@@ -766,8 +839,12 @@ def build_note_or_rest(
     slur_number = staff_num
     ET.SubElement(note, "voice").text = str(get_xml_voice(staff_num, rhythmic_layer))
     ET.SubElement(note, "staff").text = str(staff_num)
-    if model_note.stem_direction is not None:
+    if model_note.stem_direction in {"up", "down"}:
         ET.SubElement(note, "stem").text = model_note.stem_direction
+    elif model_note.stem_direction == SHARED:
+        # Not a stem MusicXML can carry, so it is left as a mark for the voice
+        # rebalancer and removed again once it has been read.
+        note.set("stem-shared", "yes")
 
     build_articulations(note, model_note.articulation, tuplet_mark, state)
     build_slurs(note, model_note.slur, slur_number)

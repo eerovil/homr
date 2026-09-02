@@ -18,6 +18,8 @@ BLOCKED = 1e6
 FIT_ROUNDS = 4
 # A collision offset puts two voices of one moment about a notehead apart.
 COLUMN_GAP = 1.4
+# Staff positions count up from the bottom line, so the middle line is 5.
+MIDDLE_LINE = 5
 
 
 @dataclass
@@ -27,7 +29,10 @@ class Head:
     x: float
     position: float
     stems: set[str] = field(default_factory=set)
+    voices: set[str] = field(default_factory=set)
     label: str = ""
+    # The bar and beat this notehead sounds on, for a reference head.
+    moment: tuple | None = None
     # Where the notehead is in the scan, for a detected one.
     scan: tuple[float, float] | None = None
 
@@ -56,10 +61,12 @@ def reference_columns(notes: list[dict]) -> list[Column]:
                 x=note["x"],
                 position=note["position"],
                 label=f"m{note['measure']} {note['step']}{note['octave']}",
+                moment=note["moment"],
             )
             heads[key] = head
         if note["stem"]:
             head.stems.add(note["stem"])
+        head.voices.add(note["voice"])
     columns = [
         Column(x=min(head.x for head in heads.values()), heads=list(heads.values()))
         for _, heads in sorted(moments.items())
@@ -209,7 +216,9 @@ def _column_heads(columns: list[Column]) -> list[Head]:
             x=column.x,
             position=head.position,
             stems=head.stems,
+            voices=head.voices,
             label=head.label,
+            moment=head.moment,
             scan=head.scan,
         )
         for column in columns
@@ -320,3 +329,66 @@ def check_fixture(reference: list[dict], detected: list[list[dict]]) -> list[Sta
         detected_notes = detected[index] if index < len(detected) else []
         results.append(check_staff(index + 1, reference_notes, detected_notes))
     return results
+
+
+def voice_failures(index: int, reference: list[dict], detected: list[dict]) -> list[str]:
+    """Check the stem-to-voice rule against the printed voices, bar by bar.
+
+    Stems are worth detecting because they say which voice a note belongs to,
+    so the fixtures should say whether they do.  This applies the rule homr
+    applies -- a stem decides a voice only in a bar where two notes sound
+    together with their stems drawn opposite ways -- and compares the answer
+    against the voice the reference prints.
+    """
+    pairs = [
+        (head, other)
+        for head, other in match(reference_columns(reference), detected_columns(detected))
+        if head is not None and other is not None
+    ]
+    bars: dict[object, list[tuple[Head, Head]]] = {}
+    for head, other in pairs:
+        assert head.moment is not None
+        bars.setdefault(head.moment[0], []).append((head, other))
+    failures = []
+    for bar, found in sorted(bars.items(), key=lambda item: str(item[0])):
+        moments: dict[object, set[str]] = {}
+        contradicts = False
+        shared = False
+        for head, other in found:
+            assert head.moment is not None
+            if len(other.stems) > 1:
+                # One printed head carrying both stems is two voices meeting.
+                shared = True
+                continue
+            if len(other.stems) != 1:
+                continue
+            moments.setdefault(head.moment, set()).update(other.stems)
+            # A lone voice stems by height; a stem against the note's height
+            # means the staff is carrying a second one.
+            if "up" in other.stems and other.position > MIDDLE_LINE:
+                contradicts = True
+            if "down" in other.stems and other.position < MIDDLE_LINE:
+                contradicts = True
+        together = (
+            shared or contradicts or any(len(stems) > 1 for stems in moments.values())
+        )
+        printed = {voice for head, _ in found for voice in head.voices}
+        if not together:
+            if len(printed) > 1:
+                failures.append(
+                    f"staff {index} bar {bar + 1}: the page prints voices"
+                    f" {sorted(printed)} but nothing in the detected stems says"
+                    " so, and no voice would be decided"
+                )
+            continue
+        for head, other in found:
+            if len(other.stems) != 1:
+                continue
+            expected = "1" if "up" in other.stems else "2"
+            if head.voices != {expected}:
+                failures.append(
+                    f"staff {index} bar {bar + 1}: {head.label} is printed in voice"
+                    f" {sorted(head.voices)} but its {sorted(other.stems)[0]} stem"
+                    f" would put it in voice {expected}"
+                )
+    return failures

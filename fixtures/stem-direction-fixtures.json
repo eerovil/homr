@@ -47,6 +47,12 @@
           "reason": "the stems mask has no ink on that side of the head",
           "id": "S4-s2-972p8"
         }
+      ],
+      "known_voice_gaps": [
+        {
+          "failure": "staff 2 bar 1: m1 G3 is printed in voice ['1', '2'] but its up stem would put it in voice 1",
+          "reason": "follows from the stem this head is missing, which the segmentation has no ink for"
+        }
       ]
     }
   }
