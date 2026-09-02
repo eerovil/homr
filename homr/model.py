@@ -139,6 +139,7 @@ class Note(SymbolOnStaff):
         position: int,
         stem: RotatedBoundingBox | None,
         stem_direction: StemDirection | None,
+        stem_directions: list[StemDirection] | None = None,
     ):
         super().__init__(box.center)
         self.box = box
@@ -147,6 +148,7 @@ class Note(SymbolOnStaff):
         self.stem = stem
         self.circle_of_fifth = 0
         self.stem_direction = stem_direction
+        self.stem_directions = stem_directions or ([] if stem_direction is None else [stem_direction])
         self.beams: list[RotatedBoundingBox] = []
         self.flags: list[RotatedBoundingBox] = []
 
@@ -177,7 +179,7 @@ class Note(SymbolOnStaff):
         return str(self)
 
     def copy(self) -> "Note":
-        return Note(self.box, self.position, self.stem, self.stem_direction)
+        return Note(self.box, self.position, self.stem, self.stem_direction, self.stem_directions)
 
 
 class BarLine(SymbolOnStaff):

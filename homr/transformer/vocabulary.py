@@ -290,6 +290,7 @@ class EncodedSymbol:
         position: str = nonote,
         coordinates: tuple[float, float] | None = None,
         confidence: dict[str, Any] | None = None,
+        stem_direction: str | None = None,
     ) -> None:
         self.rhythm = rhythm
         self.pitch = pitch
@@ -307,6 +308,10 @@ class EncodedSymbol:
         # Optional decoder diagnostics. Keeping them on the symbol means the
         # score post-processing decides which records reach the sidecar.
         self.confidence = confidence
+        # Set only by the opt-in geometry post-processing pass.  It is not a
+        # transformer prediction and intentionally does not affect equality or
+        # token serialization.
+        self.stem_direction = stem_direction
         self._duration: SymbolDuration | None = None
 
     def is_control_symbol(self) -> bool:

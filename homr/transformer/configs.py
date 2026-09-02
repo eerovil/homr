@@ -87,6 +87,7 @@ class Config:
         self.vocab = Vocabulary()
         self.forbidden_rhythm_tokens: set[int] = set()
         self.record_confidence = False
+        self.use_stem_voice_hints = False
         self.filepaths = FilePaths()
         self.channels = 1
         self.patch_size = 16

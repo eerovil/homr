@@ -347,7 +347,7 @@ class TimedNoteEvent:
 
 
 def rebalance_measure_voices(measure: ET.Element) -> None:
-    """Assign stable non-overlapping voices per staff for a whole measure."""
+    """Assign stable voices per staff, honoring opt-in physical stem hints."""
     timed_events: list[TimedNoteEvent] = []
     current_time = 0
     last_note_start = 0
@@ -400,8 +400,18 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
                 if active_end > event.start
             ]
             used_voices = {voice_no for _, voice_no in active}
-            voice_no = 1
+            directions = {
+                direction
+                for note in event.notes
+                if (direction := note.findtext("stem")) in {"up", "down"}
+            }
+            preferred_voice = (
+                {"up": 1, "down": 2}.get(directions.pop()) if len(directions) == 1 else None
+            )
+            voice_no = preferred_voice if preferred_voice is not None else 1
             while voice_no in used_voices:
+                if preferred_voice is not None:
+                    break
                 voice_no += 1
             active.append((event.end, voice_no))
             xml_voice = str(get_xml_voice(staff_num, voice_no - 1))
@@ -721,6 +731,8 @@ def build_note_or_rest(
     slur_number = staff_num
     ET.SubElement(note, "voice").text = str(get_xml_voice(staff_num, rhythmic_layer))
     ET.SubElement(note, "staff").text = str(staff_num)
+    if model_note.stem_direction is not None:
+        ET.SubElement(note, "stem").text = model_note.stem_direction
 
     build_articulations(note, model_note.articulation, tuplet_mark, state)
     build_slurs(note, model_note.slur, slur_number)
@@ -753,10 +765,14 @@ def build_note_chord(
         notes = [n for n in group_notes if n.pitch not in (empty, nonote)]
         rests = [n for n in group_notes if n.pitch in (empty, nonote)]
 
-        is_first = True
-        for note in notes:
-            result.append(build_note_or_rest(note, i, not is_first, state, note_chord.tuplet_mark))
-            is_first = False
+        direction_groups = _split_mixed_stem_directions(notes)
+        for direction_index, direction_group in enumerate(direction_groups):
+            is_first = True
+            for note in direction_group:
+                result.append(build_note_or_rest(note, i, not is_first, state, note_chord.tuplet_mark))
+                is_first = False
+            if direction_index != len(direction_groups) - 1:
+                result.append(build_backup(group_duration, state))
 
         if rests:
             assert group_duration > Fraction(0)
@@ -774,6 +790,16 @@ def build_note_chord(
         result.append(build_backup(max(by_duration) - chord_duration, state))
 
     return result
+
+
+def _split_mixed_stem_directions(notes: list[EncodedSymbol]) -> list[list[EncodedSymbol]]:
+    """Keep a chord together unless confident hints say it contains two voices."""
+    directions = {note.stem_direction for note in notes if note.stem_direction is not None}
+    if directions != {"up", "down"}:
+        return [notes]
+    up = [note for note in notes if note.stem_direction != "down"]
+    down = [note for note in notes if note.stem_direction == "down"]
+    return [up, down]
 
 
 def _group_notes(notes: list[EncodedSymbol]) -> dict[Fraction, list[EncodedSymbol]]:

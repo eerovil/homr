@@ -11,9 +11,13 @@ class RhythmSettings:
     minimum_duration: int | None = None
     allow_tuplets: bool = True
     allow_grace_notes: bool = True
+    stem_voice_hints: bool = False
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "RhythmSettings":
+        unknown_root = set(data) - {"decoder", "postprocessing"}
+        if unknown_root:
+            raise ValueError("unknown score setting(s): " + ", ".join(sorted(unknown_root)))
         decoder = data.get("decoder", {})
         if not isinstance(decoder, dict):
             raise ValueError("score settings 'decoder' must be an object")
@@ -31,10 +35,20 @@ class RhythmSettings:
         for name in ("allow_tuplets", "allow_grace_notes"):
             if name in decoder and not isinstance(decoder[name], bool):
                 raise ValueError(f"{name} must be true or false")
+        postprocessing = data.get("postprocessing", {})
+        if not isinstance(postprocessing, dict):
+            raise ValueError("score settings 'postprocessing' must be an object")
+        unknown = set(postprocessing) - {"stem_voice_hints"}
+        if unknown:
+            raise ValueError("unknown postprocessing setting(s): " + ", ".join(sorted(unknown)))
+        stem_voice_hints = postprocessing.get("stem_voice_hints", False)
+        if not isinstance(stem_voice_hints, bool):
+            raise ValueError("stem_voice_hints must be true or false")
         return cls(
             minimum_duration=minimum,
             allow_tuplets=decoder.get("allow_tuplets", True),
             allow_grace_notes=decoder.get("allow_grace_notes", True),
+            stem_voice_hints=stem_voice_hints,
         )
 
     def forbidden_rhythm_tokens(self, vocabulary: dict[str, int]) -> set[int]:
