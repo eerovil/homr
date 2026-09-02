@@ -392,6 +392,7 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
 
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
+        two_voices = _staff_carries_two_voices(sorted_events)
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -406,7 +407,9 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
                 if (direction := note.findtext("stem")) in {"up", "down"}
             }
             preferred_voice = (
-                {"up": 1, "down": 2}.get(directions.pop()) if len(directions) == 1 else None
+                {"up": 1, "down": 2}.get(directions.pop())
+                if two_voices and len(directions) == 1
+                else None
             )
             voice_no = preferred_voice if preferred_voice is not None else 1
             while voice_no in used_voices:
@@ -419,6 +422,38 @@ def rebalance_measure_voices(measure: ET.Element) -> None:
                 voice_el = note.find("voice")
                 if voice_el is not None:
                     voice_el.text = xml_voice
+
+
+def _staff_carries_two_voices(events: list[TimedNoteEvent]) -> bool:
+    """Whether this staff really has two voices in this measure.
+
+    A stem says which voice a note is only when the staff has two of them to
+    choose between.  On a staff carrying one voice the direction says how high
+    the note is instead -- everything above the middle line stems down -- so
+    honouring it there splits one voice in half.  Measured on Lemmen nosto,
+    where every staff has one voice: 31 notes moved into voice 2 over 16 bars,
+    and not once did the two sound together.
+
+    What two voices look like is two notes sounding at the same moment with
+    their stems drawn in opposite directions.
+    """
+    for index, event in enumerate(events):
+        for other in events[index + 1 :]:
+            if other.start >= event.end:
+                break
+            if _direction(event) and _direction(other) and _direction(event) != _direction(other):
+                return True
+    return False
+
+
+def _direction(event: TimedNoteEvent) -> str | None:
+    """The one stem direction this event is drawn with, if it has just one."""
+    directions = {
+        direction
+        for note in event.notes
+        if (direction := note.findtext("stem")) in {"up", "down"}
+    }
+    return directions.pop() if len(directions) == 1 else None
 
 
 def get_note_pitch(note: ET.Element) -> str | None:

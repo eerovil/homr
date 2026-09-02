@@ -1,7 +1,12 @@
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 
 from homr.model import StemDirection
-from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
+from homr.music_xml_generator import (
+    XmlGeneratorArguments,
+    generate_xml,
+    rebalance_measure_voices,
+)
 from homr.stem_voice_hints import add_stem_voice_hints
 from homr.transformer.vocabulary import EncodedSymbol
 
@@ -52,3 +57,35 @@ def test_mixed_stem_chord_becomes_two_simultaneous_voices() -> None:
 
     assert [note.findtext("voice") for note in notes] == ["1", "2"]
     assert len(measure.findall("backup")) == 1
+
+
+def test_one_voice_keeps_its_voice_however_its_stems_point() -> None:
+    """A staff with one voice stems by height, not by voice."""
+    measure = ET.fromstring(
+        """<measure number="1">
+             <note><pitch><step>D</step><octave>5</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
+             <note><pitch><step>E</step><octave>4</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+           </measure>"""
+    )
+
+    rebalance_measure_voices(measure)
+
+    assert [note.findtext("voice") for note in measure.findall("note")] == ["1", "1"]
+
+
+def test_two_voices_sounding_together_are_told_apart_by_their_stems() -> None:
+    measure = ET.fromstring(
+        """<measure number="1">
+             <note><pitch><step>D</step><octave>5</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+             <backup><duration>4</duration></backup>
+             <note><pitch><step>F</step><octave>4</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
+           </measure>"""
+    )
+
+    rebalance_measure_voices(measure)
+
+    assert [note.findtext("voice") for note in measure.findall("note")] == ["1", "2"]
