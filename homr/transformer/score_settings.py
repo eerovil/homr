@@ -11,7 +11,7 @@ class RhythmSettings:
     minimum_duration: int | None = None
     allow_tuplets: bool = True
     allow_grace_notes: bool = True
-    stem_voice_hints: bool = False
+    stem_voice_hints: bool = True
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "RhythmSettings":
@@ -41,7 +41,7 @@ class RhythmSettings:
         unknown = set(postprocessing) - {"stem_voice_hints"}
         if unknown:
             raise ValueError("unknown postprocessing setting(s): " + ", ".join(sorted(unknown)))
-        stem_voice_hints = postprocessing.get("stem_voice_hints", False)
+        stem_voice_hints = postprocessing.get("stem_voice_hints", True)
         if not isinstance(stem_voice_hints, bool):
             raise ValueError("stem_voice_hints must be true or false")
         return cls(

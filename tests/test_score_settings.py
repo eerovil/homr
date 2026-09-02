@@ -25,8 +25,11 @@ def test_settings_can_forbid_tuplets_and_grace_notes():
     assert vocab["note_16"] not in forbidden
 
 
-def test_stem_voice_hints_are_an_opt_in_postprocessing_setting():
-    assert not RhythmSettings.from_json({}).stem_voice_hints
+def test_stem_voice_hints_are_on_unless_a_score_turns_them_off():
+    assert RhythmSettings.from_json({}).stem_voice_hints
     assert RhythmSettings.from_json(
         {"postprocessing": {"stem_voice_hints": True}}
+    ).stem_voice_hints
+    assert not RhythmSettings.from_json(
+        {"postprocessing": {"stem_voice_hints": False}}
     ).stem_voice_hints
