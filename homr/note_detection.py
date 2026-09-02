@@ -131,6 +131,7 @@ def combine_noteheads_with_stems(
         return (
             stem_height >= max(notehead_height * 1.5, notehead_width)
             and stem_width <= notehead_width * 0.75
+            and abs(stem.center[0] - notehead.center[0]) <= (notehead_width + stem_width) / 2
         )
 
     result = []

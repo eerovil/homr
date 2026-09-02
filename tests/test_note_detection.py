@@ -27,3 +27,14 @@ def test_stem_matching_reports_unknown_when_only_noise_overlaps() -> None:
 
     assert matched[0].stem is None
     assert matched[0].stem_direction is None
+
+
+def test_stem_matching_rejects_a_nearby_barline() -> None:
+    notehead = BoundingEllipse(((50, 50), (16, 12), 0), empty)
+    real_up_stem = RotatedBoundingBox(((58, 22), (2, 50), 0), empty)
+    nearby_barline = RotatedBoundingBox(((65, 50), (2, 120), 0), empty)
+
+    matched = combine_noteheads_with_stems([notehead], [nearby_barline, real_up_stem])
+
+    assert matched[0].stem == real_up_stem
+    assert matched[0].stem_direction == StemDirection.UP
