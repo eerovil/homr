@@ -88,7 +88,10 @@ def verdict(finding: dict, predictions, unit: float) -> tuple[str, str, dict]:
         return ("model", "the mask really is that big here", {"mask": "notehead"})
     if finding["kind"] == "missing":
         blob = blob_at(predictions.notehead, x, y, reach=int(unit * 0.7))
-        if blob is not None and min(blob["box"][2:]) >= unit * 0.5:
+        # A notehead is wider than it is tall, so half of one is half of each
+        # -- a tall thin sliver of an outline is not a head the code could use.
+        wide, tall = (blob["box"][2:] if blob else (0, 0))
+        if blob is not None and wide >= unit * 1.286 * 0.5 and tall >= unit * 0.5:
             return (
                 "code",
                 f"a notehead-sized piece of ink ({blob['box'][2]}x{blob['box'][3]}px) is"

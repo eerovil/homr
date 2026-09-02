@@ -23,17 +23,17 @@
       "known_gaps": [
         {
           "failure": "staff 1: no detected notehead for m4 C5 at x=655.62",
-          "reason": "the segmentation finds no notehead at this place",
+          "reason": "the segmentation finds no usable notehead at this place",
           "id": "KK-s1-1279p6"
         },
         {
           "failure": "staff 2: no detected notehead for m4 G4 at x=655.62",
-          "reason": "the segmentation finds no notehead at this place",
+          "reason": "the segmentation finds no usable notehead at this place",
           "id": "KK-s2-1280p3"
         },
         {
           "failure": "staff 3: no detected notehead for m3 F4 at x=501.48",
-          "reason": "the segmentation finds no notehead at this place",
+          "reason": "the segmentation finds no usable notehead at this place",
           "id": "KK-s3-1007p2"
         }
       ]
@@ -44,7 +44,7 @@
       "known_gaps": [
         {
           "failure": "staff 1: no detected notehead for m2 C4 at x=264.17",
-          "reason": "the segmentation finds no notehead at this place",
+          "reason": "the segmentation finds no usable notehead at this place",
           "id": "SR-s1-544p6"
         }
       ]

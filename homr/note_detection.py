@@ -100,7 +100,7 @@ def split_stack(bbox: cvt.Rect, noteheads: NDArray, note_h: float) -> list[cvt.R
         waists = [int(step * index) for index in range(1, count)]
     cuts = [0, *waists, len(profile)]
     return [
-        (bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom)
+        adjust_bbox((bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom), noteheads)
         for top, bottom in zip(cuts, cuts[1:], strict=False)
         if bottom > top
     ]
@@ -400,32 +400,20 @@ def add_notes_to_staffs(
             point = staff.get_at(center[0])
             if point is None:
                 continue
-            if (
-                notehead_chunk.notehead.size[0] < 0.5 * point.average_unit_size
-                or notehead_chunk.notehead.size[1] < 0.5 * point.average_unit_size
-            ):
+            width, height = notehead_chunk.notehead.size
+            unit = point.average_unit_size
+            if not (0.5 * unit <= width <= 3 * unit and 0.5 * unit <= height <= 2 * unit):
                 continue
-            for notehead in [notehead_chunk]:
-                point = staff.get_at(center[0])
-                if point is None:
-                    continue
-                if (
-                    notehead.notehead.size[0] < 0.5 * point.average_unit_size
-                    or notehead.notehead.size[0] > 3 * point.average_unit_size
-                    or notehead.notehead.size[1] < 0.5 * point.average_unit_size
-                    or notehead.notehead.size[1] > 2 * point.average_unit_size
-                ):
-                    continue
-                position = point.find_position_in_unit_sizes(notehead.notehead)
-                note = Note(
-                    notehead.notehead,
-                    position,
-                    notehead.stem,
-                    notehead.stem_direction,
-                    notehead.stem_directions,
-                )
-                result.append(note)
-                staff.add_symbol(note)
+            position = point.find_position_in_unit_sizes(notehead_chunk.notehead)
+            note = Note(
+                notehead_chunk.notehead,
+                position,
+                notehead_chunk.stem,
+                notehead_chunk.stem_direction,
+                notehead_chunk.stem_directions,
+            )
+            result.append(note)
+            staff.add_symbol(note)
     number_of_notes = 0
     for staff in staffs:
         number_of_notes += len(staff.get_notes())
