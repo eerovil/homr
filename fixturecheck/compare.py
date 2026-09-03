@@ -65,6 +65,13 @@ def read_score(path: Path) -> dict[tuple[str, int, float], list[dict]]:
     The printed staff is counted across the whole file rather than read from
     `<staff>`, because both sides write their staves as separate parts that each
     call themselves staff 1, and keying on that folds the bass into the treble.
+
+    Onsets are in **quarter notes**, not in the file's own duration units. Two
+    scores of the same music routinely declare different `<divisions>` -- Heraa
+    Suomi's reference and its parse do -- and comparing raw durations then lines
+    a note up with whichever note happens to share an offset and reports it as a
+    different pitch. Every "3 positions lower" on that system was this, on notes
+    whose positions in fact agree exactly.
     """
     found: dict[tuple[str, int, float], list[dict]] = {}
     printed = 0
@@ -72,19 +79,24 @@ def read_score(path: Path) -> dict[tuple[str, int, float], list[dict]]:
         staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
         base, printed = printed, printed + staves
         clefs: dict[int, tuple[str, int, int]] = {}
+        divisions = 1.0
         for measure in part.findall("measure"):
             clefs.update(_clefs(measure))
+            for attributes in measure.findall("attributes"):
+                declared = attributes.findtext("divisions")
+                if declared:
+                    divisions = float(declared) or 1.0
             at = previous = 0.0
             for node in measure:
                 if node.tag == "backup":
-                    at -= float(node.findtext("duration", "0"))
+                    at -= float(node.findtext("duration", "0")) / divisions
                     continue
                 if node.tag == "forward":
-                    at += float(node.findtext("duration", "0"))
+                    at += float(node.findtext("duration", "0")) / divisions
                     continue
                 if node.tag != "note":
                     continue
-                length = float(node.findtext("duration", "0"))
+                length = float(node.findtext("duration", "0")) / divisions
                 onset = previous if node.find("chord") is not None else at
                 if node.find("chord") is None:
                     previous, at = at, at + length
