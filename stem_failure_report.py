@@ -41,6 +41,7 @@ CODES = {
     "kolme-kakea": "KK",
     "sammon-ryosto": "SR",
     "system4": "S4",
+    "laulun-aika-s2": "LA",
 }
 PAD_X = 95
 PAD_Y = 90

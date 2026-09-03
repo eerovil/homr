@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""One fixture in full: every printed notehead, and what homr made of it.
+
+``stem_failure_report.py`` draws the failures.  This draws everything, which is
+the other half of trusting a fixture: a report that shows only what went wrong
+cannot tell you whether the 56 notes it stayed quiet about were read correctly
+or never looked at.  Every printed moment gets a row, both staves, matched or
+not.
+
+    .venv/bin/python fixture_detail.py laulun-aika-s2
+
+Writes ``fixture-detail/<name>.html``.  Run ``fixture_probe.py <name>`` first.
+"""
+
+import html
+import json
+import sys
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from homr.main import load_and_preprocess_predictions, predict_symbols  # noqa: E402
+from stem_blame import Quiet, verdict  # noqa: E402
+from stem_failure_report import CODES, crop, findings  # noqa: E402
+from tests.fixture_matching import (  # noqa: E402
+    align_columns,
+    detected_columns,
+    reference_columns,
+    _heads_in_column,
+)
+from tests.fixture_reference import reference_staffs  # noqa: E402
+
+ROOT = Path(__file__).parent
+FIXTURES = ROOT / "fixtures"
+OUT = ROOT / "fixture-detail"
+
+STYLE = """
+body { font: 14px/1.55 system-ui, sans-serif; margin: 0 auto; max-width: 1150px;
+       padding: 24px; color: #1a1a1a; background: #fafafa; }
+h1 { font-size: 22px; margin-bottom: 2px; }
+h2 { font-size: 17px; margin: 30px 0 6px; }
+p.lead { color: #555; margin-top: 0; }
+img.page { width: 100%; border: 1px solid #e2e2e2; border-radius: 6px;
+           background: #fff; margin-bottom: 8px; }
+table { border-collapse: collapse; width: 100%; background: #fff;
+        border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
+th, td { padding: 5px 9px; text-align: left; border-bottom: 1px solid #f0f0f0;
+         font-variant-numeric: tabular-nums; }
+th { background: #f4f4f4; font-size: 12px; text-transform: uppercase;
+     letter-spacing: .04em; color: #555; }
+tr.bad td { background: #fdecec; }
+tr.gap td { background: #fff8e1; }
+td.ok { color: #1c5c2c; }
+td.no { color: #8a1f1f; font-weight: 600; }
+.mono { font-family: ui-monospace, monospace; font-size: 12px; }
+figure { margin: 0 0 14px; background: #fff; border: 1px solid #e2e2e2;
+         border-radius: 8px; padding: 10px; }
+figure img { width: 49%; border: 1px solid #eee; }
+figcaption { font-size: 13px; margin-top: 6px; }
+.tag { border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+.wrong { background: #fdecec; color: #8a1f1f; }
+.missing { background: #fff3cd; color: #7a5b00; }
+.extra { background: #e7edfb; color: #1b3a7a; }
+.id { font-family: ui-monospace, monospace; color: #555; }
+.sum { display: flex; gap: 22px; flex-wrap: wrap; margin: 6px 0 14px; }
+.sum b { font-size: 20px; display: block; }
+"""
+
+
+def show(head) -> str:
+    """One notehead as position and stems, or a dash when there is none."""
+    if head is None:
+        return "&mdash;"
+    stems = "+".join(sorted(head.stems)) or "no stem"
+    voice = f" v{'/'.join(sorted(head.voices))}" if head.voices else ""
+    return f"{head.position:g} <span class='mono'>{stems}</span>{voice}"
+
+
+def main() -> None:
+    name = sys.argv[1] if len(sys.argv) > 1 else "laulun-aika-s2"
+    manifest = json.loads((FIXTURES / "stem-direction-fixtures.json").read_text())
+    entry = manifest["fixtures"][name]
+    OUT.mkdir(exist_ok=True)
+    for old in OUT.glob(f"{name}-*.png"):
+        old.unlink()
+
+    image_path = FIXTURES / entry["image"]
+    (OUT / f"{name}-page.png").write_bytes(image_path.read_bytes())
+    reference = reference_staffs(FIXTURES / entry["reference"])
+    probe = json.loads((FIXTURES / f"{name}.fixture-probe.json").read_text())
+
+    tables, totals = [], {"heads": 0, "agreed": 0, "stem": 0, "missing": 0, "extra": 0}
+    for index in range(max(len(reference), len(probe["detected"]))):
+        notes = reference[index]["notes"] if index < len(reference) else []
+        detected = probe["detected"][index] if index < len(probe["detected"]) else []
+        left, right = reference_columns(notes), detected_columns(detected)
+        rows = []
+        for number, (a, b) in enumerate(align_columns(left, right), 1):
+            here = left[a] if a is not None else None
+            there = right[b] if b is not None else None
+            if here is not None and there is not None:
+                pairs = _heads_in_column(here, there)
+            elif here is not None:
+                pairs = [(head, None) for head in here.heads]
+            else:
+                pairs = [(None, other) for other in there.heads]
+            for head, other in pairs:
+                totals["heads"] += 1
+                if head is None:
+                    state, css = "homr saw a note the page does not print", "gap"
+                    totals["extra"] += 1
+                elif other is None:
+                    state, css = "homr did not find this notehead", "gap"
+                    totals["missing"] += 1
+                elif head.stems != other.stems:
+                    state, css = "stem read differently", "bad"
+                    totals["stem"] += 1
+                else:
+                    state, css = "agrees", ""
+                    totals["agreed"] += 1
+                rows.append(
+                    f"<tr class='{css}'><td>{number}</td>"
+                    f"<td>{html.escape(head.label) if head else '&mdash;'}</td>"
+                    f"<td>{show(head)}</td><td>{show(other)}</td>"
+                    f"<td class='{'ok' if not css else 'no'}'>{state}</td></tr>")
+        tables.append(
+            f"<h2>Printed staff {index + 1}</h2>"
+            f"<p class='lead'>{len(notes)} noteheads on the page, "
+            f"{len(detected)} found by homr.</p>"
+            "<table><tr><th>moment</th><th>the page</th><th>page: position, stem</th>"
+            "<th>homr: position, stem</th><th></th></tr>"
+            + "".join(rows) + "</table>")
+
+    # The failures again, this time as pixels: the scan around each one, beside
+    # the mask the model produced there. A count says a stem is missing; only
+    # the mask says whether there was ever ink for it to find.
+    predictions, _ = load_and_preprocess_predictions(str(image_path), False, False, False)
+    symbols = predict_symbols(Quiet(), predictions)
+    unit = float(np.median([head.size[1] for head in symbols.noteheads]))
+    cards = []
+    for finding in findings(name):
+        whose, why, how = verdict(finding, predictions, unit)
+        picture, mask = f"{name}-{finding['id']}.png", f"{name}-{finding['id']}-mask.png"
+        crop(predictions.preprocessed, finding, OUT / picture)
+        crop(255 - getattr(predictions, how["mask"]) * 255, finding, OUT / mask,
+             marks=False)
+        cards.append(
+            f"<figure><img src='{picture}' alt='the scan'>"
+            f"<img src='{mask}' alt='what the model segmented'>"
+            f"<figcaption><span class='id'>{finding['id']}</span> "
+            f"<span class='tag {finding['kind']}'>{finding['kind']}</span> "
+            f"&nbsp;staff {finding['staff']} &middot; "
+            f"<b>{html.escape(finding['title'])}</b><br>"
+            f"page: <b>{html.escape(finding['expected'])}</b> &nbsp;&middot;&nbsp; "
+            f"homr: <b>{html.escape(finding['detected'])}</b><br>"
+            f"<b>{whose}</b> &mdash; {html.escape(why)}</figcaption></figure>")
+
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(name)} in full</title><style>{STYLE}</style></head><body>
+<h1>{html.escape(name)} &mdash; every notehead</h1>
+<p class="lead">One printed system, the reference beside what homr read off it.
+The reference is the song's cleaned score imploded back to the printed two-staff
+shape, so it says what the page says. Codes like <span class="id">{CODES.get(name, '??')}
+-s1-1042p7</span> name a case and do not renumber when others are fixed.</p>
+<div class="sum">
+  <div><b>{totals['heads']}</b>noteheads compared</div>
+  <div><b>{totals['agreed']}</b>agree, position and stem</div>
+  <div><b>{totals['stem']}</b>stem read differently</div>
+  <div><b>{totals['missing']}</b>not found by homr</div>
+  <div><b>{totals['extra']}</b>found but not printed</div>
+</div>
+<img class="page" src="{name}-page.png" alt="the printed system">
+{''.join(cards)}
+{''.join(tables)}
+</body></html>"""
+    target = OUT / f"{name}.html"
+    target.write_text(page)
+    print(target)
+
+
+if __name__ == "__main__":
+    main()
