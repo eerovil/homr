@@ -180,6 +180,27 @@ def test_a_second_takes_the_stem_drawn_between_its_two_noteheads() -> None:
     assert {note.stem_direction for note in matched} == {StemDirection.DOWN}
 
 
+def test_the_upper_voice_of_a_column_keeps_only_its_own_up_stem() -> None:
+    """Two voices in one column: the down stem below is not the upper head's.
+
+    The stem hangs from the lower head, and the ink the segmentation gives it
+    reaches up alongside the upper head -- which is what makes this the hard
+    case, since a stem drawn *beside* a head is normally its own or its chord's.
+    It is the shape that puts a singer in the wrong voice: the head reports both
+    directions where the page prints one.
+    """
+    upper = BoundingEllipse(((50, 40), (16, 12), 0), empty)
+    lower = BoundingEllipse(((50, 52), (16, 12), 0), empty)
+    up_stem = RotatedBoundingBox(((58, 22), (2, 36), 0), empty)
+    down_stem = RotatedBoundingBox(((42, 63), (2, 36), 0), empty)
+
+    matched = combine_noteheads_with_stems([upper, lower], [up_stem, down_stem])
+
+    directions = {note.notehead.center[1]: note.stem_directions for note in matched}
+    assert directions[40] == [StemDirection.UP]
+    assert directions[52] == [StemDirection.DOWN]
+
+
 def test_a_voice_beside_a_chord_does_not_take_its_stem() -> None:
     top = BoundingEllipse(((50, 40), (16, 12), 0), empty)
     bottom = BoundingEllipse(((50, 52), (16, 12), 0), empty)
