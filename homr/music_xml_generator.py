@@ -387,10 +387,72 @@ def _staff_position(note: ET.Element, clef: tuple[str, int, int]) -> int | None:
     return 2 * line - 1 + written - _diatonic(reference_step, reference_octave)
 
 
+def split_mixed_chords(measure: ET.Element) -> int:
+    """Two voices meeting on one beat are not a chord, however they were decoded.
+
+    The transformer writes simultaneous voices as a chord -- one note plus a
+    `<chord/>` tone -- and everything downstream then treats them as one thing.
+    `rebalance_measure_voices` assigns a voice per event and a chord is one
+    event, so no stem, however well detected, can pull the two apart afterwards.
+    A chord whose heads carry opposite stems is therefore un-chorded here, before
+    voices are assigned: the notes are regrouped by stem direction and separated
+    by a `<backup>`, which is how MusicXML says two things sound at once.
+
+    Only a chord where *every* note has a stem is split. A chord with one stem
+    among stemless tones is a real chord as far as anything here can tell, and
+    guessing which voice a stemless tone belongs to is how a correct chord gets
+    torn in half.
+    """
+    children = list(measure)
+    rebuilt: list[ET.Element] = []
+    split = 0
+    index = 0
+    while index < len(children):
+        child = children[index]
+        if child.tag != "note" or child.find("chord") is not None:
+            rebuilt.append(child)
+            index += 1
+            continue
+        group = [child]
+        index += 1
+        while index < len(children) and children[index].tag == "note" \
+                and children[index].find("chord") is not None:
+            group.append(children[index])
+            index += 1
+        directions = [note.findtext("stem") for note in group]
+        if len(group) < 2 or any(d not in {"up", "down"} for d in directions) \
+                or len(set(directions)) < 2:
+            rebuilt.extend(group)
+            continue
+        up = [note for note in group if note.findtext("stem") == "up"]
+        down = [note for note in group if note.findtext("stem") == "down"]
+        duration = group[0].findtext("duration")
+        for position, part in enumerate((up, down)):
+            for rank, note in enumerate(part):
+                marker = note.find("chord")
+                if rank == 0 and marker is not None:
+                    note.remove(marker)
+                if rank > 0 and marker is None:
+                    note.insert(0, ET.Element("chord"))
+                rebuilt.append(note)
+            if position == 0 and duration is not None:
+                backup = ET.Element("backup")
+                ET.SubElement(backup, "duration").text = duration
+                rebuilt.append(backup)
+        split += 1
+    if split:
+        for child in list(measure):
+            measure.remove(child)
+        for child in rebuilt:
+            measure.append(child)
+    return split
+
+
 def rebalance_measure_voices(
     measure: ET.Element, clefs: dict[int, tuple[str, int, int]] | None = None
 ) -> None:
     """Assign stable voices per staff, honoring opt-in physical stem hints."""
+    split_mixed_chords(measure)
     timed_events: list[TimedNoteEvent] = []
     current_time = 0
     last_note_start = 0
