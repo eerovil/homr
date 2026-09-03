@@ -21,6 +21,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import xml.etree.ElementTree as ET
+
 import cv2
 import numpy as np
 
@@ -136,6 +138,107 @@ def homr_output(image: Path, into: Path) -> str:
         return into.name if engraved.returncode == 0 and into.exists() else ""
 
 
+def voice_lines(reference: Path, parsed: Path) -> list[str]:
+    """Which voice each notehead ended up in, the page against homr's output.
+
+    This is the half the fixture cannot see. A fixture failure is about the
+    picture -- a notehead the detector missed, a stem it found no ink for -- and
+    says nothing about what became of the note. It is easy to read "not detected"
+    as "not in the output", and on this fixture that would be wrong: homr writes
+    the note and puts it in the wrong voice, because a notehead with no stem has
+    nothing to say which line it belongs to.
+
+    A wrong voice is the defect that matters here. Two singers share a staff, and
+    a note in the wrong voice is a singer given the wrong line.
+
+    Notes are lined up by when they sound, not by the order they are written in:
+    the reference writes one voice out and backs up for the next, while homr
+    interleaves them, so document order pairs a tenor with a bass. Within a
+    moment they are ordered top to bottom, and what is compared is which of the
+    staff's voices a note is in rather than the voice's number -- the two files
+    number them differently, and the reference is a male-choir score written an
+    octave above where it sounds, so absolute pitch cannot be compared either.
+    """
+    def read(path: Path) -> dict[tuple[str, int, float], list[dict]]:
+        found: dict[tuple[str, int, float], list[dict]] = {}
+        printed = 0
+        for part in ET.parse(path).getroot().findall("part"):
+            staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
+            base, printed = printed, printed + staves
+            for measure in part.findall("measure"):
+                at, previous = 0.0, 0.0
+                for node in measure:
+                    if node.tag == "backup":
+                        at -= float(node.findtext("duration", "0"))
+                        continue
+                    if node.tag == "forward":
+                        at += float(node.findtext("duration", "0"))
+                        continue
+                    if node.tag != "note":
+                        continue
+                    length = float(node.findtext("duration", "0"))
+                    # A chord member sounds with the note before it, not after.
+                    onset = previous if node.find("chord") is not None else at
+                    if node.find("chord") is None:
+                        previous, at = at, at + length
+                    if node.find("rest") is not None:
+                        continue
+                    pitch = node.find("pitch")
+                    if pitch is None:
+                        continue
+                    staff = base + int(node.findtext("staff", "1"))
+                    key = (measure.get("number", "?"), staff, round(onset, 3))
+                    found.setdefault(key, []).append({
+                        "voice": node.findtext("voice", "1"),
+                        "name": f"{pitch.findtext('step')}{pitch.findtext('octave')}",
+                        "height": 7 * int(pitch.findtext("octave", "4"))
+                        + STEPS.index(pitch.findtext("step", "C")),
+                        "stem": node.findtext("stem", ""),
+                        "chord": node.find("chord") is not None,
+                    })
+        return found
+
+    def ranked(notes: dict[tuple[str, int, float], list[dict]]) -> dict[int, dict[str, int]]:
+        """The staff's voices as first, second, ... top line down."""
+        order: dict[int, list[str]] = {}
+        for (_, staff, _), group in sorted(notes.items()):
+            for note in sorted(group, key=lambda n: -n["height"]):
+                order.setdefault(staff, [])
+                if note["voice"] not in order[staff]:
+                    order[staff].append(note["voice"])
+        return {staff: {voice: index + 1 for index, voice in enumerate(voices)}
+                for staff, voices in order.items()}
+
+    want, got = read(reference), read(parsed)
+    here, there = ranked(want), ranked(got)
+    rows = []
+    for key in sorted(want, key=lambda k: (int(k[0]), k[1], k[2])):
+        bar, staff, onset = key
+        mine = sorted(want[key], key=lambda n: -n["height"])
+        theirs = sorted(got.get(key, []), key=lambda n: -n["height"])
+        if len(mine) != len(theirs):
+            rows.append(
+                f"<tr class='gap'><td>bar {bar}, staff {staff}, beat "
+                f"{onset:g}</td><td colspan='3'>{len(mine)} notehead(s) on the "
+                f"page, {len(theirs)} in homr's output here</td></tr>")
+            continue
+        for a, b in zip(mine, theirs):
+            mine_voice = here.get(staff, {}).get(a["voice"], 0)
+            their_voice = there.get(staff, {}).get(b["voice"], 0)
+            same = mine_voice == their_voice
+            note = "the voice the page prints" if same else (
+                "folded into the other voice as a chord member" if b["chord"]
+                else "written in the other voice")
+            rows.append(
+                f"<tr class='{'' if same else 'bad'}'>"
+                f"<td>bar {bar}, staff {staff}, beat {onset:g}</td>"
+                f"<td>{a['name']} &middot; voice {mine_voice}</td>"
+                f"<td>{b['name']} &middot; voice {their_voice}"
+                f"{'' if b['stem'] else " <span class='mono'>no stem</span>"}</td>"
+                f"<td class='{'ok' if same else 'no'}'>{note}</td></tr>")
+    return rows
+
+
 def show(head) -> str:
     """One notehead as position and stems, or a dash when there is none."""
     if head is None:
@@ -245,6 +348,20 @@ def main() -> None:
               if engraved else
               "<h2>What homr writes</h2><p class='lead'>(could not be produced)</p>")
 
+    voices = ""
+    parsed = OUT / f"{name}-homr.musicxml"
+    if parsed.exists():
+        rows = voice_lines(FIXTURES / entry["reference"], parsed)
+        wrong = sum(1 for row in rows if "class='bad'" in row)
+        voices = ("<h2>Which voice each note ended up in</h2>"
+                  "<p class='lead'>The page against homr's own output. This is the "
+                  "half a fixture cannot see: a fixture failure is about the "
+                  "picture and says nothing about what became of the note. "
+                  f"<b>{wrong}</b> notehead(s) are written in the wrong voice.</p>"
+                  "<table><tr><th>where</th><th>the page</th>"
+                  "<th>homr's output</th><th></th></tr>"
+                  + "".join(rows) + "</table>")
+
     page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -267,6 +384,11 @@ shape, so it says what the page says. Codes like <span class="id">{CODES.get(nam
 {output}
 <h2>Where they disagree</h2>
 {''.join(cards)}
+{voices}
+<h2>Every notehead, as the detector sees it</h2>
+<p class="lead">The layer the fixture tests: noteheads and stems found in the
+picture. A note absent here can still reach homr's output, as the table above
+shows &mdash; without a stem to place it, in the wrong voice.</p>
 {''.join(tables)}
 </body></html>"""
     target = OUT / f"{name}.html"
