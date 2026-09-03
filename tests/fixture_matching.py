@@ -226,40 +226,130 @@ def _column_heads(columns: list[Column]) -> list[Head]:
     ]
 
 
-def match(reference: list[Column], detected: list[Column]) -> list[tuple[Head | None, Head | None]]:
-    """Pair every reference notehead with a detected one, or with nothing."""
-    heads, others = _column_heads(reference), _column_heads(detected)
-    if not heads or not others:
-        return [(head, None) for head in heads] + [(None, other) for other in others]
-    span = max(other.x for other in others) - min(other.x for other in others)
-    reference_span = max(head.x for head in heads) - min(head.x for head in heads)
-    scale = span / reference_span if reference_span else 1.0
-    offset = min(other.x for other in others) - scale * min(head.x for head in heads)
-    warp: Callable[[float], float] = lambda x: scale * x + offset  # noqa: E731
-    pairs: list[tuple[int | None, int | None]] = []
-    for index in range(FIT_ROUNDS):
-        # Start loose enough to survive the reference's different bar spacing,
-        # then tighten once the anchors have absorbed it.
-        tolerance = max(span, 1.0) * (0.1 if index == 0 else 0.03)
-        costs = [
-            [_cost(head, other, warp, tolerance) for other in others] for head in heads
+def _heads_in_column(reference: Column, detected: Column) -> list[tuple[Head | None, Head | None]]:
+    """Pair the noteheads of one printed moment, by where they sit on the staff.
+
+    Within a moment the two sides do not agree on left-to-right order -- when
+    two voices collide the reference puts the up-stem voice on the left and the
+    scan puts it on the right -- so only the staff position is trusted here.
+    """
+    costs = [
+        [
+            (
+                BLOCKED
+                if abs(head.position - other.position) > MAX_POSITION_ERROR
+                else abs(head.position - other.position) / MAX_POSITION_ERROR
+                + (0.0 if head.stems == other.stems else 0.1)
+            )
+            for other in detected.heads
         ]
-        pairs = _pair_up(costs)
-        matched = [
-            (heads[row].x, others[column].x)
-            for row, column in pairs
-            if row is not None and column is not None
+        for head in reference.heads
+    ]
+    if not costs or not costs[0]:
+        return [(head, None) for head in reference.heads] + [
+            (None, other) for other in detected.heads
         ]
-        if len(matched) < 2:
-            break
-        warp = Warp(matched)
     return [
         (
-            heads[row] if row is not None else None,
-            others[column] if column is not None else None,
+            reference.heads[row] if row is not None else None,
+            detected.heads[column] if column is not None else None,
         )
-        for row, column in pairs
+        for row, column in _pair_up(costs)
     ]
+
+
+def _agreement(reference: Column, detected: Column) -> int:
+    """How many of the two moments' noteheads sit at the same staff position."""
+    return sum(1 for head, other in _heads_in_column(reference, detected) if head and other)
+
+
+def align_columns(
+    reference: list[Column], detected: list[Column]
+) -> list[tuple[int | None, int | None]]:
+    """Line the two sequences of printed moments up, keeping their order.
+
+    Both sides read left to right and neither reorders the music, so this is a
+    sequence alignment and not a geometry problem.  It used to be one: the
+    columns were flattened to noteheads and paired by warping reference tenths
+    into scan pixels, seeded with a single scale and offset for the whole
+    system.  But a scan is not a scaled copy of the engraving -- MuseScore
+    spaces a bar by what is in it and the printer spaced it by what fits the
+    page -- so on a system where the two disagree by more than the seed's
+    tolerance, a whole stretch failed to pair, and every note in it was reported
+    both missing and extra.  On Laulun aika's second system that turned one
+    wrong pitch and one lost notehead into fifteen failures, all of them
+    pointing at a detector that had in fact found the notes.
+
+    What is minimised is noteheads left unexplained, so a moment the scan lost
+    entirely costs its own heads and does not drag its neighbours out of step.
+    """
+    rows, columns = len(reference), len(detected)
+    best = [[0.0] * (columns + 1) for _ in range(rows + 1)]
+    came: list[list[str]] = [[""] * (columns + 1) for _ in range(rows + 1)]
+    for row in range(1, rows + 1):
+        best[row][0] = best[row - 1][0] + len(reference[row - 1].heads)
+        came[row][0] = "reference"
+    for column in range(1, columns + 1):
+        best[0][column] = best[0][column - 1] + len(detected[column - 1].heads)
+        came[0][column] = "detected"
+    # A tie-break only: where two alignments explain the same noteheads, prefer
+    # the one that also puts the moments in comparable places across the system.
+    def place(columns_: list[Column], index: int) -> float:
+        span = columns_[-1].x - columns_[0].x
+        return (columns_[index].x - columns_[0].x) / span if span else 0.0
+
+    for row in range(1, rows + 1):
+        for column in range(1, columns + 1):
+            here, there = reference[row - 1], detected[column - 1]
+            agreed = _agreement(here, there)
+            paired = BLOCKED
+            if agreed:
+                drift = abs(place(reference, row - 1) - place(detected, column - 1))
+                paired = (
+                    best[row - 1][column - 1]
+                    + len(here.heads)
+                    + len(there.heads)
+                    - 2 * agreed
+                    + 0.25 * drift
+                )
+            skip_reference = best[row - 1][column] + len(here.heads)
+            skip_detected = best[row][column - 1] + len(there.heads)
+            best[row][column] = min(paired, skip_reference, skip_detected)
+            came[row][column] = (
+                "paired"
+                if best[row][column] == paired
+                else "reference"
+                if best[row][column] == skip_reference
+                else "detected"
+            )
+
+    steps: list[tuple[int | None, int | None]] = []
+    row, column = rows, columns
+    while row or column:
+        move = came[row][column]
+        if move == "paired":
+            row, column = row - 1, column - 1
+            steps.append((row, column))
+        elif move == "reference":
+            row -= 1
+            steps.append((row, None))
+        else:
+            column -= 1
+            steps.append((None, column))
+    return list(reversed(steps))
+
+
+def match(reference: list[Column], detected: list[Column]) -> list[tuple[Head | None, Head | None]]:
+    """Pair every reference notehead with a detected one, or with nothing."""
+    pairs: list[tuple[Head | None, Head | None]] = []
+    for row, column in align_columns(reference, detected):
+        if row is not None and column is not None:
+            pairs.extend(_heads_in_column(reference[row], detected[column]))
+        elif row is not None:
+            pairs.extend((head, None) for head in reference[row].heads)
+        else:
+            pairs.extend((None, other) for other in detected[column].heads)
+    return pairs
 
 
 def _cost(
