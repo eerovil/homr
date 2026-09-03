@@ -18,6 +18,13 @@ WAIST_DEPTH = 0.8
 MAX_STEM_HEIGHT = 5.0
 # How many times a chord's stem may be handed on from one notehead to the next.
 CHORD_PASSES = 2
+# A notehead's own ink is thick top to bottom. Ink at the outer end of a clump
+# thinner than this share of the clump's thickest column is something else that
+# ran into it -- almost always the staff line the head sits on.
+THIN_END_SHARE = 0.35
+# Only a clump wider than this many noteheads is trimmed: a head sitting alone
+# is judged as it was found.
+WIDE_CLUMP = 1.6
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -56,11 +63,39 @@ def get_center(bbox: cvt.Rect) -> tuple[int, int]:
     return cen_x, cen_y
 
 
+def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, note_w: float) -> cvt.Rect:
+    """Trim ink at a wide clump's ends that is too thin to be a notehead.
+
+    A head printed *on* a staff line is drawn through that line, and the
+    segmentation sometimes keeps a run of it: two pixels tall, tens of pixels
+    long, joined to the head and to nothing else. The clump then measures
+    several noteheads wide, and `add_notes_to_staffs` throws away anything wider
+    than three -- so the head goes with it, and a note the model found perfectly
+    well never reaches the score.
+
+    Cutting it as a waist is wrong: a waist needs a shoulder on both sides and a
+    staff line has one only where it meets the head. What separates the two is
+    thickness, not narrowing, so that is what is measured -- and only at the
+    ends, so a genuine pair of heads side by side, both thick, is untouched.
+    """
+    region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
+    if region.size == 0 or bbox[2] - bbox[0] <= WIDE_CLUMP * note_w:
+        return bbox
+    columns = (region > 0).sum(axis=0)
+    if not columns.any():
+        return bbox
+    thick = np.where(columns >= max(2.0, THIN_END_SHARE * columns.max()))[0]
+    if len(thick) == 0:
+        return bbox
+    return (bbox[0] + int(thick[0]), bbox[1], bbox[0] + int(thick[-1]) + 1, bbox[3])
+
+
 def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cvt.Rect]:
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
     note_w = constants.NOTEHEAD_SIZE_RATIO * unit_size
     note_h = unit_size
+    bbox = shed_thin_ends(bbox, noteheads, note_w)
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
 
     new_bbox: list[cvt.Rect] = []
     region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
@@ -181,7 +216,12 @@ def split_notehead_ellipse(
         int(notehead.bottom_right[1]),
     ]
     split_boxes = check_bbox_size(bbox, noteheads, unit_size)
-    if len(split_boxes) <= 1:
+    # One box back is usually the head unchanged -- but it can also be the head
+    # with a staff line trimmed off it, and handing back the original ellipse
+    # then throws the trim away and the note with it.
+    if len(split_boxes) == 1 and list(split_boxes[0]) == bbox:
+        return [notehead]
+    if not split_boxes:
         return [notehead]
     result: list[BoundingEllipse] = []
     for box in split_boxes:
