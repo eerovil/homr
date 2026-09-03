@@ -37,7 +37,12 @@ from tests.fixture_matching import (  # noqa: E402
     reference_columns,
     _heads_in_column,
 )
-from tests.fixture_reference import STEPS, reference_staffs  # noqa: E402
+from tests.fixture_reference import (  # noqa: E402
+    STEPS,
+    _clefs,
+    _staff_position,
+    reference_staffs,
+)
 
 #: The homr this host installs, borrowed for its dependencies while the code
 #: comes from this working copy -- the same way the choir app runs a checkout.
@@ -165,7 +170,9 @@ def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
         for part in ET.parse(path).getroot().findall("part"):
             staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
             base, printed = printed, printed + staves
+            clefs: dict[int, tuple[str, int, int]] = {}
             for measure in part.findall("measure"):
+                clefs.update(_clefs(measure))
                 at, previous = 0.0, 0.0
                 for node in measure:
                     if node.tag == "backup":
@@ -191,6 +198,15 @@ def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
                     found.setdefault(key, []).append({
                         "voice": node.findtext("voice", "1"),
                         "name": f"{pitch.findtext('step')}{pitch.findtext('octave')}",
+                        # Where the note sits on the staff, which is what the two
+                        # files can be compared on: the reference is a male-choir
+                        # score written an octave above where it sounds, so the
+                        # pitch names differ by an octave while the printed note
+                        # is the same one.
+                        "position": _staff_position(
+                            pitch,
+                            clefs.get(int(node.findtext("staff", "1")), ("G", 2, 0)),
+                        ),
                         "height": 7 * int(pitch.findtext("octave", "4"))
                         + STEPS.index(pitch.findtext("step", "C")),
                         "stem": node.findtext("stem", ""),
@@ -225,6 +241,17 @@ def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
         for a, b in zip(mine, theirs):
             mine_voice = here.get(staff, {}).get(a["voice"], 0)
             their_voice = there.get(staff, {}).get(b["voice"], 0)
+            if a["position"] != b["position"]:
+                wrong[(bar, staff, a["name"])] = (
+                    f"a different note &mdash; {b['name']}, "
+                    f"{abs(a['position'] - b['position'])} staff position(s) "
+                    f"{'higher' if b['position'] > a['position'] else 'lower'}")
+                rows.append(
+                    f"<tr class='bad'><td>bar {bar}, staff {staff}, beat {onset:g}</td>"
+                    f"<td>{a['name']} &middot; position {a['position']}</td>"
+                    f"<td>{b['name']} &middot; position {b['position']}</td>"
+                    f"<td class='no'>a different note</td></tr>")
+                continue
             same = mine_voice == their_voice
             note = "the voice the page prints" if same else (
                 "folded into the other voice as a chord member" if b["chord"]
@@ -294,12 +321,15 @@ def main() -> None:
                     state, css = "stem read differently", "bad"
                     totals["stem"] += 1
                 elif heard and heard != head.label.split(" ")[-1]:
-                    # Not a fixture failure: heads pair within
-                    # MAX_POSITION_ERROR, which is the slack the stem check
-                    # needs to survive a notehead sitting a little high in a
-                    # scan. It does mean a pitch read one step out passes a
-                    # stem-direction fixture in silence, so it is said here.
-                    state, css = "stem right, pitch a step out", "warn"
+                    # The DETECTOR's staff position, not the pitch homr writes.
+                    # Pitch is the transformer's answer and it reads the image
+                    # itself, so it can be right while the detected head sits a
+                    # step off -- on this fixture it is. Calling this row "pitch
+                    # a step out" said homr had misread a note when homr's
+                    # output agreed with the page exactly, which is the same
+                    # confusion of layers as calling a note "not detected at
+                    # all" when it reaches the score in the wrong voice.
+                    state, css = "detected a step off the page", "warn"
                     totals["pitch"] += 1
                 else:
                     state, css = "agrees", ""
@@ -388,7 +418,7 @@ shape, so it says what the page says. Codes like <span class="id">{CODES.get(nam
   <div><b>{totals['agreed']}</b>agree, position and stem</div>
   <div><b>{totals['stem']}</b>stem read differently</div>
   <div><b>{totals['missing']}</b>not found by homr</div>
-  <div><b>{totals['pitch']}</b>stem right, pitch a step out</div>
+  <div><b>{totals['pitch']}</b>detected a step off the page</div>
   <div><b>{totals['extra']}</b>found but not printed</div>
 </div>
 <h2>The printed system</h2>
@@ -399,8 +429,11 @@ shape, so it says what the page says. Codes like <span class="id">{CODES.get(nam
 {voices}
 <h2>Every notehead, as the detector sees it</h2>
 <p class="lead">The layer the fixture tests: noteheads and stems found in the
-picture. A note absent here can still reach homr's output, as the table above
-shows &mdash; without a stem to place it, in the wrong voice.</p>
+picture. This is <b>not</b> what homr writes, and the two can differ in both
+directions &mdash; a note absent here can still reach the output (in the wrong
+voice, having no stem to place it), and a head detected a step off the page can
+still be written at the right pitch, because the pitch is read from the image by
+the transformer rather than taken from this geometry.</p>
 {''.join(tables)}
 </body></html>"""
     target = OUT / f"{name}.html"
