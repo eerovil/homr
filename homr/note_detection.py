@@ -22,9 +22,11 @@ CHORD_PASSES = 2
 # thinner than this share of the clump's thickest column is something else that
 # ran into it -- almost always the staff line the head sits on.
 THIN_END_SHARE = 0.35
-# Only a clump wider than this many noteheads is trimmed: a head sitting alone
-# is judged as it was found.
-WIDE_CLUMP = 1.6
+# The widest a notehead may be, in staff units, before `add_notes_to_staffs`
+# throws it away. Trimming is gated on the same number so it can only rescue a
+# head that was going to be discarded, and can never re-shape one that is
+# already being read.
+MAX_NOTEHEAD_WIDTH = 3.0
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -63,7 +65,7 @@ def get_center(bbox: cvt.Rect) -> tuple[int, int]:
     return cen_x, cen_y
 
 
-def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, note_w: float) -> cvt.Rect:
+def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> cvt.Rect:
     """Trim ink at a wide clump's ends that is too thin to be a notehead.
 
     A head printed *on* a staff line is drawn through that line, and the
@@ -77,9 +79,19 @@ def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, note_w: float) -> cvt.Rec
     staff line has one only where it meets the head. What separates the two is
     thickness, not narrowing, so that is what is measured -- and only at the
     ends, so a genuine pair of heads side by side, both thick, is untouched.
+
+    This is a last resort, applied to a box the splitting has already finished
+    with and that is still too wide to be accepted. Two looser versions were
+    measured over 80 real system crops first, and both recovered the same seven
+    noteheads while also disturbing notes that were being read correctly --
+    trimming every wide clump moved two heads by a staff position and flipped a
+    stem, and trimming every clump wider than the limit still did, because a
+    stack or a pair is legitimately wider than one head and tightening it moves
+    where it splits. Rescuing a note nobody was going to get is worth a change;
+    re-reading a note that was already right is not.
     """
     region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
-    if region.size == 0 or bbox[2] - bbox[0] <= WIDE_CLUMP * note_w:
+    if region.size == 0 or bbox[2] - bbox[0] <= MAX_NOTEHEAD_WIDTH * unit_size:
         return bbox
     columns = (region > 0).sum(axis=0)
     if not columns.any():
@@ -91,9 +103,18 @@ def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, note_w: float) -> cvt.Rec
 
 
 def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cvt.Rect]:
+    """Split a clump of ink into noteheads, and rescue what is left too wide."""
+    return [
+        box
+        if box[2] - box[0] <= MAX_NOTEHEAD_WIDTH * unit_size
+        else shed_thin_ends(box, noteheads, unit_size)
+        for box in _split_bbox(bbox, noteheads, unit_size)
+    ]
+
+
+def _split_bbox(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cvt.Rect]:
     note_w = constants.NOTEHEAD_SIZE_RATIO * unit_size
     note_h = unit_size
-    bbox = shed_thin_ends(bbox, noteheads, note_w)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
 
@@ -108,7 +129,7 @@ def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> lis
         cuts = [0, *waists, w]
         for left, right in zip(cuts, cuts[1:], strict=False):
             part = adjust_bbox((bbox[0] + left, bbox[1], bbox[0] + right, bbox[3]), noteheads)
-            new_bbox.extend(check_bbox_size(part, noteheads, unit_size))
+            new_bbox.extend(_split_bbox(part, noteheads, unit_size))
     else:
         bands = split_stack(bbox, noteheads, note_h)
         if len(bands) <= 1:
@@ -119,7 +140,7 @@ def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> lis
         for band in bands:
             trimmed = _trim(band, noteheads)
             new_bbox.extend(
-                check_bbox_size(trimmed, noteheads, unit_size)
+                _split_bbox(trimmed, noteheads, unit_size)
                 if trimmed[2] - trimmed[0] < w
                 else [trimmed]
             )
@@ -585,7 +606,10 @@ def add_notes_to_staffs(
                 continue
             width, height = notehead_chunk.notehead.size
             unit = point.average_unit_size
-            if not (0.5 * unit <= width <= 3 * unit and 0.5 * unit <= height <= 2 * unit):
+            if not (
+                0.5 * unit <= width <= MAX_NOTEHEAD_WIDTH * unit
+                and 0.5 * unit <= height <= 2 * unit
+            ):
                 continue
             position = point.find_position_in_unit_sizes(notehead_chunk.notehead)
             note = Note(
