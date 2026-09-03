@@ -138,7 +138,7 @@ def homr_output(image: Path, into: Path) -> str:
         return into.name if engraved.returncode == 0 and into.exists() else ""
 
 
-def voice_lines(reference: Path, parsed: Path) -> list[str]:
+def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
     """Which voice each notehead ended up in, the page against homr's output.
 
     This is the half the fixture cannot see. A fixture failure is about the
@@ -211,7 +211,7 @@ def voice_lines(reference: Path, parsed: Path) -> list[str]:
 
     want, got = read(reference), read(parsed)
     here, there = ranked(want), ranked(got)
-    rows = []
+    rows, wrong = [], {}
     for key in sorted(want, key=lambda k: (int(k[0]), k[1], k[2])):
         bar, staff, onset = key
         mine = sorted(want[key], key=lambda n: -n["height"])
@@ -229,6 +229,9 @@ def voice_lines(reference: Path, parsed: Path) -> list[str]:
             note = "the voice the page prints" if same else (
                 "folded into the other voice as a chord member" if b["chord"]
                 else "written in the other voice")
+            if not same:
+                wrong[(bar, staff, a["name"])] = (
+                    f"voice {their_voice} instead of {mine_voice} &mdash; {note}")
             rows.append(
                 f"<tr class='{'' if same else 'bad'}'>"
                 f"<td>bar {bar}, staff {staff}, beat {onset:g}</td>"
@@ -236,7 +239,7 @@ def voice_lines(reference: Path, parsed: Path) -> list[str]:
                 f"<td>{b['name']} &middot; voice {their_voice}"
                 f"{'' if b['stem'] else " <span class='mono'>no stem</span>"}</td>"
                 f"<td class='{'ok' if same else 'no'}'>{note}</td></tr>")
-    return rows
+    return rows, wrong
 
 
 def show(head) -> str:
@@ -318,6 +321,11 @@ def main() -> None:
     # The failures again, this time as pixels: the scan around each one, beside
     # the mask the model produced there. A count says a stem is missing; only
     # the mask says whether there was ever ink for it to find.
+    engraved = homr_output(image_path, OUT / f"{name}-homr.png")
+    parsed = OUT / f"{name}-homr.musicxml"
+    rows, wrong = voice_lines(FIXTURES / entry["reference"], parsed) \
+        if parsed.exists() else ([], {})
+
     predictions, _ = load_and_preprocess_predictions(str(image_path), False, False, False)
     symbols = predict_symbols(Quiet(), predictions)
     unit = float(np.median([head.size[1] for head in symbols.noteheads]))
@@ -328,6 +336,13 @@ def main() -> None:
         crop(predictions.preprocessed, finding, OUT / picture)
         crop(255 - getattr(predictions, how["mask"]) * 255, finding, OUT / mask,
              marks=False)
+        # What became of this note in homr's output -- the thing the finding
+        # itself cannot know, and the thing a reader assumes it means.
+        label = finding["title"].split(":")[0]
+        bar, _, pitch = label.partition(" ")
+        became = wrong.get((bar.lstrip("m"), finding["staff"], pitch))
+        outcome = (f"<br>in homr's output: <b>{became}</b>" if became else
+                   "<br>in homr's output: in the voice the page prints")
         cards.append(
             f"<figure><img src='{picture}' alt='the scan'>"
             f"<img src='{mask}' alt='what the model segmented'>"
@@ -337,9 +352,8 @@ def main() -> None:
             f"<b>{html.escape(finding['title'])}</b><br>"
             f"page: <b>{html.escape(finding['expected'])}</b> &nbsp;&middot;&nbsp; "
             f"homr: <b>{html.escape(finding['detected'])}</b><br>"
-            f"<b>{whose}</b> &mdash; {html.escape(why)}</figcaption></figure>")
+            f"<b>{whose}</b> &mdash; {html.escape(why)}{outcome}</figcaption></figure>")
 
-    engraved = homr_output(image_path, OUT / f"{name}-homr.png")
     output = (f"<h2>What homr writes</h2><p class='lead'>The parse itself, "
               f"engraved &mdash; not the detection the tables below check. "
               f"The MusicXML is beside this page as "
@@ -349,15 +363,13 @@ def main() -> None:
               "<h2>What homr writes</h2><p class='lead'>(could not be produced)</p>")
 
     voices = ""
-    parsed = OUT / f"{name}-homr.musicxml"
-    if parsed.exists():
-        rows = voice_lines(FIXTURES / entry["reference"], parsed)
-        wrong = sum(1 for row in rows if "class='bad'" in row)
+    if rows:
+        missed = sum(1 for row in rows if "class='bad'" in row)
         voices = ("<h2>Which voice each note ended up in</h2>"
                   "<p class='lead'>The page against homr's own output. This is the "
                   "half a fixture cannot see: a fixture failure is about the "
                   "picture and says nothing about what became of the note. "
-                  f"<b>{wrong}</b> notehead(s) are written in the wrong voice.</p>"
+                  f"<b>{missed}</b> notehead(s) are written in the wrong voice.</p>"
                   "<table><tr><th>where</th><th>the page</th>"
                   "<th>homr's output</th><th></th></tr>"
                   + "".join(rows) + "</table>")

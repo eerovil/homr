@@ -137,9 +137,18 @@ def findings(name: str) -> list[dict]:
                 found.append(
                     {
                         "kind": "missing",
-                        "title": f"{head.label} is not detected at all",
+                        # Says what this actually is. "Not detected at all" was
+                        # read -- correctly, from those words -- as the note
+                        # being absent from homr's output, and on every case
+                        # seen so far it is not: homr writes the note and puts
+                        # it in the wrong voice, because a notehead with no
+                        # stem has nothing to say which line it belongs to.
+                        # What the detector missed is the notehead, and that is
+                        # all this finding knows about.
+                        "title": f"{head.label}: the notehead detector found no head here",
                         "expected": f"a notehead with {stems(head)}",
-                        "detected": "nothing here",
+                        "detected": "no notehead in the detection "
+                                    "(the note may still reach homr's output)",
                         "at": at,
                         "others": [],
                         "staff": staff,
@@ -151,7 +160,7 @@ def findings(name: str) -> list[dict]:
                 found.append(
                     {
                         "kind": "wrong",
-                        "title": f"{head.label}",
+                        "title": f"{head.label}: stem read differently",
                         "expected": stems(head),
                         "detected": stems(other),
                         "at": other.scan,
