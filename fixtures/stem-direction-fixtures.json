@@ -34,7 +34,7 @@
         {
           "failure": "staff 1: no detected notehead for m2 C4 at x=264.17",
           "reason": "the segmentation has no usable notehead here, or runs it into its neighbours as one blob",
-          "id": "SR-s1-544p6"
+          "id": "SR-s1-526p6"
         }
       ]
     },
