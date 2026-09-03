@@ -3,7 +3,13 @@ import numpy as np
 
 from homr.bounding_boxes import BoundingEllipse, RotatedBoundingBox
 from homr.model import StemDirection
-from homr.note_detection import combine_noteheads_with_stems, split_notehead_ellipse
+from homr.note_detection import (
+    bridged_ink,
+    combine_noteheads_with_stems,
+    split_notehead_ellipse,
+    stems_of_notehead,
+    vertical_ink,
+)
 
 
 empty = np.array([])
@@ -186,3 +192,68 @@ def test_a_voice_beside_a_chord_does_not_take_its_stem() -> None:
     directions = {note.notehead.center[0]: note.stem_direction for note in matched}
     assert directions[68] == StemDirection.UP
     assert directions[50] == StemDirection.DOWN
+
+
+def a_page_with_a_stem_crossing_a_staff_line() -> np.ndarray:
+    """A scan: one notehead, its up stem, and a staff line drawn through both."""
+    page = np.full((80, 80), 255, np.uint8)
+    cv2.ellipse(page, (40, 60), (8, 6), 0, 0, 360, 0, -1)  # the notehead
+    page[20:53, 47:50] = 0  # its stem, on the head's right
+    page[46:50, :] = 0  # a staff line, right across the stem near its foot
+    return page
+
+
+def test_a_stem_crossing_a_staff_line_still_reaches_its_notehead() -> None:
+    page = a_page_with_a_stem_crossing_a_staff_line()
+    head = BoundingEllipse(((40, 60), (16, 12), 0), empty)
+
+    matched = combine_noteheads_with_stems([head], [], page)
+
+    assert matched[0].stem_direction == StemDirection.UP
+
+
+def test_the_staff_line_is_still_no_stem_of_its_own() -> None:
+    page = np.full((80, 80), 255, np.uint8)
+    cv2.ellipse(page, (40, 60), (8, 6), 0, 0, 360, 0, -1)
+    page[46:50, :] = 0  # a staff line and nothing else
+    head = BoundingEllipse(((40, 60), (16, 12), 0), empty)
+
+    matched = combine_noteheads_with_stems([head], [], page)
+
+    assert matched[0].stem_direction is None
+
+
+def test_mending_a_stroke_invents_no_ink_the_scan_has_not_got() -> None:
+    page = a_page_with_a_stem_crossing_a_staff_line()
+
+    mended = bridged_ink(page)
+
+    assert not ((mended > 0) & (page >= 180)).any()
+
+
+def test_two_strokes_with_paper_between_them_are_not_one_stroke() -> None:
+    page = np.full((80, 80), 255, np.uint8)
+    page[10:30, 40:43] = 0
+    page[36:56, 40:43] = 0  # a second stroke, with paper in between
+
+    mended = bridged_ink(page)
+
+    assert not mended[30:36, 41].any()
+
+
+def test_a_stem_the_scan_already_gives_is_not_read_again_through_the_mend() -> None:
+    """Mending is a last resort: a head being read already is left alone."""
+    page = a_page_with_a_stem_crossing_a_staff_line()
+    head = BoundingEllipse(((40, 60), (16, 12), 0), empty)
+    without_mending = stems_of_notehead(head, [], vertical_ink(page), [head], None)
+    with_mending = stems_of_notehead(head, [], vertical_ink(page), [head], bridged_ink(page))
+
+    assert not without_mending  # the pieces are too short and too far
+    assert len(with_mending) == 1
+
+    segmentation_found_it = RotatedBoundingBox(((48, 40), (2, 30), 0), empty)
+    both = stems_of_notehead(
+        head, [segmentation_found_it], vertical_ink(page), [head], bridged_ink(page)
+    )
+
+    assert both == stems_of_notehead(head, [segmentation_found_it], vertical_ink(page), [head])

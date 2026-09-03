@@ -18,6 +18,10 @@ WAIST_DEPTH = 0.8
 MAX_STEM_HEIGHT = 5.0
 # How many times a chord's stem may be handed on from one notehead to the next.
 CHORD_PASSES = 2
+# How tall a hole in a stroke may be, in pixels, and still be read as the staff
+# line that was taken out of it rather than as paper between two strokes. A
+# staff line is three or four pixels of ink on these scans.
+STAFF_LINE_BRIDGE = 7
 # A notehead's own ink is thick top to bottom. Ink at the outer end of a clump
 # thinner than this share of the clump's thickest column is something else that
 # ran into it -- almost always the staff line the head sits on.
@@ -311,12 +315,55 @@ def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bo
     )
 
 
-def vertical_ink(source_image: NDArray) -> NDArray:
-    """The scan's ink with staff lines and beams taken out, for stem recovery."""
+def _without_horizontal_ink(source_image: NDArray) -> tuple[NDArray, NDArray]:
+    """The scan's ink, and the same with its long horizontal runs taken out."""
     ink = (source_image < 180).astype(np.uint8)
     horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 12), np.uint8))
-    ink &= 1 - horizontal
-    return cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((1, 12), np.uint8))
+    return ink, ink & (1 - horizontal)
+
+
+def vertical_ink(source_image: NDArray) -> NDArray:
+    """The scan's ink with staff lines and beams taken out, for stem recovery."""
+    _, kept = _without_horizontal_ink(source_image)
+    return cv2.morphologyEx(kept, cv2.MORPH_CLOSE, np.ones((1, 12), np.uint8))
+
+
+def bridged_ink(source_image: NDArray) -> NDArray:
+    """The same ink, with the cut a staff line leaves across a stem put back.
+
+    A stem crossing a staff line is the ordinary case, not the exception, and
+    the removal above takes the crossing rows out of the stem as well as out of
+    the line -- so a stem arrives in `vertical_ink` in pieces, each too short or
+    too far from its notehead to be read as a stem.
+
+    What is put back is decided by the scan, not guessed: a hole is filled only
+    where ink survived both above and below it, and only with pixels the scan
+    really has (`& ink`).  Where the gap is paper, the close fills nothing, so
+    two separate strokes are never joined into one -- and no stroke can grow
+    into white space, which is what sank every version of this that closed the
+    ink vertically without asking the scan.
+    """
+    ink, kept = _without_horizontal_ink(source_image)
+    joined = cv2.morphologyEx(kept, cv2.MORPH_CLOSE, np.ones((STAFF_LINE_BRIDGE, 1), np.uint8))
+    return kept | (joined & ink)
+
+
+def _reach_towards_head(bridge: NDArray, column: int, near: int, edge: int, limit: int) -> int:
+    """How far the mended ink carries this run's near end towards the notehead.
+
+    Only towards, and never past the head's own edge, so this can lengthen a run
+    onto its note and can never lengthen one away from it -- which is what an
+    unanchored gap-joiner does, and it hands every stub of noise the length the
+    floor below was keeping it short of.
+    """
+    step = 1 if edge > near else -1
+    reached = near
+    for offset in range(1, limit + 1):
+        row = near + step * offset
+        if (edge - row) * step < 0 or not 0 <= row < bridge.shape[0] or not bridge[row, column]:
+            break
+        reached = row
+    return reached
 
 
 def _longest_run(
@@ -325,9 +372,11 @@ def _longest_run(
     columns: range,
     rows: range,
     direction: StemDirection,
+    bridge: NDArray | None = None,
 ) -> RotatedBoundingBox | None:
     x, y = map(int, notehead.center)
     height = int(notehead.size[1])
+    edge = y - height // 2 if direction == StemDirection.UP else y + height // 2
     best: tuple[int, int, int, int] | None = None
     for column in columns:
         if not 0 <= column < ink.shape[1]:
@@ -339,23 +388,37 @@ def _longest_run(
         for start, end in zip(starts, ends, strict=True):
             length = int(end - start)
             top, bottom = rows[start], rows[end - 1]
-            if direction == StemDirection.UP:
-                gap = y - height // 2 - bottom
-            else:
-                gap = top - (y + height // 2)
             # Beam and staff-line removal can leave a short white gap
             # between a real source-image stem and its notehead.
-            attached = -max(2, height * 0.1) <= gap <= height * 0.65
+            towards = 1 if direction == StemDirection.UP else -1
+
+            def reaches(near: int, towards: int = towards) -> bool:
+                return -max(2, height * 0.1) <= (edge - near) * towards <= height * 0.65
+
+            near = bottom if direction == StemDirection.UP else top
+            if not reaches(near) and bridge is not None:
+                # The gap may be the staff line this stem crosses rather than
+                # paper. Ask the mended ink, and only for a run that was going
+                # to be thrown away: a run already reaching its head is left
+                # exactly as it was read.
+                near = _reach_towards_head(bridge, column, near, edge, int(max(2, height)))
+                if direction == StemDirection.UP:
+                    bottom = near
+                else:
+                    top = near
+            attached = reaches(near)
             if attached and (best is None or length > best[0]):
                 best = (length, column, top, bottom)
     if best is None or not height * 0.5 <= best[0] <= height * 5:
         return None
-    length, column, top, bottom = best
-    return RotatedBoundingBox(((column, (top + bottom) / 2), (3, length), 0), np.empty((0, 2)))
+    _, column, top, bottom = best
+    return RotatedBoundingBox(
+        ((column, (top + bottom) / 2), (3, bottom - top + 1), 0), np.empty((0, 2))
+    )
 
 
 def source_stem_candidates(
-    notehead: BoundingEllipse, ink: NDArray | None
+    notehead: BoundingEllipse, ink: NDArray | None, bridge: NDArray | None = None
 ) -> list[RotatedBoundingBox]:
     """Recover a visibly printed stem when its segmentation class is empty."""
     if ink is None:
@@ -364,7 +427,12 @@ def source_stem_candidates(
     width, height = map(int, notehead.size)
     found = [
         _longest_run(
-            ink, notehead, range(x, x + width + 16), range(max(0, y - 80), y + 1), StemDirection.UP
+            ink,
+            notehead,
+            range(x, x + width + 16),
+            range(max(0, y - 80), y + 1),
+            StemDirection.UP,
+            bridge,
         ),
         _longest_run(
             ink,
@@ -372,6 +440,7 @@ def source_stem_candidates(
             range(max(0, x - width - 16), x + 1),
             range(y, min(ink.shape[0], y + 81)),
             StemDirection.DOWN,
+            bridge,
         ),
     ]
     return [
@@ -479,6 +548,7 @@ def stems_of_notehead(
     stems: list[RotatedBoundingBox],
     ink: NDArray | None,
     noteheads: list[BoundingEllipse] | None = None,
+    bridge: NDArray | None = None,
 ) -> list[RotatedBoundingBox]:
     """Every stem drawn on one notehead: at most one up and one down."""
     # Not "does the stem touch the notehead's outline": a head is drawn as an
@@ -492,14 +562,26 @@ def stems_of_notehead(
         and not belongs_to_another_notehead(notehead, stem, noteheads or [])
     ]
     learned_directions = {stem_direction(notehead, stem) for stem in candidates}
-    candidates.extend(
-        stem
-        for stem in source_stem_candidates(notehead, ink)
-        # The scan is only consulted for a direction the segmentation missed,
-        # and never for a stem that starts at a different notehead.
-        if stem_direction(notehead, stem) not in learned_directions
-        and not belongs_to_another_notehead(notehead, stem, noteheads or [])
-    )
+
+    def from_source(bridge: NDArray | None) -> list[RotatedBoundingBox]:
+        return [
+            stem
+            for stem in source_stem_candidates(notehead, ink, bridge)
+            # The scan is only consulted for a direction the segmentation missed,
+            # and never for a stem that starts at a different notehead.
+            if stem_direction(notehead, stem) not in learned_directions
+            and not belongs_to_another_notehead(notehead, stem, noteheads or [])
+        ]
+
+    candidates.extend(from_source(None))
+    if not candidates and bridge is not None:
+        # Nothing at all was found for this head, so it is about to be reported
+        # stemless. Only now is the staff line's cut mended and the scan asked
+        # again: mending is a last resort, so a head that is already being read
+        # cannot be re-read by it. Letting it run on every head was measured --
+        # it gains a little and disturbs four times as much, mostly by handing
+        # the upper head of a two-voice column the lower head's stem.
+        candidates.extend(from_source(bridge))
     longest = {
         direction: max(
             (stem for stem in candidates if stem_direction(notehead, stem) == direction),
@@ -521,11 +603,12 @@ def combine_noteheads_with_stems(
     what vertical lines are stems and which are bar lines.
     """
     ink = vertical_ink(source_image) if source_image is not None else None
+    bridge = bridged_ink(source_image) if source_image is not None else None
     unit = float(np.median([notehead.size[1] for notehead in noteheads])) if noteheads else 0.0
     stems = join_stem_fragments(stems, unit)
     result = []
     for notehead in sorted(noteheads, key=lambda notehead: notehead.box[0][1]):
-        found = stems_of_notehead(notehead, stems, ink, noteheads)
+        found = stems_of_notehead(notehead, stems, ink, noteheads, bridge)
         if not found:
             result.append(NoteheadWithStem(notehead, None, None))
             continue
