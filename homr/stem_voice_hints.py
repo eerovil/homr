@@ -9,6 +9,7 @@ both is two voices meeting, which is recorded as such and left to the voice
 rebalancer rather than read as a voice.
 """
 
+import re
 from numbers import Real
 
 from homr.model import Note, StemDirection
@@ -27,6 +28,49 @@ _MATCH_Y_TOLERANCE = 24.0
 _MARGIN = 16.0
 #: Written on a notehead that carries an up stem and a down stem at once.
 SHARED = "both"
+_STEPS = "CDEFGAB"
+#: Where each clef sign puts its reference pitch: the note on the line the sign
+#: names. G2 names G4 on line 2, F4 names F3 on line 4, C3 names C4 on line 3.
+_CLEF_REFERENCE = {"G": ("G", 4), "F": ("F", 3), "C": ("C", 4)}
+_CLEF = re.compile(r"^clef_([GFC])(\d)$")
+
+
+def _diatonic(step: str, octave: int) -> int:
+    return 7 * octave + _STEPS.index(step)
+
+
+def expected_position(pitch: str, clef: tuple[str, int]) -> int | None:
+    """Where a decoded pitch must sit on the staff, given the clef in force.
+
+    Bottom line 1, one step per line or space -- the same numbering the detected
+    noteheads carry, so the two can be compared outright.
+    """
+    match = re.match(r"^([A-G])([#b]*)(-?\d+)$", pitch)
+    if match is None:
+        return None
+    step, _, octave = match.groups()
+    sign, line = clef
+    reference_step, reference_octave = _CLEF_REFERENCE[sign]
+    return (
+        2 * line - 1 + _diatonic(step, int(octave)) - _diatonic(reference_step, reference_octave)
+    )
+
+
+def _clefs_in_force(symbols: list[EncodedSymbol]) -> list[tuple[str, int] | None]:
+    """The clef governing each symbol, tracked per staff of the group.
+
+    A grand staff arrives as one stream with each symbol marked `upper` or
+    `lower`, and each half has its own clef -- so tracking a single current clef
+    would read every bass note against the treble.
+    """
+    current: dict[str, tuple[str, int]] = {}
+    found: list[tuple[str, int] | None] = []
+    for symbol in symbols:
+        match = _CLEF.match(symbol.rhythm)
+        if match is not None:
+            current[symbol.position] = (match.group(1), int(match.group(2)))
+        found.append(current.get(symbol.position))
+    return found
 
 
 def _note_coordinates(symbol: EncodedSymbol) -> tuple[float, float] | None:
@@ -37,6 +81,33 @@ def _note_coordinates(symbol: EncodedSymbol) -> tuple[float, float] | None:
     if not isinstance(x, Real) or not isinstance(y, Real):
         return None
     return float(x), float(y)
+
+
+def _at_position(notes: list[Note], x: float, y: float, position: int) -> Note | None:
+    """The notehead this decoded pitch names, found by where it must sit.
+
+    The decoder reports where it was attending, and that is reliable across the
+    staff and unreliable up it: measured, the attention point sits along the stem
+    rather than on the head, and on one note of Sammon ryosto it landed 50px away
+    in the gap between two staves, equidistant from heads on both. No tolerance
+    can rescue that safely -- widening far enough to reach the right head reaches
+    the wrong staff's too.
+
+    But the decoded note says which pitch it is, and the clef says where that
+    pitch sits, and the segmentation already recorded a position for every head.
+    So the column is found by x, where the attention is trustworthy, and the head
+    within it by the position the music demands. Where two staves offer a head at
+    the same position, the nearer in y wins -- staves are far enough apart that
+    even a 50px error picks the right one.
+    """
+    candidates = [
+        note
+        for note in notes
+        if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE and note.position == position
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda note: abs(note.center[1] - y))
 
 
 def _nearest(notes: list[Note], x: float, y: float) -> Note | None:
@@ -61,13 +132,20 @@ def _nearest(notes: list[Note], x: float, y: float) -> Note | None:
 def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
     """Set ``stem_direction`` on safely matched decoded notes and return its count."""
     hinted = 0
-    for symbol in symbols:
+    clefs = _clefs_in_force(symbols)
+    for index, symbol in enumerate(symbols):
         if not symbol.rhythm.startswith("note"):
             continue
         coordinates = _note_coordinates(symbol)
         if coordinates is None:
             continue
-        note = _nearest(notes, *coordinates)
+        clef = clefs[index]
+        position = expected_position(symbol.pitch, clef) if clef else None
+        note = None
+        if position is not None:
+            note = _at_position(notes, *coordinates, position)
+        if note is None:
+            note = _nearest(notes, *coordinates)
         if note is None or not note.stem_directions:
             continue
         if len(note.stem_directions) > 1:
