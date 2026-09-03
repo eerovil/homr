@@ -11,6 +11,15 @@ from homr.type_definitions import NDArray
 # How far short of a notehead a stem may stop and still count as attached to
 # it: beam and staff-line removal leaves real stems a little short.
 ATTACHMENT_SLACK = 0.3
+# How far past a stem's starting end a notehead may sit, in noteheads, and still
+# be read as sharing that stem rather than as the neighbouring voice reaching for
+# it. A second between two voices is half a notehead, so the room has to be less
+# than that or the case this guards against walks straight through -- and it has
+# to be some, because a stem's own end is read a pixel or two off its head.
+# Measured over 80 real system crops: at 0.4 the three two-voice columns that
+# report both directions keep on doing so, and at 0.1 seven heads that were read
+# correctly flip, the up stem of an upper voice being taken for the lower one's.
+OWNERSHIP_SLACK = 0.25
 # How much narrower than its shoulders the ink has to get before it counts as
 # the waist between two noteheads rather than one head's own rounded end.
 WAIST_DEPTH = 0.8
@@ -454,6 +463,23 @@ def source_stem_candidates(
     ]
 
 
+def on_the_stems_side(
+    notehead: BoundingEllipse, stem: RotatedBoundingBox, direction: StemDirection | None
+) -> bool:
+    """Whether this head is on the side of the stem a head that owns it sits on.
+
+    An up stem is drawn on the right of the head it rises from and a down stem
+    on the left of the head it hangs from.  `stem_direction` asks the same
+    question and then asks whether the stem runs away from the head as well,
+    which is right for reading a direction and wrong for asking whose end this
+    is: a stem's own end lies level with, and often inside, its notehead.
+    """
+    side_offset = notehead.size[0] * 0.1
+    if direction == StemDirection.UP:
+        return stem.center[0] >= notehead.center[0] + side_offset
+    return stem.center[0] <= notehead.center[0] - side_offset
+
+
 def belongs_to_another_notehead(
     notehead: BoundingEllipse,
     stem: RotatedBoundingBox,
@@ -461,26 +487,40 @@ def belongs_to_another_notehead(
 ) -> bool:
     """Whether a stem starts at some other notehead rather than at this one.
 
-    Voices stacked in one column sit close enough that one head can reach the
-    next head's stem: the gap it has to cross is smaller than the room a real
-    stem needs.  A stem drawn *alongside* this head is its own or its chord's,
-    so only one that stops short of it is asked whose it is, and the answer is
-    whichever head its near end lands on.
+    A stem is drawn from one head: an up stem rises from the head at its bottom
+    end, a down stem hangs from the head at its top end.  The rest of its length
+    runs alongside the other heads of the same chord, which is why a head is not
+    asked to *begin* the stem -- but it is asked to lie on the stem's own side of
+    that starting head.  A head sitting past the starting end is a different
+    voice's, sharing the column: the up stem on the right of the upper head and
+    the down stem on the left of the lower head are two stems, not one head with
+    two.
+
+    Only a head that is really past the end, with another head sitting at that
+    end, is refused.  A stem the segmentation cut short of its own head has no
+    other head there to hand it to, so it stays where it was read.
     """
     stem_top = stem.center[1] - stem.size[1] / 2
     stem_bottom = stem.center[1] + stem.size[1] / 2
-    note_top = notehead.center[1] - notehead.size[1] / 2
-    note_bottom = notehead.center[1] + notehead.size[1] / 2
-    if stem_top <= note_bottom and stem_bottom >= note_top:
-        return False
-    if stem_direction(notehead, stem) == StemDirection.UP:
+    direction = stem_direction(notehead, stem)
+    if direction == StemDirection.UP:
         near_y = stem_bottom
+        past_the_end = notehead.center[1] - near_y
     else:
         near_y = stem_top
+        past_the_end = near_y - notehead.center[1]
+    if past_the_end <= notehead.size[1] * OWNERSHIP_SLACK:
+        return False
     return any(
         other is not notehead
         and abs(other.center[0] - stem.center[0]) <= other.size[0] * 0.8
         and abs(other.center[1] - near_y) <= other.size[1]
+        # A head the stem is drawn on the wrong side of cannot be whose it is:
+        # at a second the engraver moves one head across the stem, and that
+        # displaced head sits at the stem's end without owning it.  Only the
+        # side is asked, not `stem_direction`, because the ink at a stem's own
+        # end overlaps its head and so is neither above nor below it.
+        and on_the_stems_side(other, stem, direction)
         for other in noteheads
     )
 
