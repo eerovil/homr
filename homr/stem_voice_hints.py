@@ -15,7 +15,14 @@ from homr.model import Note, StemDirection
 from homr.transformer.vocabulary import EncodedSymbol
 
 _MATCH_X_TOLERANCE = 12.0
-_MATCH_Y_TOLERANCE = 16.0
+#: The decoder's attention point sits along the stem rather than on the head, so
+#: it is displaced away from the head in the direction the stem is drawn --
+#: measured on laulun-aika-s2, 13 to 17px above an up-stem head and 3 to 8px
+#: below a down-stem one. At 16 an up-stem head could fall outside its own note's
+#: reach and get no hint at all, which is how a chord of two voices came to carry
+#: one stem: no hint, no stem, nothing to say the chord was two lines. The margin
+#: rule below is what keeps this from grabbing a neighbour.
+_MATCH_Y_TOLERANCE = 24.0
 #: How much closer the nearest notehead must be than the next one.
 _MARGIN = 16.0
 #: Written on a notehead that carries an up stem and a down stem at once.
