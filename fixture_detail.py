@@ -225,7 +225,27 @@ def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
         return {staff: {voice: index + 1 for index, voice in enumerate(voices)}
                 for staff, voices in order.items()}
 
-    want, got = read(reference), read(parsed)
+    def collapse(found: dict) -> dict:
+        """Two voices in unison print ONE notehead, so count it once.
+
+        Older choral engraving writes a unison as a single head serving both
+        voices, and the reference -- one staff per part -- has to write it twice.
+        Comparing those two against homr's one said the parse had lost a note on
+        ten moments of Sammon ryosto, all of them unisons, none of them wrong.
+        """
+        merged: dict = {}
+        for key, group in found.items():
+            seen: dict[int, dict] = {}
+            for note in group:
+                at = seen.get(note["position"])
+                if at is None:
+                    seen[note["position"]] = dict(note, unison=False)
+                else:
+                    at["unison"] = True
+            merged[key] = list(seen.values())
+        return merged
+
+    want, got = collapse(read(reference)), read(parsed)
     here, there = ranked(want), ranked(got)
     rows, wrong = [], {}
     for key in sorted(want, key=lambda k: (int(k[0]), k[1], k[2])):
@@ -251,6 +271,15 @@ def voice_lines(reference: Path, parsed: Path) -> tuple[list[str], dict]:
                     f"<td>{a['name']} &middot; position {a['position']}</td>"
                     f"<td>{b['name']} &middot; position {b['position']}</td>"
                     f"<td class='no'>a different note</td></tr>")
+                continue
+            if a.get("unison"):
+                # One printed head serving both voices: there is no voice for
+                # homr to get wrong.
+                rows.append(
+                    f"<tr><td>bar {bar}, staff {staff}, beat {onset:g}</td>"
+                    f"<td>{a['name']} &middot; both voices</td>"
+                    f"<td>{b['name']}</td>"
+                    f"<td class='ok'>a unison &mdash; one head, both parts</td></tr>")
                 continue
             same = mine_voice == their_voice
             note = "the voice the page prints" if same else (
