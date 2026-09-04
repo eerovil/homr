@@ -185,11 +185,25 @@ class Result:
         return self.voice + self.pitch + self.size
 
 
+def _lines_per_bar(found: dict) -> dict[tuple[str, int], int]:
+    """How many voices the page prints on each staff in each bar."""
+    lines: dict[tuple[str, int], set[str]] = {}
+    for (bar, staff, _), group in found.items():
+        lines.setdefault((bar, staff), set()).update(note["voice"] for note in group)
+    return {key: len(voices) for key, voices in lines.items()}
+
+
 def compare_output(reference: Path, parsed: Path) -> Result:
     """The page against homr's MusicXML, note by note."""
     want = collapse_unisons(read_score(reference))
     got = read_score(parsed)
     here, there = _voice_rank(want), _voice_rank(got)
+    # A voice is only wrong where the page gave it a choice. Where a staff prints
+    # one line through a bar, homr numbering its notes voice 5 and then voice 6
+    # is untidy and costs the singer nothing -- there is no second line for the
+    # note to be on. Counting it anyway made five faults out of one such bar and
+    # put the worst case in the sample somewhere it did not belong.
+    lines = _lines_per_bar(want)
     result = Result()
     for key in sorted(want, key=lambda k: (int(re.sub(r"\D", "", k[0]) or 0), k[1], k[2])):
         bar, staff, onset = key
@@ -218,6 +232,12 @@ def compare_output(reference: Path, parsed: Path) -> Result:
                                        "a unison — one head, both parts", "unison"))
                 continue
             mine_rank, their_rank = here[staff][a["voice"]], there[staff][b["voice"]]
+            if lines.get((bar, staff), 1) < 2:
+                result.agree += 1
+                result.rows.append(Row(where, f"{a['name']} · the only line",
+                                       b["name"], "one line here — no voice to "
+                                       "get wrong", "agree"))
+                continue
             if mine_rank != their_rank:
                 result.voice += 1
                 result.rows.append(Row(
