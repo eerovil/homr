@@ -134,7 +134,10 @@ def _split_bbox(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cv
     new_bbox: list[cvt.Rect] = []
     region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
     columns = (region > 0).sum(axis=0).astype(float) if region.size else np.zeros(0)
-    waists = [column for column in _waists(columns, note_w) if 0 < column < w]
+    gaps = _blank_gaps(columns) if w > MAX_NOTEHEAD_WIDTH * unit_size else []
+    waists = sorted(
+        {column for column in [*gaps, *_waists(columns, note_w)] if 0 < column < w}
+    )
     if waists:
         # Heads side by side: cut where the ink narrows between them, not down
         # the middle, so a notehead with a ledger line growing out of it is not
@@ -197,6 +200,50 @@ def split_stack(bbox: cvt.Rect, noteheads: NDArray, note_h: float) -> list[cvt.R
         adjust_bbox((bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom), noteheads)
         for top, bottom in zip(cuts, cuts[1:], strict=False)
         if bottom > top
+    ]
+
+
+def _blank_gaps(columns: NDArray) -> list[int]:
+    """The middle of each stretch of blank paper with ink on both sides.
+
+    `_waists` cannot find these, and the reason is worth writing down because it
+    looks like a threshold problem and is not.  A waist needs a shoulder within
+    one notehead on each side (`above`/`below` look back and forward
+    `int(note_h)` columns); the two heads this rescues are 58 blank columns
+    apart, so every column in between has a shoulder on one side and nothing but
+    paper on the other, and `min(above, below) == 0` declines all of them.
+    `WAIST_DEPTH` never gets a say.  Widening those windows instead would make
+    every eighth column of the gap a cut and slice the blank into slivers.
+
+    Measured on `laulun-aika-3-s3`, the clump at (1099, 118), 128px wide against
+    a notehead's 16, with `unit` 12.8 and the limit 38.5::
+
+        cols  0..5    0
+        cols  6..20   1          a run of staff line
+        cols 21..40   5..14      the upper voice's first notehead
+        cols 41..98   0          blank paper
+        cols 99..118  5..14      the upper voice's second notehead
+
+    So the two heads are joined by no ink whatsoever inside this box: the
+    segmentation's own component runs through a staff line a few rows below it,
+    and the ellipse fitted over the group is too short to include that line while
+    being wide enough to span both heads.  `add_notes_to_staffs` then threw the
+    whole 128px clump away and both notes with it.
+
+    Cutting blank paper is the one cut that cannot be wrong -- a notehead is a
+    connected piece of ink, so no head has blank columns through the middle of
+    it, and either side of the cut is ink that was there already.  It is still
+    asked for only when the box is over-wide, on the same principle as
+    `shed_thin_ends`: rescuing a note nobody was going to get is worth a change,
+    re-shaping a note that is already being read is not.
+    """
+    ink = np.flatnonzero(columns > 0)
+    if len(ink) < 2:
+        return []
+    return [
+        int((left + right + 1) // 2)
+        for left, right in zip(ink[:-1], ink[1:], strict=False)
+        if right - left > 1
     ]
 
 

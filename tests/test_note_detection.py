@@ -128,6 +128,28 @@ def test_a_notehead_with_a_ledger_line_stays_one_notehead() -> None:
     assert len(split) == 1
 
 
+def test_two_heads_with_blank_paper_between_them_are_cut_apart() -> None:
+    # The shape measured on laulun-aika-3-s3 bar 3: two heads of the upper voice
+    # printed on the same staff line, joined into one 128px clump against a
+    # notehead's 16 -- and inside the clump's own box there is no ink at all
+    # between them, because the line that joined them runs a few rows lower.
+    # `_waists` cannot see it: its shoulder windows reach one notehead each way,
+    # so every column of a gap this wide has paper on one side and declines.
+    mask = np.zeros((80, 140), dtype=np.uint8)
+    cv2.ellipse(mask, (30, 40), (10, 7), 0, 0, 360, 1, -1)
+    cv2.ellipse(mask, (100, 40), (10, 7), 0, 0, 360, 1, -1)
+    clump = BoundingEllipse(((65, 40), (100, 14), 0), empty)
+
+    split = split_notehead_ellipse(clump, mask, 12)
+
+    assert len(split) == 2
+    # And the cut landed on the paper: each piece is one notehead, not a head
+    # with half a gap stuck to it.
+    assert sorted(round(head.center[0]) for head in split) == [30, 100]
+    for head in split:
+        assert head.size[0] <= 3 * 12
+
+
 def test_a_stem_cut_into_pieces_by_staff_lines_is_read_as_one() -> None:
     notehead = BoundingEllipse(((50, 50), (16, 12), 0), empty)
     # One stem, lost where two staff lines crossed it.
