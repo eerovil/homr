@@ -32,7 +32,12 @@ from homr.debug import Debug
 from homr.model import InputPredictions, MultiStaff, Staff
 from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
 from homr.noise_filtering import filter_predictions
-from homr.note_detection import add_notes_to_staffs, combine_noteheads_with_stems, split_notehead_ellipse
+from homr.note_detection import (
+    add_notes_to_staffs,
+    combine_noteheads_with_stems,
+    shed_staff_lines,
+    split_notehead_ellipse,
+)
 from homr.onnx_providers import coreml_available, cuda_available, rocm_available
 from homr.pdf_utils import render_pdf_to_image
 from homr.resize import resize_image
@@ -126,6 +131,10 @@ def load_and_preprocess_predictions(
     predictions = filter_predictions(predictions, debug)
 
     predictions.staff = make_lines_stronger(predictions.staff, (1, 2))
+    # Before anything looks for a notehead, take the staff line back out of the
+    # mask it will look in, so two heads joined only by a line are two
+    # components and never have to be split apart again.
+    predictions.notehead = shed_staff_lines(predictions.notehead, predictions.staff)
     debug.write_threshold_image("staff", predictions.staff)
     debug.write_threshold_image("symbols", predictions.symbols)
     debug.write_threshold_image("stems_rest", predictions.stems_rest)

@@ -40,6 +40,19 @@ THIN_END_SHARE = 0.35
 # head that was going to be discarded, and can never re-shape one that is
 # already being read.
 MAX_NOTEHEAD_WIDTH = 3.0
+# How far, in rows, the notehead mask and the staff mask may disagree about
+# where a staff line ends and still be talking about the same line.
+STAFF_LINE_SLACK = 1
+# How thick a run of notehead ink may be, as a share of the staff line's own
+# thickness, and still be read as that line rather than as a notehead.
+STAFF_INK_SHARE = 0.5
+# How thick, in staff spaces, ink has to be before it counts as a notehead's
+# body rather than as something that ran into one. A head is about a space
+# tall; a staff line is not.
+BODY_SHARE = 0.5
+# How wide, in staff spaces, a clump of notehead ink has to be before the staff
+# line is taken out of it.
+CLUMP_WIDTH = 2.5
 
 
 class NoteheadWithStem(DebugDrawable):
@@ -59,6 +72,119 @@ class NoteheadWithStem(DebugDrawable):
         self.notehead.draw_onto_image(img, color)
         if self.stem is not None:
             self.stem.draw_onto_image(img, color)
+
+
+def _vertical_run_height(mask: NDArray) -> NDArray:
+    """How tall the unbroken column of ink through each pixel is."""
+    ink = (mask > 0).astype(np.int32)
+    above = np.zeros_like(ink)
+    below = np.zeros_like(ink)
+    for row in range(ink.shape[0]):
+        above[row] = np.where(ink[row] > 0, (above[row - 1] if row else 0) + 1, 0)
+    for row in range(ink.shape[0] - 1, -1, -1):
+        below[row] = np.where(ink[row] > 0, (below[row + 1] if row < ink.shape[0] - 1 else 0) + 1, 0)
+    return np.where(ink > 0, above + below - 1, 0)
+
+
+def staff_space(staff: NDArray) -> float:
+    """The gap between two staff lines, read off the staff mask itself.
+
+    It is the one length available before any notehead has been found, and it
+    is the length everything about a notehead is measured in: a head is about
+    one space wide and one space tall.
+    """
+    lines = staff > 0
+    starts = lines & ~np.roll(lines, 1, axis=0)
+    gaps: list[int] = []
+    for column in range(0, staff.shape[1], 8):
+        rows = np.flatnonzero(starts[:, column])
+        gaps.extend(np.diff(rows).tolist())
+    inside = [gap for gap in gaps if gap > 2]
+    return float(np.median(inside)) if inside else 0.0
+
+
+def shed_staff_lines(noteheads: NDArray, staff: NDArray) -> NDArray:
+    """Take the staff line out of the notehead mask before heads are found.
+
+    The segmentation classes are one argmax, so a pixel is never both a
+    notehead and a staff line -- but the boundary between them is drawn a row
+    or two off, and the notehead class keeps a sliver of the line running out
+    of every head that sits on one. Two heads a third apart are then joined by
+    that sliver into a single component, and a clump of ink 128 pixels wide
+    against a notehead's 16 is not a notehead: `add_notes_to_staffs` throws
+    away anything wider than three staff units, so both heads are lost and the
+    voice they belonged to is left to be guessed at.
+
+    Three things decide what goes, and the third is the one that took a
+    measurement to get right.
+
+    **Thickness**, because that is what separates a line from a head: a head is
+    a dozen rows of ink top to bottom, including where it is drawn straight
+    through a line, and the sliver is one or two. Measured on one system crop,
+    the notehead mask holds 3465 pixels in runs of one or two rows and 190 in
+    runs of three or four before the count climbs again from five upwards,
+    which is the heads -- so the two are separated by a gap and not by a line
+    drawn through a crowd.
+
+    **The staff mask**, as a gate rather than as the measurement, so ink this
+    thin anywhere else on the page is left alone. It has to be given a row of
+    slack: on that crop 49% of the thin notehead ink sits on the staff mask
+    exactly and 97% does within one row, after which nothing more is gained.
+    The two masks agree that a line is there and disagree about its last row.
+
+    **How wide the clump already is**, which is what keeps this from
+    re-measuring notes that were being read perfectly well. A sliver hanging
+    off a lone head costs nothing: its contour is still a head's contour, and
+    the head is found. Cutting it moves that head's box by a few pixels -- and
+    the stem search, the ownership rules and the chord rules are all measured
+    in that box. Shedding every sliver cost five noteheads their stem direction
+    across the committed fixtures, none of them near a fused pair. So a clump
+    is only opened up once it is wider than `MAX_NOTEHEAD_WIDTH` spaces: wider
+    than any notehead may be, which is to say a clump that was going to be
+    split or thrown away regardless. Narrower ink is handed back exactly as the
+    model drew it, byte for byte. This is `shed_thin_ends`' own rule -- rescue
+    a note nobody was going to get, never re-read a note that was already
+    right -- applied one layer earlier, where it is still ink and not yet a
+    fitted ellipse.
+
+    Earlier is what buys the whole change, because the fusing does not happen
+    in the connected components at all: a head and its sliver are their own
+    component, and it is `create_bounding_ellipses` that fits an ellipse to
+    that long thin contour, gets a wide slanted one, finds it overlapping its
+    neighbour's and merges the two. Two heads 60 pixels apart become one
+    128-pixel ellipse without ever having touched.
+
+    Nothing is shed on a page with no staff mask, and on a scan whose lines are
+    thick enough that the sliver is thick too the gate never opens: the failure
+    is doing nothing, not cutting a hole through a head.
+    """
+    space = staff_space(staff)
+    if space <= 0 or not noteheads.any():
+        return noteheads
+    thickness = _vertical_run_height(noteheads)
+    line_thickness = float(np.median(_vertical_run_height(staff)[staff > 0]))
+    limit = max(2, int(line_thickness * STAFF_INK_SHARE))
+    slack = np.ones((1 + 2 * STAFF_LINE_SLACK, 1), np.uint8)
+    on_a_line = cv2.dilate((staff > 0).astype(np.uint8), slack) > 0
+    is_line = (noteheads > 0) & on_a_line & (thickness > 0) & (thickness <= limit)
+    if not is_line.any():
+        return noteheads
+    body = ((noteheads > 0) & (thickness >= space * BODY_SHARE)).astype(np.uint8)
+    shed = noteheads.copy()
+    count, clumps, stats, _ = cv2.connectedComponentsWithStats(
+        (noteheads > 0).astype(np.uint8), 8
+    )
+    for label in range(1, count):
+        left, top, width, height = stats[label][:4]
+        if width <= CLUMP_WIDTH * space:
+            continue
+        window = (slice(top, top + height), slice(left, left + width))
+        clump = clumps[window] == label
+        line = is_line[window] & clump
+        if not line.any() or not (body[window] & clump).any():
+            continue
+        shed[window][line] = 0
+    return shed
 
 
 def adjust_bbox(bbox: cvt.Rect, noteheads: NDArray) -> cvt.Rect:
