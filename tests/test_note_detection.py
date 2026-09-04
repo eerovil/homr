@@ -3,8 +3,11 @@ import numpy as np
 
 from homr.bounding_boxes import BoundingEllipse, RotatedBoundingBox
 from homr.model import StemDirection
+from homr.type_definitions import NDArray
 from homr.note_detection import (
     bridged_ink,
+    shed_staff_lines,
+    staff_space,
     combine_noteheads_with_stems,
     split_notehead_ellipse,
     stems_of_notehead,
@@ -278,3 +281,104 @@ def test_a_stem_the_scan_already_gives_is_not_read_again_through_the_mend() -> N
     )
 
     assert both == stems_of_notehead(head, [segmentation_found_it], vertical_ink(page), [head])
+
+
+def _page(space: int = 14, rows: int = 120, columns: int = 260) -> tuple[NDArray, NDArray]:
+    """A blank staff: five lines a space apart, and an empty notehead mask."""
+    staff = np.zeros((rows, columns), dtype=np.uint8)
+    for line in range(5):
+        top = 30 + line * space
+        staff[top : top + 4, :] = 1
+    return np.zeros((rows, columns), dtype=np.uint8), staff
+
+
+def _head(mask: NDArray, x: int, y: int) -> None:
+    cv2.ellipse(mask, (x, y), (9, 7), 0, 0, 360, 1, -1)
+
+
+def test_the_staff_line_the_model_kept_is_taken_out_of_a_fused_clump() -> None:
+    # Two heads a third apart, joined by nothing but two rows of the staff line
+    # they sit on. This is the whole defect: they never touch, but the ellipse
+    # fitted to each long thin contour is wide enough to swallow the other.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 51)
+    _head(noteheads, 140, 58)
+    noteheads[58:60, 40:170] = 1
+
+    shed = shed_staff_lines(noteheads, staff)
+
+    assert not shed[58:60, 90:120].any()
+    left, right = shed[40:70, 50:70], shed[40:70, 130:150]
+    assert left.sum() > 100 and right.sum() > 100
+
+
+def test_a_head_drawn_through_a_line_keeps_the_ink_that_line_costs_it() -> None:
+    # The gate is thickness, so the head's own column across the line is thick
+    # and stays: subtracting the staff mask would cut a hole through every head
+    # printed on a line, which is most of them.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 58)
+    noteheads[58:60, 40:170] = 1
+
+    shed = shed_staff_lines(noteheads, staff)
+
+    assert shed[51:66, 55:66].sum() == noteheads[51:66, 55:66].sum()
+
+
+def test_a_lone_head_is_handed_back_exactly_as_the_model_drew_it() -> None:
+    # A sliver on a head that is joined to nothing changes no decision, and
+    # cutting it would move the box the stem and chord rules are measured in.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 58)
+    noteheads[58:60, 50:85] = 1
+
+    assert np.array_equal(shed_staff_lines(noteheads, staff), noteheads)
+
+
+def test_nothing_is_shed_where_the_model_found_no_staff() -> None:
+    noteheads, staff = _page()
+    _head(noteheads, 60, 58)
+    _head(noteheads, 140, 58)
+    noteheads[58:60, 40:170] = 1
+
+    assert np.array_equal(shed_staff_lines(noteheads, np.zeros_like(staff)), noteheads)
+
+
+def test_thin_ink_away_from_any_line_is_not_a_staff_line() -> None:
+    # The staff mask is the gate: a hairline the model drew between the lines
+    # is something else, and this pass has no opinion about it.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 51)
+    _head(noteheads, 140, 51)
+    noteheads[50:52, 40:170] = 1
+
+    assert np.array_equal(shed_staff_lines(noteheads, staff), noteheads)
+
+
+def test_the_masks_may_disagree_by_a_row_about_where_a_line_ends() -> None:
+    # They come from one argmax, so they never share a pixel: the sliver lies
+    # just under the line rather than on it. Measured on a real crop, 49% of the
+    # thin notehead ink sits on the staff mask exactly and 97% within one row,
+    # which is the row of slack this asks for.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 51)
+    _head(noteheads, 140, 58)
+    noteheads[62:63, 40:170] = 1
+
+    assert not shed_staff_lines(noteheads, staff)[62:63, 90:120].any()
+
+
+def test_a_pair_of_heads_side_by_side_is_not_thinned_into_a_line() -> None:
+    # Wide enough to be opened up, but there is no thin ink in it to take.
+    noteheads, staff = _page()
+    _head(noteheads, 60, 51)
+    _head(noteheads, 78, 51)
+    _head(noteheads, 96, 51)
+
+    assert np.array_equal(shed_staff_lines(noteheads, staff), noteheads)
+
+
+def test_the_staff_space_is_read_off_the_staff_mask() -> None:
+    _, staff = _page(space=14)
+
+    assert staff_space(staff) == 14

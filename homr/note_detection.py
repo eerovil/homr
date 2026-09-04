@@ -82,7 +82,8 @@ def _vertical_run_height(mask: NDArray) -> NDArray:
     for row in range(ink.shape[0]):
         above[row] = np.where(ink[row] > 0, (above[row - 1] if row else 0) + 1, 0)
     for row in range(ink.shape[0] - 1, -1, -1):
-        below[row] = np.where(ink[row] > 0, (below[row + 1] if row < ink.shape[0] - 1 else 0) + 1, 0)
+        after = below[row + 1] if row < ink.shape[0] - 1 else 0
+        below[row] = np.where(ink[row] > 0, after + 1, 0)
     return np.where(ink > 0, above + below - 1, 0)
 
 
@@ -139,13 +140,15 @@ def shed_staff_lines(noteheads: NDArray, staff: NDArray) -> NDArray:
     the stem search, the ownership rules and the chord rules are all measured
     in that box. Shedding every sliver cost five noteheads their stem direction
     across the committed fixtures, none of them near a fused pair. So a clump
-    is only opened up once it is wider than `MAX_NOTEHEAD_WIDTH` spaces: wider
-    than any notehead may be, which is to say a clump that was going to be
-    split or thrown away regardless. Narrower ink is handed back exactly as the
-    model drew it, byte for byte. This is `shed_thin_ends`' own rule -- rescue
-    a note nobody was going to get, never re-read a note that was already
-    right -- applied one layer earlier, where it is still ink and not yet a
-    fitted ellipse.
+    is only opened up once it is `CLUMP_WIDTH` spaces wide -- wider than any
+    notehead, which is to say a clump that was going to be split or thrown away
+    regardless. Narrower ink is handed back exactly as the model drew it, byte
+    for byte. This is `shed_thin_ends`' own rule -- rescue a note nobody was
+    going to get, never re-read a note that was already right -- applied one
+    layer earlier, where it is still ink and not yet a fitted ellipse. The
+    number is measured too: at 2.5 spaces the fused pair comes apart and the
+    five committed fixtures parse unchanged, and every step tighter than that
+    starts re-reading heads on pages where nothing was wrong.
 
     Earlier is what buys the whole change, because the fusing does not happen
     in the connected components at all: a head and its sliver are their own
