@@ -298,10 +298,38 @@ def compare(new: dict, old: dict) -> None:
             f"-> {new['scan']['holes']} holes, {new['scan']['bars']} bars")
 
 
+def _kubernetes_shim(tree: str | None) -> str:
+    """Prepare the pod and return an executable that reads a page in it.
+
+    Three steps, all in ``choir-k8s.sh``: build the pod and its venv if this is
+    the first run, put the worktree's source in front of that venv, and write a
+    shim honouring homr's own CLI. The shim is what goes in ``HOMR_BIN``, so
+    nothing downstream knows the difference.
+
+    The tree is shipped on **every** run rather than only when it changes: it is
+    a few hundred KB of Python and a second of wall clock, and a sweep measuring
+    source the pod does not actually have is the one failure worth spending a
+    second to make impossible.
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "choir-k8s.sh")
+    run = [script, "up"]
+    if subprocess.run(run).returncode:
+        sys.exit("choir-k8s.sh up failed — is kubectl pointed at a cluster?")
+    if tree and subprocess.run([script, "ship", tree]).returncode:
+        sys.exit(f"could not ship {tree} to the pod")
+    shim = os.path.join(tempfile.mkdtemp(prefix="choir-k8s-"), "homr")
+    if subprocess.run([script, "shim", shim]).returncode:
+        sys.exit("could not write the pod shim")
+    return shim
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", help="worktree to test; omit to test the installed homr")
+    ap.add_argument("--kubernetes", action="store_true",
+                    help="run homr in a pod instead of on this host "
+                         "(see scripts/choir-k8s.sh)")
     ap.add_argument("--all", action="store_true", help="every target")
     ap.add_argument("--pytest", action="store_true", help="the fork's unit tests")
     ap.add_argument("--benchmark", action="store_true", help="the benchmark pages")
@@ -326,18 +354,35 @@ def main() -> int:
 
     if args.tree:
         tree = os.path.abspath(args.tree)
+    else:
+        tree = None
+
+    if args.kubernetes:
+        # The pod is reached the same way a worktree is: as an executable in
+        # HOMR_BIN. Everything else here — the crops, the flattening, the
+        # scoring — still runs on this host, because that is the choir app's
+        # code and it is not what the sweep spends its cores on.
+        binary = _kubernetes_shim(tree)
+        os.environ["HOMR_BIN"] = binary
+        log(f"homr under test: pod {os.environ.get('CHOIR_K8S_POD', 'homr-bench')}"
+            + (f" running {os.path.basename(tree)}" if tree else " running its own install"))
+    elif tree:
         binary = os.path.join(tree, ".venv", "bin", "homr")
         if not os.path.exists(binary):
             sys.exit(f"No homr in {tree} — run scripts/choir-worktree.sh first.")
         os.environ["HOMR_BIN"] = binary
         log(f"homr under test: {binary}")
     else:
-        tree = None
         log(f"homr under test: {os.environ.get('HOMR_BIN', 'the installed venv')}")
     log(f"crops at {omr_systems.SCAN_DPI} dpi")
 
     if targets["pytest"] and not tree:
         sys.exit("--pytest needs --tree (the installed venv has no test suite).")
+    if targets["pytest"] and args.kubernetes:
+        # --kubernetes moves the page reading, which is what the sweep's cores
+        # go on. The unit tests are the tree's own pytest and stay here; saying
+        # so is better than appearing to have run them somewhere else.
+        log("note: --pytest runs on this host; --kubernetes moves only the page reading")
 
     results: dict = {"homr": os.environ.get("HOMR_BIN"), "dpi": omr_systems.SCAN_DPI}
     scratch = args.keep or tempfile.mkdtemp(prefix="choir-bench-")
