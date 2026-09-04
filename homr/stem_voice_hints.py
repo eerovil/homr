@@ -26,6 +26,10 @@ _MATCH_X_TOLERANCE = 12.0
 _MATCH_Y_TOLERANCE = 24.0
 #: How much closer the nearest notehead must be than the next one.
 _MARGIN = 16.0
+#: How far from a decoded note a head may sit and still be in its column. Wide,
+#: because this is only ever used to look at a pair that is already known to be
+#: one moment on one staff.
+_COLUMN_REACH = 60.0
 #: Written on a notehead that carries an up stem and a down stem at once.
 SHARED = "both"
 _STEPS = "CDEFGAB"
@@ -127,6 +131,105 @@ def _nearest(notes: list[Note], x: float, y: float) -> Note | None:
     if len(matches) > 1 and matches[1][0] - matches[0][0] < _MARGIN:
         return None
     return matches[0][2]
+
+
+def pitch_at(position: int, clef: tuple[str, int]) -> str | None:
+    """The pitch a staff position spells, given the clef -- the inverse of above."""
+    sign, line = clef
+    reference_step, reference_octave = _CLEF_REFERENCE[sign]
+    note = position - (2 * line - 1) + _diatonic(reference_step, reference_octave)
+    if note < 0:
+        return None
+    return f"{_STEPS[note % 7]}{note // 7}"
+
+
+def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
+    """Re-pitch a note that duplicates its neighbour and is about to be deleted.
+
+    The decoder can read one head of a close-set pair as the other's pitch. The
+    two decoded notes are then identical, `_remove_duplicated_piches` keeps one
+    -- correctly, since a chord cannot hold the same pitch twice -- and a note
+    the page prints vanishes from the score entirely. On Heraa Suomi's fourth
+    system the page has a C and an A a third apart, the segmentation finds both
+    heads with the right positions and opposite stems, and the output has only
+    the C.
+
+    A dropped note is the worst kind of fault here: a wrong stem or a wrong voice
+    still writes the note and can be argued with afterwards, and nothing
+    downstream can recover a note that is not there.
+
+    So where two decoded notes of one moment on one staff carry the same pitch,
+    and the segmentation found exactly two heads there at two different
+    positions, and one of those positions is the pitch they agree on, the other
+    note is re-pitched to the head nobody claimed. Deliberately no wider than
+    that: it only ever acts where a note is about to be lost, so the worst it can
+    do is replace a deletion with a wrong pitch, and every other reading is left
+    exactly as the decoder produced it.
+    """
+    clefs = _clefs_in_force(symbols)
+    # Grouped by how close the notes are, not by a grid: two notes of one moment
+    # sit a fraction of a pixel apart and a fixed bucket puts them either side of
+    # its boundary. This one did -- 184.0 and 184.1 became bucket 11 and bucket
+    # 12 -- and the pair this exists for was never looked at.
+    per_staff: dict[str, list[tuple[float, int]]] = {}
+    for index, symbol in enumerate(symbols):
+        if not symbol.rhythm.startswith("note"):
+            continue
+        coordinates = _note_coordinates(symbol)
+        if coordinates is None or clefs[index] is None:
+            continue
+        per_staff.setdefault(symbol.position, []).append((coordinates[0], index))
+    columns: list[list[int]] = []
+    for places in per_staff.values():
+        group: list[int] = []
+        last: float | None = None
+        for x, index in sorted(places):
+            if last is not None and x - last > _MATCH_X_TOLERANCE:
+                columns.append(group)
+                group = []
+            group.append(index)
+            last = x
+        if group:
+            columns.append(group)
+
+    rescued = 0
+    for members in columns:
+        if len(members) != 2:
+            continue
+        first, second = (symbols[i] for i in members)
+        if first.pitch != second.pitch:
+            continue
+        x = _note_coordinates(first)[0]
+        clef = clefs[members[0]]
+        claimed = expected_position(first.pitch, clef)
+        here = [
+            note for note in notes
+            if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
+            and abs(note.center[1] - _note_coordinates(first)[1]) <= _COLUMN_REACH
+            and abs(note.center[1] - _note_coordinates(second)[1]) <= _COLUMN_REACH
+        ]
+        positions = sorted({note.position for note in here})
+        if len(positions) != 2 or claimed not in positions:
+            continue
+        other = positions[0] if positions[1] == claimed else positions[1]
+        spelled = pitch_at(other, clef)
+        if spelled is None:
+            continue
+        # The lower head takes the lower pitch: re-pitch whichever of the two is
+        # drawn on the side the free position sits.
+        target = second if (other < claimed) == (
+            _note_coordinates(second)[1] > _note_coordinates(first)[1]) else first
+        target.pitch = spelled
+        # And the stem the head carries. Without it the rescued note has nothing
+        # to say which line it belongs to and lands in whichever voice the chord
+        # is assigned -- a note present but in the wrong part, which is what the
+        # first version of this produced.
+        owner = next((note for note in here if note.position == other), None)
+        if owner is not None and len(owner.stem_directions) == 1:
+            target.stem_direction = (
+                "up" if owner.stem_directions[0] == StemDirection.UP else "down")
+        rescued += 1
+    return rescued
 
 
 def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int:

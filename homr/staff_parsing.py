@@ -11,7 +11,7 @@ from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
-from homr.stem_voice_hints import add_stem_voice_hints
+from homr.stem_voice_hints import add_stem_voice_hints, rescue_duplicate_pitches
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
@@ -333,6 +333,12 @@ def parse_staff_image(
         noteheads = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]
         hinted = add_stem_voice_hints(result, noteheads)
         eprint("Applied", hinted, "stem voice hints on staff", index)
+        # Before the duplicate remover runs: a note the decoder gave its
+        # neighbour's pitch is about to be deleted as a duplicate, and the
+        # segmentation knows which head it really is.
+        rescued = rescue_duplicate_pitches(result, noteheads)
+        if rescued:
+            eprint("Rescued", rescued, "note(s) from being deleted as duplicates")
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
