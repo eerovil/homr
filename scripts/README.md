@@ -69,4 +69,56 @@ Useful extras: `--pages B1a,B1b` narrows the benchmark, `--dpi` overrides the
 staves), `--keep DIR` keeps the crops and the MusicXML to look at, and
 `--compare` diffs against a previous `-o` file.
 
+## --kubernetes
+
+`--kubernetes` runs the homr half in a pod instead of on this host.
+
+**Not for speed, on an idle host.** Measured page for page with nothing else
+running, the pod reads one in 15–17 s and this host in 16–19 s — a wash. What it
+buys is whose cores are spent: a page through the shim costs **18.6 s of wall
+clock and 0.29 s of this host's CPU**.
+
+**On a busy host it is also much faster, which is the real reason.** This is a
+four-core machine that serves the live app, runs its own deploy and hosts other
+agents' test suites; the first `--kubernetes` run happened to land at a load
+average of 22.8, and B1a took **31 s in the pod against 181 s here** — same
+three systems, same staff and bar counts, the same 4/14 bars note-exact. Nearly
+6x, none of it from the cluster being quick. A sweep nobody is waiting for is
+exactly the work that should be somewhere else.
+
+Everything except the reading still runs here: the crops, the flattening, the
+scoring, and `--pytest`. Those are the choir app's code and the fork's own tests,
+and they are not where the sweep spends itself.
+
+```bash
+scripts/choir-k8s.sh up                                   # once, ~2 min
+scripts/choir-bench.py --kubernetes --benchmark -o pod.json
+scripts/choir-bench.py --kubernetes --tree ~/homr-trees/slurs --benchmark \
+    -o slurs.json --compare pod.json
+```
+
+`--tree` still means what it means: the tree's `homr/` package is copied into the
+pod on every run and put in front of the pod's venv on `PYTHONPATH` — the same
+arrangement `omr.py`'s engines use locally, so editing a tree and re-running
+costs one copy and no reinstall. Without `--tree`, the pod runs its own install.
+
+The pod is stock `python:3.12` and builds its venv onto a persistent volume the
+first time; there is no image to build, which is deliberate (an arm64 image from
+an x86 host needs emulation or a second machine, and this is a benchmarking tool,
+not something the app depends on). The cost is that the volume is not
+reproducible from this repository — `scripts/choir-k8s.sh purge` throws it away
+and `up` builds it again from `HOMR_SOURCE`.
+
+**One trap when comparing pod numbers with host numbers.** The pod's venv is
+installed from `HOMR_SOURCE` at the moment `up` ran, and the host's install came
+from whenever `install-homr.sh` was last run — they can be different commits, so
+a pod-vs-host diff can be measuring that rather than your change. Compare
+pod against pod, or pass `--tree` to both so the code under test is the same
+source in either place. `scripts/choir-k8s.sh status` says which commit the pod
+has.
+
+`KUBECTL`, `CHOIR_K8S_NAMESPACE`, `CHOIR_K8S_POD`, `CHOIR_K8S_IMAGE` and
+`CHOIR_K8S_VOLUME_SIZE` move the pieces. `down` deletes the pod and keeps the
+volume; `purge` deletes both.
+
 Needs poppler for the crops. Nothing here is fast: homr is ~10–20s a system.
