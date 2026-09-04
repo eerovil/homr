@@ -52,8 +52,15 @@ def parse(case: cases.Case, fingerprint: str) -> Path | None:
 
 
 def code_fingerprint() -> str:
-    """What homr is right now: the commit, plus whatever is uncommitted."""
-    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=cases.ROOT,
+    """What homr is right now: its own last commit, plus whatever is uncommitted.
+
+    The last commit that touched `homr/`, and not `HEAD`. A parse is only stale
+    when homr changes -- that is the promise the cache is worth anything for --
+    and keying on `HEAD` broke it: committing to this very directory re-read all
+    93 systems with a homr that had not moved a line, three quarters of an hour
+    to arrive back at the same parses.
+    """
+    head = subprocess.run(["git", "log", "-1", "--format=%h", "--", "homr"], cwd=cases.ROOT,
                           capture_output=True, text=True).stdout.strip() or "nogit"
     dirty = subprocess.run(["git", "diff", "--stat", "HEAD", "--", "homr"], cwd=cases.ROOT,
                            capture_output=True, text=True).stdout
@@ -98,13 +105,19 @@ def main() -> None:
         entries.append({"name": case.name, "page": page, "score": result.score,
                         "agree": result.agree, "voice": result.voice,
                         "pitch": result.pitch, "size": result.size,
+                        "timing": result.timing, "structure": result.structure,
+                        "staves_page": result.staves_page,
+                        "staves_homr": result.staves_homr,
                         "unison": result.unison, "before": before})
         moved = ""
         if before:
             change = (result.voice + result.pitch) - (before["voice"] + before["pitch"])
             moved = "  (no change)" if change == 0 else f"  ({change:+d} faults)"
+        staves = (f", staves {result.staves_page} vs {result.staves_homr}"
+                  if result.structure else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
-              f"{result.pitch} pitch, {result.size} count{moved}")
+              f"{result.pitch} pitch, {result.size} count, "
+              f"{result.timing} beat{staves}{moved}")
 
     if entries:
         report.save_results(entries)

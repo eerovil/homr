@@ -160,7 +160,7 @@ class Row:
     page: str
     homr: str
     verdict: str
-    kind: str          # agree | voice | pitch | size | unison
+    kind: str          # agree | voice | pitch | size | timing | structure | unison
 
 
 @dataclass
@@ -169,7 +169,10 @@ class Result:
     voice: int = 0
     pitch: int = 0
     size: int = 0
+    timing: int = 0
     unison: int = 0
+    staves_page: int = 0
+    staves_homr: int = 0
     rows: list[Row] = field(default_factory=list)
 
     @property
@@ -181,8 +184,36 @@ class Result:
         return 100.0 * self.agree / self.judged if self.judged else 0.0
 
     @property
+    def structure(self) -> int:
+        """1 where homr and the page disagree about how many staves are printed.
+
+        A case and not a note, because that is what it is: one wrong answer,
+        which then costs a row at every moment of every staff below it.
+        """
+        return int(self.staves_page != self.staves_homr)
+
+    @property
     def faults(self) -> int:
         return self.voice + self.pitch + self.size
+
+
+def printed_staves(path: Path) -> int:
+    """How many printed staves the file holds, counted as `read_score` keys them.
+
+    Off the file rather than off the notes, so a staff that rests through the
+    whole system still counts: it is printed, and homr inventing one is the
+    same mistake whether or not anything sounds on it.
+    """
+    return sum(max((int(n.text or 1) for n in part.iter("staves")), default=1)
+               for part in ET.parse(path).getroot().findall("part"))
+
+
+def _heads_per_bar(found: dict) -> dict[tuple[str, int], int]:
+    """How many noteheads each staff holds in each bar, whenever they sound."""
+    heads: dict[tuple[str, int], int] = {}
+    for (bar, staff, _), group in found.items():
+        heads[(bar, staff)] = heads.get((bar, staff), 0) + len(group)
+    return heads
 
 
 def _lines_per_bar(found: dict) -> dict[tuple[str, int], int]:
@@ -194,7 +225,50 @@ def _lines_per_bar(found: dict) -> dict[tuple[str, int], int]:
 
 
 def compare_output(reference: Path, parsed: Path) -> Result:
-    """The page against homr's MusicXML, note by note."""
+    """The page against homr's MusicXML, note by note.
+
+    A moment where the two files hold a different number of noteheads used to be
+    one number, `size`, and across the 93 systems of this repertoire it came to
+    505 -- read, reasonably, as five hundred misread notes. Checked one at a
+    time, almost none of them was a note homr had got wrong.
+
+    **Nineteen of the 93 systems disagree about how many staves are printed**,
+    seventeen of them writing three or four where the page prints two, having
+    given a divisi staff's second voice a staff of its own. The staff is part of
+    the key every note is matched on, so from the first staff that diverges the
+    two files are no longer being compared on the same music: 328 of the 505
+    live in those nineteen systems, and so do 54 of the 128 wrong pitches. One
+    of them, `kaksi-laulua-krapulasta-2-s13`, reports 26 lost noteheads on a
+    system homr read *note for note correctly* -- its 78 notes are all there and
+    all right, on three staves instead of two. That is one wrong answer, about
+    structure, so it is counted once as `structure` and said at the top of the
+    case page, and the rows beneath it are to be read as its consequence.
+
+    **Of the 177 left in the 74 systems whose staves do agree, 118 are the
+    bar's own rhythm.** homr wrote nothing at that beat while that bar of that
+    staff still holds at least as many noteheads as the page prints: a duration
+    read differently early in the bar walks the cursor out of step, and every
+    moment after it reports one against zero. The notes are in the file, at the
+    wrong time, which is a real fault and a different one, so it is `timing`.
+
+    Asking merely whether the bar held *anything* is not enough, and the first
+    version of this asked exactly that. homr writes **one** notehead into bar 2
+    of `sammon-ryosto` where the page prints four, and being asked the looser
+    question the check called three lost notes a beat read differently -- the
+    tidy answer, on the one case somebody had already looked at by hand and
+    found notes genuinely missing. So the bar's heads are counted on both sides,
+    and a bar that is short of them has lost notes rather than moved them.
+
+    That the remaining 118 really are only moved is checked rather than assumed:
+    in 102 of them the bar holds **exactly the same staff positions** on both
+    sides, the same notes at different beats. The other 16 are bars where homr
+    has a head to spare and one of them sits a position out.
+
+    What is left in `size` is the moment both files agree exists and disagree
+    about: two heads printed and one written, or one printed and two written.
+    **That is 59 across the 74 comparable systems, not 505**, and it is the
+    number worth chasing.
+    """
     want = collapse_unisons(read_score(reference))
     got = read_score(parsed)
     here, there = _voice_rank(want), _voice_rank(got)
@@ -204,17 +278,40 @@ def compare_output(reference: Path, parsed: Path) -> Result:
     # note to be on. Counting it anyway made five faults out of one such bar and
     # put the worst case in the sample somewhere it did not belong.
     lines = _lines_per_bar(want)
-    result = Result()
+    # How many noteheads each bar of each staff holds, on both sides. A moment
+    # homr left empty is only a beat read differently if the notes are still in
+    # that bar somewhere; if the bar is short of heads they are not shifted,
+    # they are gone. Asking merely whether the bar had *anything* in it is not
+    # enough, and says so on real music: homr writes one notehead into bar 2 of
+    # `sammon-ryosto` where the page prints four, and the looser question called
+    # that a beat read differently.
+    heads_page = _heads_per_bar(want)
+    heads_homr = _heads_per_bar(got)
+    result = Result(staves_page=printed_staves(reference), staves_homr=printed_staves(parsed))
+    if result.structure:
+        result.rows.append(Row(
+            "the system", f"{result.staves_page} printed staves",
+            f"{result.staves_homr} staves",
+            "a different number of staves — every note below is keyed on the "
+            "staff, so from the first one that diverges nothing lines up",
+            "structure"))
     for key in sorted(want, key=lambda k: (int(re.sub(r"\D", "", k[0]) or 0), k[1], k[2])):
         bar, staff, onset = key
         where = f"bar {bar}, staff {staff}, beat {onset:g}"
         mine = sorted(want[key], key=lambda n: -n["position"])
         theirs = sorted(got.get(key, []), key=lambda n: -n["position"])
         if len(mine) != len(theirs):
-            result.size += 1
-            result.rows.append(Row(where, f"{len(mine)} notehead(s)",
-                                   f"{len(theirs)} notehead(s)",
-                                   "a different number of notes here", "size"))
+            if not theirs and heads_homr.get((bar, staff), 0) >= heads_page.get((bar, staff), 0):
+                result.timing += 1
+                result.rows.append(Row(
+                    where, f"{len(mine)} notehead(s)", "nothing at this beat",
+                    "homr has this bar's notes at other beats — a duration read "
+                    "differently, not a note lost", "timing"))
+            else:
+                result.size += 1
+                result.rows.append(Row(where, f"{len(mine)} notehead(s)",
+                                       f"{len(theirs)} notehead(s)",
+                                       "a different number of notes here", "size"))
             continue
         for a, b in zip(mine, theirs):
             if a["position"] != b["position"]:
