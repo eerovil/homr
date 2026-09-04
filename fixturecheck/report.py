@@ -90,11 +90,15 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
     structure = ""
     if result.structure:
         structure = (
-            f"<p class='warn'>The page prints <b>{result.staves_page}</b> staves and "
+            f"<p class='warn'>The reference says <b>{result.staves_page}</b> staves and "
             f"homr wrote <b>{result.staves_homr}</b>. Every note is matched on its "
             f"staff, so from the first staff that diverges the rows below are "
             f"comparing different music &mdash; read them as one wrong answer about "
-            f"the staves, not as many wrong notes.</p>")
+            f"the staves, not as many wrong notes. <b>Look at the printed page above "
+            f"before deciding which side is wrong</b>: on this repertoire the "
+            f"reference has been the wrong one every time it was checked, because it "
+            f"is imploded with one grouping for a whole song whose staves regroup "
+            f"from system to system.</p>")
 
     rows = "".join(
         f"<tr class='{row.kind if row.kind != 'agree' else ''}'>"
@@ -186,7 +190,9 @@ green or red is what changed since the last run of the same case.</p>
 </div>
 <p class="lead">A case whose staff count disagrees is one wrong answer about the
 structure, and the note rows under it are then comparing different music &mdash;
-read its counts as a consequence of that, not as many wrong notes.</p>
+read its counts as a consequence of that, not as many wrong notes. Whose wrong
+answer it is has to be settled against the printed page: every one checked so far
+has been the reference's, not homr's.</p>
 <table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
 <th>note count</th><th>beat shifted</th><th>staves</th><th>score</th></tr>
 {rows}</table>
