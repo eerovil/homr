@@ -54,6 +54,17 @@ def _trim_symbol_to_core_span(symbol: RotatedBoundingBox) -> RotatedBoundingBox:
     return RotatedBoundingBox(new_box, symbol.contours, symbol.debug_id)
 
 
+#: How far left of the staves a bracket may stand, in staff unit sizes. Measured
+#: at 0.4 and 1.0 on the two systems this rescues; 2.0 leaves room for a wider
+#: margin without reaching the next thing along, since it must also clear the
+#: staves entirely.
+_MARGIN_UNITS = 2.0
+#: How far short of the pair's full height a bracket may fall, in unit sizes.
+#: Both measured cases overrun rather than fall short, so this only forgives a
+#: clipped end.
+_SPAN_SLACK_UNITS = 0.5
+
+
 def _filter_for_tall_elements(
     brace_dot: list[RotatedBoundingBox], staffs: list[Staff]
 ) -> list[RotatedBoundingBox]:
@@ -144,6 +155,66 @@ def _get_connections_between_staffs_at_lines(
     return result
 
 
+def _get_connections_beside_the_staves(
+    staff1: Staff, staff2: Staff, brace_dot: list[RotatedBoundingBox]
+) -> list[RotatedBoundingBox]:
+    """A bracket stands *beside* the staves it joins, and never on them.
+
+    The three tests above all ask the same question -- does this symbol overlap
+    something belonging to both staves -- and a bracket is the one symbol for
+    which that question is hard to answer, because it is drawn in the margin
+    just clear of where the staff lines start. Each test probes one staff at one
+    x (`Staff.get_at` clamps an x outside the staff to its own end, so the probe
+    is a zero-width segment at the staff's left edge) and asks the symbol to
+    reach it. A few pixels either way decides it, and on real scans a few pixels
+    is nothing:
+
+    * `kaksi-laulua-krapulasta-2-s6`: both printed staves' lines begin at x=170
+      -- measured off the staff mask -- but the lower staff is *detected* from
+      x=200, thirty pixels late. The bracket (x 156..165) reaches the upper
+      staff and misses the lower one by eleven pixels, so the two are not
+      joined, for a reason that is a property of the detection and not of the
+      page.
+    * `heraa-suomi-final-s11`: both staves are detected from x=430 and the
+      bracket's reach clears it -- but the bracket is slightly *tilted*, so its
+      top end sits left of its bottom end. It catches the lower staff and misses
+      the upper one.
+
+    Two different accidents, the same outcome, and the same wrong question. So
+    ask what a bracket is instead: a tall thing standing in the margin whose
+    height spans the staves it binds. That is answered from the symbol's own
+    extent against the staves' own extents, and neither a tilt nor a staff whose
+    detection began late can move it.
+
+    Deliberately conservative in three ways, because a false join costs more
+    than a missed one -- it fuses two systems into a grand staff. It must be
+    **left of both staves** (`_MARGIN_UNITS`, and it may not overlap them); it
+    must **span from the upper staff's top to the lower staff's bottom**, so a
+    symbol reaching only part way -- a bar line joining a grand staff, a stem --
+    does not qualify; and `_filter_for_tall_elements` has already dropped
+    anything short or thin. Measured on the two cases above, the slack needed is
+    0.4 and 1.0 unit sizes to the left, and the vertical span overruns the pair
+    at both ends (by 18 and 20 pixels, and by 3 and 5); `_SPAN_SLACK_UNITS`
+    allows a symbol to fall a little short rather than requiring the overrun.
+    """
+    upper, lower = sorted((staff1, staff2), key=lambda staff: staff.min_y)
+    unit = (upper.average_unit_size + lower.average_unit_size) / 2
+    if unit <= 0:
+        return []
+    left_edge = min(upper.min_x, lower.min_x)
+    result = []
+    for symbol in brace_dot:
+        right = symbol.center[0] + symbol.size[0] / 2
+        if not left_edge - _MARGIN_UNITS * unit <= right <= left_edge:
+            continue
+        top = symbol.center[1] - symbol.size[1] / 2
+        bottom = symbol.center[1] + symbol.size[1] / 2
+        slack = _SPAN_SLACK_UNITS * unit
+        if top <= upper.min_y + slack and bottom >= lower.max_y - slack:
+            result.append(symbol)
+    return result
+
+
 def _get_connections_between_staffs(
     staff1: Staff, staff2: Staff, brace_dot: list[RotatedBoundingBox]
 ) -> list[RotatedBoundingBox]:
@@ -151,6 +222,7 @@ def _get_connections_between_staffs(
     result.extend(_get_connections_between_staffs_at_bar_lines(staff1, staff2, brace_dot))
     result.extend(_get_connections_between_staffs_at_clefs(staff1, staff2, brace_dot))
     result.extend(_get_connections_between_staffs_at_lines(staff1, staff2, brace_dot))
+    result.extend(_get_connections_beside_the_staves(staff1, staff2, brace_dot))
     return result
 
 
