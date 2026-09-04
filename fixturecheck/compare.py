@@ -232,17 +232,38 @@ def compare_output(reference: Path, parsed: Path) -> Result:
     505 -- read, reasonably, as five hundred misread notes. Checked one at a
     time, almost none of them was a note homr had got wrong.
 
-    **Nineteen of the 93 systems disagree about how many staves are printed**,
-    seventeen of them writing three or four where the page prints two, having
-    given a divisi staff's second voice a staff of its own. The staff is part of
-    the key every note is matched on, so from the first staff that diverges the
-    two files are no longer being compared on the same music: 328 of the 505
-    live in those nineteen systems, and so do 54 of the 128 wrong pitches. One
-    of them, `kaksi-laulua-krapulasta-2-s13`, reports 26 lost noteheads on a
-    system homr read *note for note correctly* -- its 78 notes are all there and
-    all right, on three staves instead of two. That is one wrong answer, about
-    structure, so it is counted once as `structure` and said at the top of the
-    case page, and the rows beneath it are to be read as its consequence.
+    **Nineteen of the 93 systems disagree about how many staves are printed.**
+    The staff is part of the key every note is matched on, so from the first
+    staff that diverges the two files are no longer being compared on the same
+    music: 328 of the 505 live in those nineteen, and so do 54 of the 128 wrong
+    pitches. That is one wrong answer, about structure, so it is counted once as
+    `structure` and said at the top of the case page, and the rows beneath it
+    are to be read as its consequence.
+
+    **Which side is wrong is not assumed, and on this repertoire it is ours.**
+    The first version of this said homr had invented a staff. Three of the
+    nineteen were then looked at against the printed page, and homr had the
+    staff count right in all three: `kaksi-laulua-krapulasta-2-s13` prints a
+    tenor staff and two separate bass staves, `kayttaytymisohjeita-s5` prints
+    two tenor staves and one bass, and `laulun-aika-3-s7` prints four, each
+    labelled T3, T1, T2, B with a lyric line of its own. homr wrote 3, 3 and 4.
+    The reference said 2 every time.
+
+    All nineteen are in four songs, three of them per-system scores, and the
+    reference is built by imploding the cleaned score with **one grouping for
+    the whole song** -- `implode._from_system_map` unions the per-system map, so
+    two voices that share a printed staff in *any* system are merged in *every*
+    system. On a score whose staves regroup from system to system that is wrong
+    wherever they are printed apart. So `kaksi-laulua-krapulasta-2-s13` reports
+    26 lost noteheads on a system homr read *note for note correctly*: its 78
+    notes are all there and all right, and it is the reference that put them on
+    two staves instead of three.
+
+    This is the failure the two layers here exist to prevent, arriving from the
+    side nobody was watching -- not a detection reported as an output, but our
+    own reference reported as the page. The count is kept, because a
+    disagreement about structure is worth one loud line either way; the wording
+    names the disagreement and not a culprit.
 
     **Of the 177 left in the 74 systems whose staves do agree, 118 are the
     bar's own rhythm.** homr wrote nothing at that beat while that bar of that
@@ -290,10 +311,11 @@ def compare_output(reference: Path, parsed: Path) -> Result:
     result = Result(staves_page=printed_staves(reference), staves_homr=printed_staves(parsed))
     if result.structure:
         result.rows.append(Row(
-            "the system", f"{result.staves_page} printed staves",
+            "the system", f"{result.staves_page} staves (the reference)",
             f"{result.staves_homr} staves",
             "a different number of staves — every note below is keyed on the "
-            "staff, so from the first one that diverges nothing lines up",
+            "staff, so from the first one that diverges nothing lines up. Which "
+            "side is wrong is decided by looking at the page, not by this row",
             "structure"))
     for key in sorted(want, key=lambda k: (int(re.sub(r"\D", "", k[0]) or 0), k[1], k[2])):
         bar, staff, onset = key
