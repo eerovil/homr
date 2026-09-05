@@ -220,7 +220,6 @@ def process_image(
         transformer_config = Config()
         transformer_config.use_gpu_inference = config.transformer_use_gpu
         transformer_config.use_coreml_encoder = config.coreml_encoder
-        transformer_config.record_confidence = config.write_confidence
         if config.score_settings:
             score_settings = _load_score_settings(config.score_settings)
             transformer_config.forbidden_rhythm_tokens = score_settings.forbidden_rhythm_tokens(
