@@ -89,16 +89,25 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
 
     structure = ""
     if result.structure:
+        verdict = {
+            "reference": (f"<b>The page prints {result.staves_printed}, so the "
+                          f"reference is the wrong one here</b> &mdash; the rows below "
+                          f"compare it against music it does not describe."),
+            "homr": (f"<b>The page prints {result.staves_printed}, so homr is the "
+                     f"wrong one here.</b>"),
+            "both": (f"<b>The page prints {result.staves_printed}, which is neither "
+                     f"of them.</b>"),
+            "": ("<b>Look at the printed page above before deciding which side is "
+                 "wrong.</b> Nobody has recorded what this system prints; when you "
+                 "have looked, put the count in <code>fixturecheck/printed.json</code> "
+                 "and this line will decide it next time."),
+        }[result.at_fault]
         structure = (
             f"<p class='warn'>The reference says <b>{result.staves_page}</b> staves and "
             f"homr wrote <b>{result.staves_homr}</b>. Every note is matched on its "
             f"staff, so from the first staff that diverges the rows below are "
             f"comparing different music &mdash; read them as one wrong answer about "
-            f"the staves, not as many wrong notes. <b>Look at the printed page above "
-            f"before deciding which side is wrong</b>: on this repertoire the "
-            f"reference has been the wrong one every time it was checked, because it "
-            f"is imploded with one grouping for a whole song whose staves regroup "
-            f"from system to system.</p>")
+            f"the staves, not as many wrong notes. {verdict}</p>")
 
     rows = "".join(
         f"<tr class='{row.kind if row.kind != 'agree' else ''}'>"
@@ -147,6 +156,15 @@ direction.</p>
     return target.name
 
 
+def _staves(entry: dict) -> str:
+    """The staff disagreement, and who the page says is wrong where anyone looked."""
+    if not entry["structure"]:
+        return ""
+    said = f"{entry['staves_page']} vs {entry['staves_homr']}"
+    blame = entry.get("at_fault")
+    return f"{said} <span class='down'>({blame})</span>" if blame else said
+
+
 def index_page(entries: list[dict], tier: str) -> Path:
     """The table of every case in this run, with what moved since the last one."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -167,9 +185,15 @@ def index_page(entries: list[dict], tier: str) -> Path:
         f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
         f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
         f"<td>{cell(e, 'timing')}</td>"
-        f"<td>{'%d vs %d' % (e['staves_page'], e['staves_homr']) if e['structure'] else ''}</td>"
+        f"<td>{_staves(e)}</td>"
         f"<td>{e['score']:.1f}%</td></tr>"
-        for e in sorted(entries, key=lambda e: (-e["voice"] - e["pitch"], e["name"])))
+        # Worst first means worst by what went wrong, and a case can go wrong
+        # without a single note pairing up to be called a wrong pitch:
+        # laulun-aika-3-s5 agrees on one note out of fifty, loses 41 moments to
+        # a count mismatch, and sorted 17th of 98 on voice+pitch alone. Counting
+        # every fault puts it first, where a near-total loss belongs.
+        for e in sorted(entries, key=lambda e: (
+            -(e["voice"] + e["pitch"] + e["size"] + e.get("timing", 0)), e["name"])))
 
     body = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -191,10 +215,11 @@ green or red is what changed since the last run of the same case.</p>
 <p class="lead">A case whose staff count disagrees is one wrong answer about the
 structure, and the note rows under it are then comparing different music &mdash;
 read its counts as a consequence of that, not as many wrong notes. Whose wrong
-answer it is has to be settled against the printed page: every one checked so far
-has been the reference's, not homr's.</p>
+answer it is has to be settled against the printed page. Where somebody has looked and
+written the count into <code>fixturecheck/printed.json</code>, the staves column
+names the side at fault; where nobody has, it does not guess.</p>
 <table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
-<th>note count</th><th>beat shifted</th><th>staves</th><th>score</th></tr>
+<th>note count</th><th>beat shifted</th><th>staves (who is wrong)</th><th>score</th></tr>
 {rows}</table>
 </body></html>"""
     target = OUT / "index.html"

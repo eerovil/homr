@@ -37,6 +37,24 @@ voices** a note is in rather than the voice's number, which neither file agrees
 about. A **unison** — one printed head serving two voices, which older choral
 engraving does constantly — counts once.
 
+## When the two disagree about the staves
+
+Every note is matched on its staff, so if the reference and the parse hold a
+different number of staves, nothing below the first one that diverges is being
+compared on the same music. That is **one** wrong answer, counted once as
+`structure` -- not the twenty-six lost noteheads it looks like.
+
+Whose wrong answer it is, this cannot work out on its own: there are two files
+and no third party. On this repertoire the reference has been at fault as often
+as homr, and three systems were written up as homr losing a staff when the page
+agreed with homr every time. So the answer is written down instead.
+`printed.json` holds how many staves a person counted off the printed band, with
+what they saw, and the report then names the side at fault rather than reporting
+a difference. Absent means nobody has looked, which is most cases and is not the
+same as nobody being wrong.
+
+Adding one is a look at the crop the case page already shows, and a line of JSON.
+
 ## Cost
 
 Cached by what each file depends on: the crop and the reference by the PDF,

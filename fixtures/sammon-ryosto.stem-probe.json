@@ -1,0 +1,3001 @@
+{
+  "staffs": [
+    {
+      "voice_group": 0,
+      "system": 0,
+      "detector_notes": [
+        {
+          "x": 501.1,
+          "y": 63.0,
+          "raw_notehead_center": [
+            1472.0,
+            185.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1480.5,
+              163.5
+            ],
+            "size": [
+              1.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 546.9,
+          "y": 63.0,
+          "raw_notehead_center": [
+            1606.5,
+            185.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1613.5,
+              164.0
+            ],
+            "size": [
+              3.0,
+              26.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 298.9,
+          "y": 63.3,
+          "raw_notehead_center": [
+            878.0,
+            186.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              886.0,
+              163.0
+            ],
+            "size": [
+              2.0,
+              28.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 188.6,
+          "y": 65.4,
+          "raw_notehead_center": [
+            554.0,
+            192.0
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [],
+          "stem_geometry": null
+        },
+        {
+          "x": 467.1,
+          "y": 65.4,
+          "raw_notehead_center": [
+            1372.0,
+            192.0
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1381.0,
+              184.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 441.9,
+          "y": 65.4,
+          "raw_notehead_center": [
+            1298.0,
+            192.0
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1306.0,
+              185.0
+            ],
+            "size": [
+              2.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 264.9,
+          "y": 65.4,
+          "raw_notehead_center": [
+            778.0,
+            192.0
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              787.0,
+              184.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 239.7,
+          "y": 65.4,
+          "raw_notehead_center": [
+            704.0,
+            192.0
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              712.0,
+              184.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 181.8,
+          "y": 66.0,
+          "raw_notehead_center": [
+            534.0,
+            194.0
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              549.0,
+              186.5
+            ],
+            "size": [
+              3.0,
+              6.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 501.1,
+          "y": 67.7,
+          "raw_notehead_center": [
+            1472.0,
+            199.0
+          ],
+          "staff_position": 6,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1464.0,
+              213.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 119.7,
+          "y": 68.0,
+          "raw_notehead_center": [
+            351.7,
+            199.9
+          ],
+          "staff_position": 6,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              360.5,
+              185.5
+            ],
+            "size": [
+              1.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 298.9,
+          "y": 68.1,
+          "raw_notehead_center": [
+            878.0,
+            200.0
+          ],
+          "staff_position": 6,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              869.5,
+              213.5
+            ],
+            "size": [
+              1.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 181.8,
+          "y": 69.4,
+          "raw_notehead_center": [
+            534.0,
+            204.0
+          ],
+          "staff_position": 6,
+          "stem": null,
+          "stem_directions": [],
+          "stem_geometry": null
+        },
+        {
+          "x": 546.9,
+          "y": 70.0,
+          "raw_notehead_center": [
+            1606.5,
+            205.5
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1596.5,
+              214.5
+            ],
+            "size": [
+              1.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 353.0,
+          "y": 70.1,
+          "raw_notehead_center": [
+            1037.0,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1028.5,
+              214.5
+            ],
+            "size": [
+              1.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 188.6,
+          "y": 70.1,
+          "raw_notehead_center": [
+            554.0,
+            206.0
+          ],
+          "staff_position": 6,
+          "stem": null,
+          "stem_directions": [],
+          "stem_geometry": null
+        },
+        {
+          "x": 467.1,
+          "y": 70.1,
+          "raw_notehead_center": [
+            1372.0,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1364.0,
+              213.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 441.9,
+          "y": 70.1,
+          "raw_notehead_center": [
+            1298.0,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1290.0,
+              213.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 264.9,
+          "y": 70.1,
+          "raw_notehead_center": [
+            778.0,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              770.0,
+              213.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 239.7,
+          "y": 70.1,
+          "raw_notehead_center": [
+            704.0,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              695.5,
+              214.0
+            ],
+            "size": [
+              1.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 163.9,
+          "y": 70.1,
+          "raw_notehead_center": [
+            481.5,
+            206.0
+          ],
+          "staff_position": 5,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              490.0,
+              198.0
+            ],
+            "size": [
+              2.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 103.0,
+          "y": 77.5,
+          "raw_notehead_center": [
+            302.6,
+            227.7
+          ],
+          "staff_position": 2,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              294.0,
+              250.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 500.9,
+          "y": 174.1,
+          "raw_notehead_center": [
+            1471.5,
+            511.5
+          ],
+          "staff_position": 10,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1480.0,
+              491.5
+            ],
+            "size": [
+              2.0,
+              33.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 298.6,
+          "y": 174.1,
+          "raw_notehead_center": [
+            877.0,
+            511.5
+          ],
+          "staff_position": 10,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              886.0,
+              492.0
+            ],
+            "size": [
+              2.0,
+              32.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 613.2,
+          "y": 176.1,
+          "raw_notehead_center": [
+            1801.3,
+            517.3
+          ],
+          "staff_position": 9,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1810.0,
+              499.0
+            ],
+            "size": [
+              2.0,
+              30.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 517.3,
+          "y": 176.7,
+          "raw_notehead_center": [
+            1519.4,
+            519.1
+          ],
+          "staff_position": 9,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1530.0,
+              498.0
+            ],
+            "size": [
+              2.0,
+              30.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 323.3,
+          "y": 176.9,
+          "raw_notehead_center": [
+            949.8,
+            519.6
+          ],
+          "staff_position": 9,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              962.4,
+              501.1
+            ],
+            "size": [
+              2.8,
+              30.1
+            ],
+            "angle": 3.9
+          }
+        },
+        {
+          "x": 546.7,
+          "y": 178.4,
+          "raw_notehead_center": [
+            1606.0,
+            524.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1613.0,
+              504.5
+            ],
+            "size": [
+              2.0,
+              25.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 264.7,
+          "y": 178.7,
+          "raw_notehead_center": [
+            777.5,
+            525.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              787.0,
+              503.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 441.4,
+          "y": 179.0,
+          "raw_notehead_center": [
+            1296.6,
+            526.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1306.0,
+              503.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 467.1,
+          "y": 179.1,
+          "raw_notehead_center": [
+            1372.0,
+            526.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1381.0,
+              503.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 239.3,
+          "y": 179.1,
+          "raw_notehead_center": [
+            703.0,
+            526.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              712.5,
+              503.5
+            ],
+            "size": [
+              1.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 352.7,
+          "y": 179.1,
+          "raw_notehead_center": [
+            1036.0,
+            526.0
+          ],
+          "staff_position": 8,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1045.0,
+              503.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 181.8,
+          "y": 181.1,
+          "raw_notehead_center": [
+            534.0,
+            532.0
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [],
+          "stem_geometry": null
+        },
+        {
+          "x": 188.9,
+          "y": 181.1,
+          "raw_notehead_center": [
+            555.0,
+            532.0
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [],
+          "stem_geometry": null
+        },
+        {
+          "x": 245.3,
+          "y": 181.4,
+          "raw_notehead_center": [
+            720.5,
+            533.0
+          ],
+          "staff_position": 7,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              712.5,
+              540.5
+            ],
+            "size": [
+              3.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 163.9,
+          "y": 181.5,
+          "raw_notehead_center": [
+            481.4,
+            533.3
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              490.0,
+              524.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 596.3,
+          "y": 181.6,
+          "raw_notehead_center": [
+            1751.5,
+            533.5
+          ],
+          "staff_position": 7,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1759.5,
+              525.0
+            ],
+            "size": [
+              3.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 447.7,
+          "y": 181.6,
+          "raw_notehead_center": [
+            1315.0,
+            533.5
+          ],
+          "staff_position": 7,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1306.5,
+              540.5
+            ],
+            "size": [
+              3.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 119.8,
+          "y": 181.6,
+          "raw_notehead_center": [
+            352.0,
+            533.5
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              360.5,
+              525.0
+            ],
+            "size": [
+              1.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 103.0,
+          "y": 181.6,
+          "raw_notehead_center": [
+            302.5,
+            533.5
+          ],
+          "staff_position": 7,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              310.5,
+              524.5
+            ],
+            "size": [
+              1.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 546.7,
+          "y": 181.8,
+          "raw_notehead_center": [
+            1606.0,
+            534.0
+          ],
+          "staff_position": 7,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1597.0,
+              541.0
+            ],
+            "size": [
+              3.0,
+              7.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 467.1,
+          "y": 183.8,
+          "raw_notehead_center": [
+            1372.0,
+            540.0
+          ],
+          "staff_position": 6,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1364.0,
+              554.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 352.7,
+          "y": 183.8,
+          "raw_notehead_center": [
+            1036.0,
+            540.0
+          ],
+          "staff_position": 6,
+          "stem": null,
+          "stem_directions": [
+            "up",
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1028.5,
+              554.0
+            ],
+            "size": [
+              1.0,
+              10.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 579.2,
+          "y": 184.0,
+          "raw_notehead_center": [
+            1701.5,
+            540.5
+          ],
+          "staff_position": 6,
+          "stem": "up",
+          "stem_directions": [
+            "up"
+          ],
+          "stem_geometry": {
+            "center": [
+              1710.5,
+              525.5
+            ],
+            "size": [
+              1.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 265.7,
+          "y": 184.0,
+          "raw_notehead_center": [
+            780.5,
+            540.5
+          ],
+          "staff_position": 6,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              770.0,
+              554.5
+            ],
+            "size": [
+              2.0,
+              11.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 417.7,
+          "y": 186.0,
+          "raw_notehead_center": [
+            1227.0,
+            546.5
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1219.0,
+              555.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 484.3,
+          "y": 186.0,
+          "raw_notehead_center": [
+            1422.5,
+            546.5
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1414.1,
+              555.5
+            ],
+            "size": [
+              3.0,
+              8.9
+            ],
+            "angle": 9.5
+          }
+        },
+        {
+          "x": 281.9,
+          "y": 186.2,
+          "raw_notehead_center": [
+            828.0,
+            547.0
+          ],
+          "staff_position": 5,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              820.0,
+              555.5
+            ],
+            "size": [
+              2.0,
+              9.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 382.9,
+          "y": 191.4,
+          "raw_notehead_center": [
+            1124.8,
+            562.1
+          ],
+          "staff_position": 3,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1115.5,
+              587.0
+            ],
+            "size": [
+              1.0,
+              20.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 400.5,
+          "y": 191.5,
+          "raw_notehead_center": [
+            1176.5,
+            562.5
+          ],
+          "staff_position": 3,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1169.0,
+              570.5
+            ],
+            "size": [
+              2.0,
+              7.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 298.7,
+          "y": 193.4,
+          "raw_notehead_center": [
+            877.5,
+            568.0
+          ],
+          "staff_position": 2,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              870.0,
+              590.0
+            ],
+            "size": [
+              2.0,
+              26.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 500.9,
+          "y": 193.5,
+          "raw_notehead_center": [
+            1471.5,
+            568.5
+          ],
+          "staff_position": 2,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              1464.0,
+              590.5
+            ],
+            "size": [
+              2.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 324.4,
+          "y": 193.5,
+          "raw_notehead_center": [
+            953.0,
+            568.5
+          ],
+          "staff_position": 2,
+          "stem": "down",
+          "stem_directions": [
+            "down"
+          ],
+          "stem_geometry": {
+            "center": [
+              945.0,
+              590.0
+            ],
+            "size": [
+              2.0,
+              26.0
+            ],
+            "angle": 0.0
+          }
+        }
+      ],
+      "decoded_notes": [
+        {
+          "token": 5,
+          "pitch": "F4",
+          "rhythm": "note_4",
+          "attention": [
+            104.2,
+            83.9
+          ],
+          "nearest_detector_note": {
+            "x": 103.0,
+            "y": 77.5,
+            "raw_notehead_center": [
+              302.6,
+              227.7
+            ],
+            "staff_position": 2,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                294.0,
+                250.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 6.5
+        },
+        {
+          "token": 7,
+          "pitch": "F3",
+          "rhythm": "note_4",
+          "attention": [
+            104.0,
+            168.1
+          ],
+          "nearest_detector_note": {
+            "x": 103.0,
+            "y": 181.6,
+            "raw_notehead_center": [
+              302.5,
+              533.5
+            ],
+            "staff_position": 7,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                310.5,
+                524.5
+              ],
+              "size": [
+                1.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 13.5
+        },
+        {
+          "token": 9,
+          "pitch": "F3",
+          "rhythm": "note_4",
+          "attention": [
+            104.2,
+            184.1
+          ],
+          "nearest_detector_note": {
+            "x": 103.0,
+            "y": 181.6,
+            "raw_notehead_center": [
+              302.5,
+              533.5
+            ],
+            "staff_position": 7,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                310.5,
+                524.5
+              ],
+              "size": [
+                1.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 2.7
+        },
+        {
+          "token": 10,
+          "pitch": "C5",
+          "rhythm": "note_2",
+          "attention": [
+            120.9,
+            61.0
+          ],
+          "nearest_detector_note": {
+            "x": 119.7,
+            "y": 68.0,
+            "raw_notehead_center": [
+              351.7,
+              199.9
+            ],
+            "staff_position": 6,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                360.5,
+                185.5
+              ],
+              "size": [
+                1.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.1
+        },
+        {
+          "token": 12,
+          "pitch": "F3",
+          "rhythm": "note_2",
+          "attention": [
+            120.1,
+            175.7
+          ],
+          "nearest_detector_note": {
+            "x": 119.8,
+            "y": 181.6,
+            "raw_notehead_center": [
+              352.0,
+              533.5
+            ],
+            "staff_position": 7,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                360.5,
+                525.0
+              ],
+              "size": [
+                1.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.9
+        },
+        {
+          "token": 15,
+          "pitch": "B4",
+          "rhythm": "note_1",
+          "attention": [
+            168.0,
+            71.8
+          ],
+          "nearest_detector_note": {
+            "x": 163.9,
+            "y": 70.1,
+            "raw_notehead_center": [
+              481.5,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                490.0,
+                198.0
+              ],
+              "size": [
+                2.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 4.4
+        },
+        {
+          "token": 17,
+          "pitch": "F3",
+          "rhythm": "note_1",
+          "attention": [
+            169.0,
+            183.3
+          ],
+          "nearest_detector_note": {
+            "x": 163.9,
+            "y": 181.5,
+            "raw_notehead_center": [
+              481.4,
+              533.3
+            ],
+            "staff_position": 7,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                490.0,
+                524.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.4
+        },
+        {
+          "token": 19,
+          "pitch": "F3",
+          "rhythm": "note_1",
+          "attention": [
+            168.4,
+            184.0
+          ],
+          "nearest_detector_note": {
+            "x": 163.9,
+            "y": 181.5,
+            "raw_notehead_center": [
+              481.4,
+              533.3
+            ],
+            "staff_position": 7,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                490.0,
+                524.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.1
+        },
+        {
+          "token": 22,
+          "pitch": "D5",
+          "rhythm": "note_2",
+          "attention": [
+            248.3,
+            56.6
+          ],
+          "nearest_detector_note": {
+            "x": 239.7,
+            "y": 65.4,
+            "raw_notehead_center": [
+              704.0,
+              192.0
+            ],
+            "staff_position": 7,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                712.0,
+                184.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 12.3
+        },
+        {
+          "token": 24,
+          "pitch": "B4",
+          "rhythm": "note_2",
+          "attention": [
+            248.1,
+            72.8
+          ],
+          "nearest_detector_note": {
+            "x": 239.7,
+            "y": 70.1,
+            "raw_notehead_center": [
+              704.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                695.5,
+                214.0
+              ],
+              "size": [
+                1.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.8
+        },
+        {
+          "token": 26,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            248.2,
+            168.2
+          ],
+          "nearest_detector_note": {
+            "x": 245.3,
+            "y": 181.4,
+            "raw_notehead_center": [
+              720.5,
+              533.0
+            ],
+            "staff_position": 7,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                712.5,
+                540.5
+              ],
+              "size": [
+                3.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 13.6
+        },
+        {
+          "token": 28,
+          "pitch": "F3",
+          "rhythm": "note_2",
+          "attention": [
+            248.0,
+            184.7
+          ],
+          "nearest_detector_note": {
+            "x": 245.3,
+            "y": 181.4,
+            "raw_notehead_center": [
+              720.5,
+              533.0
+            ],
+            "staff_position": 7,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                712.5,
+                540.5
+              ],
+              "size": [
+                3.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 4.3
+        },
+        {
+          "token": 29,
+          "pitch": "D5",
+          "rhythm": "note_2",
+          "attention": [
+            264.7,
+            56.7
+          ],
+          "nearest_detector_note": {
+            "x": 264.9,
+            "y": 65.4,
+            "raw_notehead_center": [
+              778.0,
+              192.0
+            ],
+            "staff_position": 7,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                787.0,
+                184.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.7
+        },
+        {
+          "token": 31,
+          "pitch": "B4",
+          "rhythm": "note_2",
+          "attention": [
+            265.5,
+            91.7
+          ],
+          "nearest_detector_note": {
+            "x": 264.9,
+            "y": 70.1,
+            "raw_notehead_center": [
+              778.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                770.0,
+                213.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 21.6
+        },
+        {
+          "token": 33,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            264.0,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 264.7,
+            "y": 178.7,
+            "raw_notehead_center": [
+              777.5,
+              525.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                787.0,
+                503.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.7
+        },
+        {
+          "token": 35,
+          "pitch": "E3",
+          "rhythm": "note_4",
+          "attention": [
+            264.2,
+            192.1
+          ],
+          "nearest_detector_note": {
+            "x": 265.7,
+            "y": 184.0,
+            "raw_notehead_center": [
+              780.5,
+              540.5
+            ],
+            "staff_position": 6,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                770.0,
+                554.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.3
+        },
+        {
+          "token": 36,
+          "pitch": "D3",
+          "rhythm": "note_4",
+          "attention": [
+            280.1,
+            187.7
+          ],
+          "nearest_detector_note": {
+            "x": 281.9,
+            "y": 186.2,
+            "raw_notehead_center": [
+              828.0,
+              547.0
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                820.0,
+                555.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 2.4
+        },
+        {
+          "token": 37,
+          "pitch": "E5",
+          "rhythm": "note_2",
+          "attention": [
+            298.1,
+            56.3
+          ],
+          "nearest_detector_note": {
+            "x": 298.9,
+            "y": 63.3,
+            "raw_notehead_center": [
+              878.0,
+              186.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                886.0,
+                163.0
+              ],
+              "size": [
+                2.0,
+                28.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.1
+        },
+        {
+          "token": 39,
+          "pitch": "C5",
+          "rhythm": "note_2",
+          "attention": [
+            304.6,
+            73.2
+          ],
+          "nearest_detector_note": {
+            "x": 298.9,
+            "y": 68.1,
+            "raw_notehead_center": [
+              878.0,
+              200.0
+            ],
+            "staff_position": 6,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                869.5,
+                213.5
+              ],
+              "size": [
+                1.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.6
+        },
+        {
+          "token": 41,
+          "pitch": "B3",
+          "rhythm": "note_4",
+          "attention": [
+            303.5,
+            165.0
+          ],
+          "nearest_detector_note": {
+            "x": 298.6,
+            "y": 174.1,
+            "raw_notehead_center": [
+              877.0,
+              511.5
+            ],
+            "staff_position": 10,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                886.0,
+                492.0
+              ],
+              "size": [
+                2.0,
+                32.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.4
+        },
+        {
+          "token": 43,
+          "pitch": "A2",
+          "rhythm": "note_4",
+          "attention": [
+            300.3,
+            200.1
+          ],
+          "nearest_detector_note": {
+            "x": 298.7,
+            "y": 193.4,
+            "raw_notehead_center": [
+              877.5,
+              568.0
+            ],
+            "staff_position": 2,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                870.0,
+                590.0
+              ],
+              "size": [
+                2.0,
+                26.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 6.9
+        },
+        {
+          "token": 44,
+          "pitch": "A3",
+          "rhythm": "note_4",
+          "attention": [
+            328.6,
+            167.1
+          ],
+          "nearest_detector_note": {
+            "x": 323.3,
+            "y": 176.9,
+            "raw_notehead_center": [
+              949.8,
+              519.6
+            ],
+            "staff_position": 9,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                962.4,
+                501.1
+              ],
+              "size": [
+                2.8,
+                30.1
+              ],
+              "angle": 3.9
+            }
+          },
+          "distance": 11.2
+        },
+        {
+          "token": 46,
+          "pitch": "A2",
+          "rhythm": "note_4",
+          "attention": [
+            328.0,
+            200.0
+          ],
+          "nearest_detector_note": {
+            "x": 324.4,
+            "y": 193.5,
+            "raw_notehead_center": [
+              953.0,
+              568.5
+            ],
+            "staff_position": 2,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                945.0,
+                590.0
+              ],
+              "size": [
+                2.0,
+                26.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.4
+        },
+        {
+          "token": 47,
+          "pitch": "B4",
+          "rhythm": "note_2",
+          "attention": [
+            363.2,
+            58.4
+          ],
+          "nearest_detector_note": {
+            "x": 353.0,
+            "y": 70.1,
+            "raw_notehead_center": [
+              1037.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1028.5,
+                214.5
+              ],
+              "size": [
+                1.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 15.5
+        },
+        {
+          "token": 49,
+          "pitch": "B4",
+          "rhythm": "note_2.",
+          "attention": [
+            357.6,
+            81.6
+          ],
+          "nearest_detector_note": {
+            "x": 353.0,
+            "y": 70.1,
+            "raw_notehead_center": [
+              1037.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1028.5,
+                214.5
+              ],
+              "size": [
+                1.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 12.4
+        },
+        {
+          "token": 51,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            360.1,
+            167.1
+          ],
+          "nearest_detector_note": {
+            "x": 352.7,
+            "y": 179.1,
+            "raw_notehead_center": [
+              1036.0,
+              526.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1045.0,
+                503.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 14.1
+        },
+        {
+          "token": 53,
+          "pitch": "E3",
+          "rhythm": "note_4",
+          "attention": [
+            359.8,
+            186.7
+          ],
+          "nearest_detector_note": {
+            "x": 352.7,
+            "y": 183.8,
+            "raw_notehead_center": [
+              1036.0,
+              540.0
+            ],
+            "staff_position": 6,
+            "stem": null,
+            "stem_directions": [
+              "up",
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1028.5,
+                554.0
+              ],
+              "size": [
+                1.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.7
+        },
+        {
+          "token": 54,
+          "pitch": "B2",
+          "rhythm": "note_4",
+          "attention": [
+            385.0,
+            192.9
+          ],
+          "nearest_detector_note": {
+            "x": 382.9,
+            "y": 191.4,
+            "raw_notehead_center": [
+              1124.8,
+              562.1
+            ],
+            "staff_position": 3,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1115.5,
+                587.0
+              ],
+              "size": [
+                1.0,
+                20.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 2.6
+        },
+        {
+          "token": 55,
+          "pitch": "B2",
+          "rhythm": "note_4",
+          "attention": [
+            408.1,
+            196.6
+          ],
+          "nearest_detector_note": {
+            "x": 400.5,
+            "y": 191.5,
+            "raw_notehead_center": [
+              1176.5,
+              562.5
+            ],
+            "staff_position": 3,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1169.0,
+                570.5
+              ],
+              "size": [
+                2.0,
+                7.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 9.1
+        },
+        {
+          "token": 58,
+          "pitch": "D3",
+          "rhythm": "note_4",
+          "attention": [
+            423.9,
+            184.1
+          ],
+          "nearest_detector_note": {
+            "x": 417.7,
+            "y": 186.0,
+            "raw_notehead_center": [
+              1227.0,
+              546.5
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1219.0,
+                555.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 6.5
+        },
+        {
+          "token": 62,
+          "pitch": "D5",
+          "rhythm": "note_2",
+          "attention": [
+            450.7,
+            59.7
+          ],
+          "nearest_detector_note": {
+            "x": 441.9,
+            "y": 65.4,
+            "raw_notehead_center": [
+              1298.0,
+              192.0
+            ],
+            "staff_position": 7,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1306.0,
+                185.0
+              ],
+              "size": [
+                2.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.5
+        },
+        {
+          "token": 64,
+          "pitch": "B4",
+          "rhythm": "note_2",
+          "attention": [
+            443.2,
+            83.9
+          ],
+          "nearest_detector_note": {
+            "x": 441.9,
+            "y": 70.1,
+            "raw_notehead_center": [
+              1298.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1290.0,
+                213.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 13.9
+        },
+        {
+          "token": 66,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            441.0,
+            168.3
+          ],
+          "nearest_detector_note": {
+            "x": 441.4,
+            "y": 179.0,
+            "raw_notehead_center": [
+              1296.6,
+              526.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1306.0,
+                503.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.7
+        },
+        {
+          "token": 68,
+          "pitch": "F3",
+          "rhythm": "note_2",
+          "attention": [
+            455.3,
+            184.0
+          ],
+          "nearest_detector_note": {
+            "x": 447.7,
+            "y": 181.6,
+            "raw_notehead_center": [
+              1315.0,
+              533.5
+            ],
+            "staff_position": 7,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1306.5,
+                540.5
+              ],
+              "size": [
+                3.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.0
+        },
+        {
+          "token": 69,
+          "pitch": "D5",
+          "rhythm": "note_2",
+          "attention": [
+            472.5,
+            56.9
+          ],
+          "nearest_detector_note": {
+            "x": 467.1,
+            "y": 65.4,
+            "raw_notehead_center": [
+              1372.0,
+              192.0
+            ],
+            "staff_position": 7,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1381.0,
+                184.5
+              ],
+              "size": [
+                2.0,
+                9.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.1
+        },
+        {
+          "token": 71,
+          "pitch": "B4",
+          "rhythm": "note_2",
+          "attention": [
+            472.0,
+            78.1
+          ],
+          "nearest_detector_note": {
+            "x": 467.1,
+            "y": 70.1,
+            "raw_notehead_center": [
+              1372.0,
+              206.0
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1364.0,
+                213.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 9.4
+        },
+        {
+          "token": 73,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            472.0,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 467.1,
+            "y": 179.1,
+            "raw_notehead_center": [
+              1372.0,
+              526.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1381.0,
+                503.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 12.1
+        },
+        {
+          "token": 75,
+          "pitch": "E3",
+          "rhythm": "note_4",
+          "attention": [
+            472.0,
+            186.0
+          ],
+          "nearest_detector_note": {
+            "x": 467.1,
+            "y": 183.8,
+            "raw_notehead_center": [
+              1372.0,
+              540.0
+            ],
+            "staff_position": 6,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1364.0,
+                554.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.3
+        },
+        {
+          "token": 76,
+          "pitch": "D3",
+          "rhythm": "note_4",
+          "attention": [
+            488.0,
+            185.7
+          ],
+          "nearest_detector_note": {
+            "x": 484.3,
+            "y": 186.0,
+            "raw_notehead_center": [
+              1422.5,
+              546.5
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1414.1,
+                555.5
+              ],
+              "size": [
+                3.0,
+                8.9
+              ],
+              "angle": 9.5
+            }
+          },
+          "distance": 3.7
+        },
+        {
+          "token": 77,
+          "pitch": "E5",
+          "rhythm": "note_2",
+          "attention": [
+            508.5,
+            63.5
+          ],
+          "nearest_detector_note": {
+            "x": 501.1,
+            "y": 63.0,
+            "raw_notehead_center": [
+              1472.0,
+              185.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1480.5,
+                163.5
+              ],
+              "size": [
+                1.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.4
+        },
+        {
+          "token": 79,
+          "pitch": "C5",
+          "rhythm": "note_2",
+          "attention": [
+            505.3,
+            72.9
+          ],
+          "nearest_detector_note": {
+            "x": 501.1,
+            "y": 67.7,
+            "raw_notehead_center": [
+              1472.0,
+              199.0
+            ],
+            "staff_position": 6,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1464.0,
+                213.5
+              ],
+              "size": [
+                2.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 6.7
+        },
+        {
+          "token": 81,
+          "pitch": "B3",
+          "rhythm": "note_4",
+          "attention": [
+            504.5,
+            167.4
+          ],
+          "nearest_detector_note": {
+            "x": 500.9,
+            "y": 174.1,
+            "raw_notehead_center": [
+              1471.5,
+              511.5
+            ],
+            "staff_position": 10,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1480.0,
+                491.5
+              ],
+              "size": [
+                2.0,
+                33.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.6
+        },
+        {
+          "token": 83,
+          "pitch": "A2",
+          "rhythm": "note_2",
+          "attention": [
+            504.0,
+            200.2
+          ],
+          "nearest_detector_note": {
+            "x": 500.9,
+            "y": 193.5,
+            "raw_notehead_center": [
+              1471.5,
+              568.5
+            ],
+            "staff_position": 2,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1464.0,
+                590.5
+              ],
+              "size": [
+                2.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.4
+        },
+        {
+          "token": 84,
+          "pitch": "A3",
+          "rhythm": "note_4",
+          "attention": [
+            520.4,
+            168.4
+          ],
+          "nearest_detector_note": {
+            "x": 517.3,
+            "y": 176.7,
+            "raw_notehead_center": [
+              1519.4,
+              519.1
+            ],
+            "staff_position": 9,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1530.0,
+                498.0
+              ],
+              "size": [
+                2.0,
+                30.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.8
+        },
+        {
+          "token": 85,
+          "pitch": "E5",
+          "rhythm": "note_2.",
+          "attention": [
+            543.0,
+            119.5
+          ],
+          "nearest_detector_note": {
+            "x": 546.9,
+            "y": 70.0,
+            "raw_notehead_center": [
+              1606.5,
+              205.5
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1596.5,
+                214.5
+              ],
+              "size": [
+                1.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 49.7
+        },
+        {
+          "token": 87,
+          "pitch": "B4",
+          "rhythm": "note_2.",
+          "attention": [
+            552.3,
+            72.3
+          ],
+          "nearest_detector_note": {
+            "x": 546.9,
+            "y": 70.0,
+            "raw_notehead_center": [
+              1606.5,
+              205.5
+            ],
+            "staff_position": 5,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1596.5,
+                214.5
+              ],
+              "size": [
+                1.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.8
+        },
+        {
+          "token": 89,
+          "pitch": "G3",
+          "rhythm": "note_2",
+          "attention": [
+            547.9,
+            168.5
+          ],
+          "nearest_detector_note": {
+            "x": 546.7,
+            "y": 178.4,
+            "raw_notehead_center": [
+              1606.0,
+              524.0
+            ],
+            "staff_position": 8,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1613.0,
+                504.5
+              ],
+              "size": [
+                2.0,
+                25.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 9.9
+        },
+        {
+          "token": 91,
+          "pitch": "E3",
+          "rhythm": "note_2.",
+          "attention": [
+            555.0,
+            196.9
+          ],
+          "nearest_detector_note": {
+            "x": 546.7,
+            "y": 181.8,
+            "raw_notehead_center": [
+              1606.0,
+              534.0
+            ],
+            "staff_position": 7,
+            "stem": "down",
+            "stem_directions": [
+              "down"
+            ],
+            "stem_geometry": {
+              "center": [
+                1597.0,
+                541.0
+              ],
+              "size": [
+                3.0,
+                7.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 17.3
+        },
+        {
+          "token": 92,
+          "pitch": "E3",
+          "rhythm": "note_4",
+          "attention": [
+            584.0,
+            183.1
+          ],
+          "nearest_detector_note": {
+            "x": 579.2,
+            "y": 184.0,
+            "raw_notehead_center": [
+              1701.5,
+              540.5
+            ],
+            "staff_position": 6,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1710.5,
+                525.5
+              ],
+              "size": [
+                1.0,
+                11.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 4.8
+        },
+        {
+          "token": 93,
+          "pitch": "F3",
+          "rhythm": "note_4",
+          "attention": [
+            599.9,
+            168.8
+          ],
+          "nearest_detector_note": {
+            "x": 596.3,
+            "y": 181.6,
+            "raw_notehead_center": [
+              1751.5,
+              533.5
+            ],
+            "staff_position": 7,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1759.5,
+                525.0
+              ],
+              "size": [
+                3.0,
+                10.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 13.3
+        },
+        {
+          "token": 96,
+          "pitch": "A3",
+          "rhythm": "note_4",
+          "attention": [
+            615.9,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 613.2,
+            "y": 176.1,
+            "raw_notehead_center": [
+              1801.3,
+              517.3
+            ],
+            "staff_position": 9,
+            "stem": "up",
+            "stem_directions": [
+              "up"
+            ],
+            "stem_geometry": {
+              "center": [
+                1810.0,
+                499.0
+              ],
+              "size": [
+                2.0,
+                30.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 8.5
+        }
+      ]
+    }
+  ]
+}
