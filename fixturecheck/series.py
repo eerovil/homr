@@ -417,9 +417,12 @@ def origin(path: Path | None = None) -> dict:
         "series_id": hashlib.sha256(f"{resolved}\0{root}".encode()).hexdigest()[:16],
         "runs": len(found),
         "last_at": found[-1].get("at", "") if found else "",
-        # The last run itself, hashed. `at` is not enough to compare a position
-        # by: it has second resolution, so two runs a moment apart carry the
-        # same stamp and a rewritten tail would slip through looking identical.
+        # **The whole history shown, hashed** — not its last run. `continues`
+        # compares this against the first `runs` runs found next time, which is
+        # what makes it a prefix check rather than an endpoint check.
+        "prefix": prefix_fingerprint(found),
+        # The last run alone, kept only so a marker written by an older version
+        # still means something for one render. Nothing new compares it.
         "last_run": run_fingerprint(found[-1]) if found else "",
     }
 
@@ -428,6 +431,19 @@ def run_fingerprint(run: dict) -> str:
     """One run, as a value — so two runs can be told apart by what they are."""
     return hashlib.sha256(
         json.dumps(run, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def prefix_fingerprint(some: list[dict]) -> str:
+    """A run of history, as one value.
+
+    Every run, in order, canonically — so a change anywhere inside it changes
+    this, and appending after it does not. Fingerprinting only the last run was
+    the defect: `[A, B, C]` and `[A, X, C, D]` share their first run, their path
+    and the run at the older endpoint, so an endpoint check calls them the same
+    history while the middle of it has been replaced under a reader.
+    """
+    return hashlib.sha256(
+        json.dumps(some, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def continues(previous: dict | None, path: Path | None = None) -> bool:
@@ -439,10 +455,15 @@ def continues(previous: dict | None, path: Path | None = None) -> bool:
     by every stable fingerprint, because a fingerprint that noticed would also
     change on every ordinary append.
 
-    So the question is asked as a **prefix**: the run the last render saw at its
-    own final position must still be that run. If it is not, the record was
-    rewritten under the same name, and the numbers at this address are not a
-    continuation of the ones before them however alike the labels look.
+    So the question is asked as a **prefix**, and it has to be the whole prefix.
+    Checking the run at the older endpoint is not the same thing and misses the
+    ordinary shape of a rewrite: `[A, B, C]` against `[A, X, C, D]` agrees on
+    the path, the first run and the run at that endpoint, and disagrees about
+    what happened in between. So every run the last render showed is hashed
+    together, and all of them must still be there, in order, unchanged.
+
+    An append leaves them untouched and says nothing, which is the property that
+    makes a banner worth reading.
     """
     if not previous:
         return True
@@ -454,12 +475,15 @@ def continues(previous: dict | None, path: Path | None = None) -> bool:
     here = runs(path)
     if len(here) < seen:
         return False        # shorter than what was already shown: rewritten
-    was = previous.get("last_run")
-    if not was:
-        # An older marker, written before runs were fingerprinted. Fall back to
-        # the timestamp rather than declaring a rewrite nobody can evidence.
-        return here[seen - 1].get("at", "") == previous.get("last_at", "")
-    return run_fingerprint(here[seen - 1]) == was
+    was = previous.get("prefix")
+    if was:
+        return prefix_fingerprint(here[:seen]) == was
+    # Markers written before the whole prefix was recorded. One render of the
+    # weaker check rather than a rewrite nobody can evidence; the next marker
+    # carries the prefix and this is never reached again.
+    if previous.get("last_run"):
+        return run_fingerprint(here[seen - 1]) == previous["last_run"]
+    return here[seen - 1].get("at", "") == previous.get("last_at", "")
 
 
 def identity(run: dict) -> tuple:

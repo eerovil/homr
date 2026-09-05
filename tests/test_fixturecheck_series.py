@@ -716,6 +716,64 @@ def test_a_history_rewritten_after_the_last_render_is_seen(tmp_path, monkeypatch
     assert "rewritten after the point" in said
 
 
+def _line(path, name, at):
+    """One run written straight in, so the histories in a test are exact."""
+    return series.append(
+        {"at": at, "harness": "fixturecheck", "tier": "one", "homr": name,
+         "references": "r", "committed": ["a"],
+         "cases": {"a": {"outcome": series.READ, "perfect": True}},
+         "headline": {"right": 1, "judged": 1, "percent": 100.0}},
+        path)
+
+
+def test_a_run_changed_in_the_middle_of_the_shown_history_is_seen(tmp_path, monkeypatch):
+    """`[A, B, C]` against `[A, X, C, D]` — the shape an endpoint check misses.
+
+    Same path, same first run, and the run at the old endpoint is still `C`, so
+    every identity that is stable across appends agrees and so does a
+    fingerprint of the last run. What changed is `B`, in the middle of what a
+    reader was already shown. The check has to be over the whole prefix or it is
+    not a prefix check, whatever it is called.
+
+    The runs are written out by hand rather than timed, so `C` really is the
+    same record both times instead of only usually being one.
+    """
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    checkout = tmp_path / "homr" / "fixturecheck"
+    checkout.mkdir(parents=True)
+    path = checkout / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+
+    _line(path, "A", "2026-09-01T09:00:00+00:00")
+    opening = path.read_text()
+    _line(path, "B", "2026-09-02T09:00:00+00:00")
+    _line(path, "C", "2026-09-03T09:00:00+00:00")
+
+    shown = series.origin()
+    assert shown["runs"] == 3
+    assert report._series_change(shown) == ""          # [A, B, C] is what was shown
+
+    # Another history: same opening, a different middle, the *same* run at the
+    # old endpoint, and one more after it.
+    path.write_text(opening)
+    _line(path, "X", "2026-09-02T09:00:00+00:00")
+    _line(path, "C", "2026-09-03T09:00:00+00:00")
+    _line(path, "D", "2026-09-04T09:00:00+00:00")
+
+    here = series.runs(path)
+    assert len(here) == 4
+    assert here[1]["homr"] == "X"                      # the middle was replaced
+    # Everything a weaker check compares still agrees:
+    assert series.origin()["series_id"] == shown["series_id"]      # path + root
+    assert series.run_fingerprint(here[2]) == shown["last_run"]    # the endpoint
+    # ...and the history is still not the one that was shown.
+    assert not series.continues(shown)
+    assert "rewritten after the point" in report._series_change(series.origin())
+
+
 def test_an_ordinary_append_says_nothing(tmp_path, monkeypatch):
     """It has to, or every run cries wolf and the banner stops meaning anything."""
     from fixturecheck import report

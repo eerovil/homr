@@ -209,10 +209,16 @@ ordinary run would cry wolf.
 
 An id alone still cannot see one thing — the same path and the same first run,
 with the history rewritten after the point the last render reached. So that is
-asked as a **prefix**: the marker keeps the last run it saw, hashed, and the
-next render checks that run is still at that position. `at` is not enough to
-compare a position by, since it has second resolution and two runs a moment
-apart carry the same stamp.
+asked as a **prefix**, and it is the whole prefix: the marker keeps a hash over
+every run the render showed, and the next render hashes the first that many runs
+it finds and compares.
+
+It has to be all of them. Hashing the run at the older endpoint was tried and
+misses the ordinary shape of a rewrite — `[A, B, C]` against `[A, X, C, D]`
+agrees on the path, the first run and the run at that endpoint, and disagrees
+about what happened in between. And `at` alone is not enough to compare even one
+position by, since it has second resolution and two runs a moment apart carry
+the same stamp.
 
 A render that fails either check says so at the top, naming which of the two it
 was. Rendering repeatedly from the same series is the ordinary case and says
