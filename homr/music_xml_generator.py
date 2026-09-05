@@ -165,7 +165,7 @@ def build_measures(
         measures.append(current_measure)
 
     measure_number = 1
-    groups = add_tuplet_start_stop(group_into_chords(voice))
+    groups = infer_meter_changes(add_tuplet_start_stop(group_into_chords(voice)))
     division, nominator = find_division_and_time_signature_nominator(groups)
     state = ConversionState(division, nominator,
                             find_nominator_per_time_signature(groups, nominator))
@@ -1033,6 +1033,109 @@ def find_common_division(durations: list[Fraction]) -> int:
     return common
 
 
+def _bar_boundaries(voice: list[SymbolChord]) -> list[tuple[int, int]]:
+    """Where each bar starts and ends in the stream, the last one open-ended."""
+    bars: list[tuple[int, int]] = []
+    start = 0
+    for index, chord in enumerate(voice):
+        if chord.is_barline():
+            bars.append((start, index))
+            start = index + 1
+    if start < len(voice):
+        bars.append((start, len(voice)))
+    return bars
+
+
+def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fraction | None:
+    """How long this bar is, when every staff of the system agrees about it.
+
+    Each staff is measured on its own timeline -- a moment costs that staff the
+    shortest of *its* notes there, so a staff holding a whole note against four
+    quarters still measures a whole. Agreement is the whole guard: a bar homr
+    misread is short in the staff it lost a note from and right in the other, and
+    a meter must not be invented off one staff's arithmetic. A single-staff
+    system has nothing to agree with and so never carries one.
+    """
+    by_position: dict[str, Fraction] = {}
+    for chord in voice[span[0] : span[1]]:
+        sounding: dict[str, list[Fraction]] = {}
+        for symbol in chord.symbols:
+            if not symbol.rhythm.startswith(("note", "rest")):
+                continue
+            sounding.setdefault(symbol.position, []).append(symbol.get_duration().fraction)
+        for position, durations in sounding.items():
+            by_position[position] = by_position.get(position, Fraction(0)) + min(durations)
+    if len(by_position) < 2:
+        return None
+    lengths = set(by_position.values())
+    return lengths.pop() if len(lengths) == 1 else None
+
+
+def infer_meter_changes(voice: list[SymbolChord]) -> list[SymbolChord]:
+    """Write the time signature at a bar that plainly changed meter and read none.
+
+    The vocabulary holds only denominators, so a change of numerator alone -- 3/4
+    to 5/4, which is what a page does when it adds a beat -- is not something the
+    model can emit even when it reads the bar perfectly. On the `sammon-ryosto`
+    fixture both bars of the opening span are measured exactly right, 3 quarters
+    and 5, and both came out declared the same, because one number was being
+    fitted to a span that holds two.
+
+    So a bar whose length every staff agrees on, and which is not the length the
+    signature in force declares, gets that signature written at it. Three things
+    it will not do, each because the alternative is worse than the fault it fixes:
+
+    - **Never the first bar of a span.** That bar is where a printed signature
+      stands, and an anacrusis is exactly a first bar shorter than its meter. A
+      pickup would otherwise be read as the meter and the meter as a change.
+    - **Never off one staff.** See `_corroborated_length`.
+    - **Never a denominator.** The one in force is carried, because a numerator
+      is what a bar length can settle and a denominator is a spelling the same
+      bar length has more than one of.
+    """
+    fallback = find_division_and_time_signature_nominator(voice)[1]
+    declared = list(find_nominator_per_time_signature(voice, fallback))
+    bars = _bar_boundaries(voice)
+    if not declared or len(bars) < 2:
+        return voice
+
+    denominator = "4"
+    span_no = -1
+    opens_span = True
+    inserted: dict[int, SymbolChord] = {}
+    for start, end in bars:
+        signatures = [
+            chord.symbols[0]
+            for chord in voice[start:end]
+            if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature")
+        ]
+        if signatures:
+            denominator = signatures[-1].rhythm.split("/")[1]
+            span_no += 1
+            opens_span = True
+        if opens_span or span_no < 0 or span_no >= len(declared):
+            opens_span = False
+            continue
+        length = _corroborated_length(voice, (start, end))
+        if length is None or length == declared[span_no]:
+            continue
+        eprint(
+            f"Bar length {length} contradicts the {declared[span_no]} in force and every "
+            f"staff agrees on it: writing a {int(length * int(denominator))}/{denominator}"
+        )
+        inserted[start] = SymbolChord([EncodedSymbol(f"timeSignature/{denominator}")])
+        declared[span_no] = length
+
+    if not inserted:
+        return voice
+    out: list[SymbolChord] = []
+    for index, chord in enumerate(voice):
+        if index in inserted:
+            out.append(inserted[index])
+        out.append(chord)
+    return out
+
+
 def find_nominator_per_time_signature(
     voice: list[SymbolChord], fallback: Fraction
 ) -> list[Fraction]:
@@ -1081,7 +1184,33 @@ def find_nominator_per_time_signature(
         current.append(in_measure)
     if started:
         spans.append(current)
-    return [Fraction(np.median(span)) if span else fallback for span in spans]
+    return [prevailing_length(span) if span else fallback for span in spans]
+
+
+def prevailing_length(lengths: list[Fraction]) -> Fraction:
+    """The length the most consecutive bars agree on; on a tie, the earliest run.
+
+    Not the median, which cannot see order and is wrong at both ends of it. An
+    anacrusis makes the opening bar short, and a span of `1/4, 4/4, 4/4, 4/4` has
+    a median of a whole -- right by luck, since the odd bar sits at an end. A span
+    of `3/4, 5/4` has a median of a whole and neither bar is a whole: a run says
+    3/4, which is the bar the printed signature actually opens, and leaves the
+    other to `infer_meter_changes` rather than averaging the two into a meter the
+    page never prints.
+
+    A run rather than a mode because a meter is what consecutive bars agree on. A
+    span alternating 3/4 and 4/4 has no majority and no prevailing meter either;
+    taking the first run says so by being wrong in one place instead of
+    everywhere.
+    """
+    best, longest = lengths[0], 0
+    current, run = None, 0
+    for length in lengths:
+        run = run + 1 if length == current else 1
+        current = length
+        if run > longest:
+            best, longest = length, run
+    return best
 
 
 def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tuple[int, Fraction]:
