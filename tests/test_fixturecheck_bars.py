@@ -120,6 +120,41 @@ def test_a_bar_or_staff_out_of_range_is_refused():
     assert bars.bar_box(geo, 1, 0, 3) is None
 
 
+def _mpos(count, width=3000.0, y=4650.79, sy=2637.07, page=0):
+    return [{"x": 1000.0 + i * width, "y": y, "sx": width, "sy": sy, "page": page}
+            for i in range(count)]
+
+
+def test_musescore_says_where_a_bar_is_and_it_is_cut_out_by_that():
+    """The mapping, pinned. Measured on two scores at 220 and 150 dpi, with the
+    crop landing on the barlines both times; see `bars.MPOS_UNITS_PER_INCH`."""
+    boxes = _mpos(3)
+    box = bars.engraved_box(boxes, ["1", "2", "3"], "2", (1819, 2572), dpi=220)
+    assert box is not None
+    scale = 220 / bars.MPOS_UNITS_PER_INCH
+    # The second bar starts at 4000 units and is 3000 wide.
+    assert abs(box["left"] * 1819 - (4000 * scale - 8)) < 1.0
+    assert abs(box["right"] * 1819 - (7000 * scale + 8)) < 1.0
+    assert 0.0 <= box["top"] < box["bottom"] <= 1.0
+
+
+def test_a_bar_count_that_disagrees_is_refused():
+    """MuseScore's boxes and the score have to be talking about the same bars."""
+    assert bars.engraved_box(_mpos(3), ["1", "2"], "2", (1819, 2572)) is None
+    assert bars.engraved_box(_mpos(2), ["1", "2"], "9", (1819, 2572)) is None
+
+
+def test_a_bar_on_a_later_page_is_refused():
+    """The render kept is page one; a box on page two would crop the wrong paper."""
+    assert bars.engraved_box(_mpos(2, page=1), ["1", "2"], "1", (1819, 2572)) is None
+
+
+def test_a_box_that_falls_outside_the_picture_is_refused():
+    """Which is what a wrong resolution or paper size looks like from here."""
+    wide = [{"x": 1000.0, "y": 100.0, "sx": 90000.0, "sy": 2637.07, "page": 0}]
+    assert bars.engraved_box(wide, ["1"], "1", (1819, 2572)) is None
+
+
 def test_a_row_knows_which_bar_it_is_about():
     """The report opens the bar named here; re-parsing `where` would be a second
     definition of the same fact."""

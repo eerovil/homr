@@ -71,13 +71,38 @@ agree — into that bar and staff in full:
   the question at a glance: the same six notes at the same positions, at beats
   `0 0 0.75 1 1 1.5` on the page and `0 0 1 1.25 1.25 1.5` in homr's reading. A
   duration read differently, and nothing lost.
-- **The same bar as pictures**: the printed crop, that bar engraved from homr's
-  parse, and that bar engraved from the reference. The printed one is the one
-  that matters, because on this repertoire it has settled every disagreement
-  that anybody checked.
+- **The same bar as pictures**: the printed crop, and that bar in homr's
+  engraving and in the reference's. The printed one is the one that matters,
+  because on this repertoire it has settled every disagreement that anybody
+  checked.
 
-Cutting a bar out of a MusicXML file is reliable. Finding it in a photograph is
-not: it needs the barlines, which come from **homr's own detection**
+**The engraved pair are cut out of the score's own render, not drawn again.**
+Engraving a single bar on its own gives it a title, a fresh layout, and a clef
+and key it does not carry in context, so the detail looked like different music
+from the system at the top of the page. MuseScore will simply say where each bar
+landed:
+
+    MuseScore3 -r 220 score.musicxml -o score.mpos    # a box per measure
+
+Those are absolute page units with the origin at the page corner, and
+`pixels = units * dpi / MPOS_UNITS_PER_INCH` converts them. The constant is
+measured rather than derived — two scores at 220 and 150 dpi, the crop landing
+on the barlines at both edges each time — and it is a rate per inch, so it does
+not assume the paper size. The page is rendered **untrimmed**, because `-T`
+crops to the ink and moves the origin the boxes are measured from. It is also
+fewer MuseScore calls: one render and one `.mpos` per side per case, rather than
+an engraving per fault.
+
+A measure box covers the whole system, so those two show the bar across every
+staff, while the printed crop shows the staff the fault is on. The labels say
+so. Cropping the printed one to the system too was tried and is worse on real
+scans: choral staves are spaced apart to leave room for the words, so the crop
+came out three times the height of the engravings beside it, half of it white
+paper.
+
+Cutting a bar out of a MusicXML file is reliable, and so is asking MuseScore
+where it drew one. Finding a bar in a photograph is not: it needs the barlines,
+which come from **homr's own detection**
 (`bars.geometry`, the same segmentation pass `scripts/homr_staves.py` uses in
 the choir app, cached per case). The lines have to cut the system into exactly
 the bars the reference says it holds, and a system's *opening* rule is normally

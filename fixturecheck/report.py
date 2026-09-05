@@ -196,21 +196,61 @@ def _bar_pictures(case, parsed: Path, row) -> str:
 
     printed, why = _printed_crop(case, row, stem)
     if printed:
-        parts.append(f"<div><h4>the printed bar</h4><img src='{printed}' "
+        parts.append(f"<div><h4>the printed bar &mdash; staff {row.staff}</h4><img src='{printed}' "
                      f"alt='bar {html.escape(row.bar)} as printed'></div>")
     else:
-        parts.append(f"<div><h4>the printed bar</h4><p class='lead'>{html.escape(why)}"
+        parts.append(f"<div><h4>the printed bar &mdash; staff {row.staff}</h4><p class='lead'>{html.escape(why)}"
                      f"</p></div>")
 
-    for label, source, suffix in (("homr, engraved", parsed, "homr"),
-                                  ("the reference, engraved", case.reference, "ref")):
-        drawn = bars.engrave_bar(source, row.bar,
-                                 cases.CACHE / "bars" / f"{stem}-{suffix}.musicxml",
-                                 OUT / f"{stem}-{suffix}.png", cli)
-        if drawn:
-            parts.append(f"<div><h4>{label}</h4><img src='{drawn.name}' "
-                         f"alt='{label}'></div>")
+    for label, source, suffix in (("homr, engraved &mdash; the whole system", parsed, "homr"),
+                                  ("the reference, engraved &mdash; the whole system", case.reference, "ref")):
+        cut, why = _engraved_crop(case, source, row, suffix, stem, cli)
+        if cut:
+            parts.append(f"<div><h4>{label}</h4><img src='{cut}' alt='{label}'></div>")
+        else:
+            parts.append(f"<div><h4>{label}</h4><p class='lead'>"
+                         f"{html.escape(why)}</p></div>")
     return f"<div class='crops'>{''.join(parts)}</div>"
+
+
+#: One render of a score, kept for as long as the report is being written. Each
+#: side is drawn once per case rather than once per fault -- the bar is cut out
+#: of the picture, so the picture is the thing worth keeping.
+_ENGRAVED: dict = {}
+
+
+def _engraved_crop(case, source: Path, row, suffix: str, stem: str,
+                   cli: str) -> tuple[str, str]:
+    """One bar cut out of the score's own engraving, or why it is not shown.
+
+    Cut rather than drawn again. Engraving a single bar on its own gave it a
+    title, a fresh layout, and a clef and key it does not carry in context, so
+    the detail under a fault looked like different music from the system at the
+    top of the page. MuseScore will say where each bar landed (`.mpos`), which
+    makes cutting exact and needs no detection at all.
+    """
+    key = (case.name, suffix)
+    if key not in _ENGRAVED:
+        _ENGRAVED[key] = bars.engraved(source, cli,
+                                       OUT / f"{case.name}-{suffix}-page.png")
+    drawn = _ENGRAVED[key]
+    if not drawn:
+        return "", "MuseScore could not draw this score, so there is no bar to cut out."
+    page, boxes = drawn
+    numbers = bars.bars_in(source)
+    try:
+        from PIL import Image
+        with Image.open(page) as picture:
+            size = picture.size
+    except Exception:                                        # noqa: BLE001
+        return "", "the engraving could not be read."
+    box = bars.engraved_box(boxes, numbers, row.bar, size)
+    if not box:
+        return "", (f"MuseScore reported {len(boxes)} bar position(s) for "
+                    f"{len(numbers)} bar(s) here, so which box is this bar is a "
+                    f"guess.")
+    cut = bars.crop(page, box, OUT / f"{stem}-{suffix}.png")
+    return (cut.name, "") if cut else ("", "the crop could not be written.")
 
 
 def _printed_crop(case, row, stem: str) -> tuple[str, str]:

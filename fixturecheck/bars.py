@@ -213,7 +213,14 @@ def bar_box(geo: dict, staff: int, index: int, expected_bars: int) -> dict | Non
         return None
     left, right = lines[index - 1], lines[index]
     row = staves[staff - 1]
-    # A little air, so the crop is a bar of music and not a slice through it.
+    # **The staff the fault is on, not the whole system.** Taking the union of
+    # the staves was tried and is worse on real scans: printed choral staves are
+    # spaced apart to leave room for the words between them, so on `hanget-soi`
+    # the system spans 60% of the band and the crop came out three times the
+    # height of the engravings beside it, half of it white paper and a line of
+    # lyrics. The engraved crops show the system because MuseScore reports one
+    # box per measure and that is what it gives; the labels say which is which,
+    # and the tables above have already isolated the staff.
     pad = 0.35 * (row["bottom"] - row["top"])
     return {"left": max(0.0, left - 0.004), "right": min(1.0, right + 0.004),
             "top": max(0.0, row["top"] - pad), "bottom": min(1.0, row["bottom"] + pad)}
@@ -232,6 +239,13 @@ def crop(image: Path, box: dict, into: Path) -> Path | None:
                                 int(box["right"] * width), int(box["bottom"] * height)))
             if not cut.width or not cut.height:
                 return None
+            if cut.mode in ("RGBA", "LA", "P"):
+                # MuseScore writes transparent paper. Left alone, the crop takes
+                # the page's colour rather than the white the pictures beside it
+                # are on, and the same bar looks like two different prints.
+                cut = cut.convert("RGBA")
+                paper = Image.new("RGBA", cut.size, (255, 255, 255, 255))
+                cut = Image.alpha_composite(paper, cut).convert("RGB")
             into.parent.mkdir(parents=True, exist_ok=True)
             cut.save(into)
     except Exception:                                        # noqa: BLE001
@@ -239,16 +253,79 @@ def crop(image: Path, box: dict, into: Path) -> Path | None:
     return into
 
 
-def engrave_bar(source: Path, bar: str, scratch: Path, into: Path,
-                cli: str, dpi: int = 220) -> Path | None:
-    """One bar of one score, drawn."""
-    fragment = one_bar(source, bar, scratch)
-    if fragment is None:
+# --- where the bar is in an engraving ------------------------------------
+
+#: `.mpos` coordinates are absolute page units with the origin at the page
+#: corner, and this converts them to pixels at a given resolution:
+#:
+#:     pixels = units * dpi / MPOS_UNITS_PER_INCH
+#:
+#: Measured rather than derived, and checked before it was relied on: two
+#: different scores at 220 and 150 dpi, with the crop landing on the barlines at
+#: both edges each time (`test_fixturecheck_bars`). Being a rate per inch rather
+#: than a page width, it does not assume the paper size.
+MPOS_UNITS_PER_INCH = 2649.2
+
+
+def engraved(source: Path, cli: str, into: Path, dpi: int = 220
+             ) -> tuple[Path, list[dict]] | None:
+    """Draw a score once, and ask MuseScore where each bar of it landed.
+
+    Two outputs from two calls, and the second is the point: `-o <file>.mpos`
+    writes a box per measure, so a bar can be **cut out of the picture the score
+    already makes** instead of being engraved again on its own. Re-engraving one
+    bar gives it a title, a fresh layout and a clef and key it does not have in
+    context, so the detail looked like different music from the system above it.
+
+    The page is rendered **untrimmed**: `-T` crops to the ink and moves the
+    origin, which is exactly what the measure boxes are measured from.
+    """
+    into.parent.mkdir(parents=True, exist_ok=True)
+    positions = into.with_suffix(".mpos")
+    for target in (into, positions):
+        run = subprocess.run([cli, "-r", str(dpi), str(source), "-o", str(target)],
+                             capture_output=True, text=True, timeout=600)
+        if run.returncode != 0:
+            return None
+    page = into.with_name(f"{into.stem}-1.png")
+    if page.exists():
+        page.replace(into)
+    if not into.exists() or not positions.exists():
         return None
-    run = subprocess.run([cli, "-T", "10", "-r", str(dpi), str(fragment),
-                          "-o", str(into)],
-                         capture_output=True, text=True, timeout=600)
-    numbered = into.with_name(f"{into.stem}-1.png")
-    if numbered.exists():
-        numbered.replace(into)
-    return into if run.returncode == 0 and into.exists() else None
+    try:
+        boxes = [
+            {"x": float(e.get("x", 0)), "y": float(e.get("y", 0)),
+             "sx": float(e.get("sx", 0)), "sy": float(e.get("sy", 0)),
+             "page": int(e.get("page", 0))}
+            for e in ET.parse(positions).getroot().findall("elements/element")]
+    except (ET.ParseError, ValueError):
+        return None
+    return into, boxes
+
+
+def engraved_box(boxes: list[dict], numbers: list[str], bar: str,
+                 size: tuple[int, int], dpi: int = 220) -> dict | None:
+    """The box around one bar of an engraving, as fractions of the picture.
+
+    Refused when the boxes and the score disagree about how many bars there are,
+    when the bar is on a page other than the first, or when the box falls
+    outside the picture — each of which would put a crop of the wrong music
+    under a finding, which is the one thing this must not do.
+    """
+    if len(boxes) != len(numbers) or bar not in numbers:
+        return None
+    box = boxes[numbers.index(bar)]
+    if box["page"] != 0:
+        return None
+    width, height = size
+    scale = dpi / MPOS_UNITS_PER_INCH
+    # A little air, so the crop is a bar of music and not a slice through it.
+    pad_x, pad_y = 8, 0.09 * box["sy"] * scale
+    left = box["x"] * scale - pad_x
+    right = (box["x"] + box["sx"]) * scale + pad_x
+    top = box["y"] * scale - pad_y
+    bottom = (box["y"] + box["sy"]) * scale + pad_y
+    if right > width + pad_x or bottom > height + pad_y or right <= left:
+        return None
+    return {"left": max(0.0, left / width), "right": min(1.0, right / width),
+            "top": max(0.0, top / height), "bottom": min(1.0, bottom / height)}
