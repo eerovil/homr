@@ -8,6 +8,41 @@ For a quick try, visit our online demo at [homr.site](https://homr.site) or [![O
 
 You might also want to check out [Andromr](https://github.com/aicelen/Andromr), an Android app for optical music recognition using homr.
 
+## About this fork
+
+`eerovil/homr` is a fork of [liebharc/homr](https://github.com/liebharc/homr), kept
+permanently rather than as a staging area. It exists to read Finnish choral scans for
+[musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins), which
+installs this fork's `main` and calls it as a subprocess.
+
+**Where a fix belongs.** A defect in a scanned score can be repaired here or in the
+choir app, and this is the rule for deciding (settled on
+[musescore-choir-plugins#141](https://github.com/eerovil/musescore-choir-plugins/issues/141)):
+
+> **homr's job is to produce MusicXML that, when rendered, looks like the original
+> page** — including stem direction, which is to say the voices. Anything after that
+> point belongs to the choir app.
+
+So if homr got the page wrong, the fix is here, whether or not the evidence is still in
+the pixels — a slur nobody engraved, two noteheads read as one, staves grouped into the
+wrong system. If the parse already matches the page and the app wants something further
+from it — which band to read next, what the operator is shown, how a practice track is
+built — that is the app's, not homr's. The rule is a claim about the *output*, so it is
+testable: render the MusicXML and hold it against the page.
+
+The choir app currently has some OMR repair code of its own that predates this rule and
+is on the wrong side of it. That is being migrated; the rule binds new fixes.
+
+**Upstreaming is opportunistic.** Fixes here are general improvements often enough, and
+one is welcome to go to `liebharc/homr` — but nothing is tracked, nothing is owed, and
+no decision here waits on upstream review. Note that `CONTRIBUTING.md` is upstream's
+file and describes contributing to *upstream*, not to this fork.
+
+**The measurement harness lives here** (`fixturecheck/`, `scripts/choir-bench.py`,
+`scripts/choir-worktree.sh`, `scripts/choir-k8s.sh`). It has to run inside homr's own
+environment, and it reaches into the choir repo through `CHOIR_REPO` for the fixtures
+and reference scores it judges against. See `scripts/README.md`.
+
 ## Prerequisites
 
 - Python 3.11 or 3.12
