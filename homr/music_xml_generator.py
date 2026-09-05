@@ -21,13 +21,22 @@ from homr.transformer.vocabulary import (
 
 
 class ConversionState:
-    def __init__(self, division: int, nominator: Fraction):
+    def __init__(self, division: int, nominator: Fraction,
+                 nominators: list[Fraction] | None = None):
         self.beats = 4 * constants.duration_of_quarter
         self.division = division
         self.nominator = nominator
+        #: One numerator per time signature, in the order they appear. The
+        #: voice-wide `nominator` stays as the fallback for a signature this
+        #: does not reach -- see `find_nominator_per_time_signature`.
+        self.nominators = list(nominators or [])
         self.tremolo_state = "stop"
         self.volta_number = 1
         self.last_volta_measure = -10
+
+    def next_nominator(self) -> Fraction:
+        """The numerator for the signature now being built."""
+        return self.nominators.pop(0) if self.nominators else self.nominator
 
     def start_volta(self, measure_no: int) -> int:
         if measure_no == self.last_volta_measure + 1:
@@ -158,7 +167,8 @@ def build_measures(
     measure_number = 1
     groups = add_tuplet_start_stop(group_into_chords(voice))
     division, nominator = find_division_and_time_signature_nominator(groups)
-    state = ConversionState(division, nominator)
+    state = ConversionState(division, nominator,
+                            find_nominator_per_time_signature(groups, nominator))
     measures: list[ET.Element] = []
     current_measure = ET.Element("measure", number=str(measure_number))
     first_attributes = build_or_get_attributes(current_measure, None)
@@ -709,7 +719,7 @@ def build_time_signature(
 ) -> None:
     time = ET.SubElement(attributes, "time")
     denominator = model_time_signature.rhythm.split("/")[1]
-    beats = max(int(state.nominator * int(denominator)), 1)
+    beats = max(int(state.next_nominator() * int(denominator)), 1)
     ET.SubElement(time, "beats").text = str(beats)
     ET.SubElement(time, "beat-type").text = denominator
     state.beats = beats
@@ -1021,6 +1031,57 @@ def find_common_division(durations: list[Fraction]) -> int:
     for d in denominators[1:]:
         common = lcm(common, d)
     return common
+
+
+def find_nominator_per_time_signature(
+    voice: list[SymbolChord], fallback: Fraction
+) -> list[Fraction]:
+    """A numerator for each stretch between time signature changes.
+
+    The model reads only the **denominator** of a time signature; the numerator
+    is inferred from how long the bars actually are. Inferring it once for the
+    whole voice makes a changing meter impossible to express — every signature
+    then gets the same numerator and differs only in its denominator, so a part
+    that goes 3/4, 5/4, 5/2 can have at most one of them right.
+
+    Measured on a real system of Sammon ryösto: one median gave 7/4, then no
+    change at all where the page changes to 5/4, then 3/2 where the page says
+    5/2. Not one of the three.
+
+    So the median is taken over each span between signatures instead. A span
+    with no complete bar in it falls back to the voice-wide figure rather than
+    inventing something out of nothing.
+
+    This is still inference and not reading. A span whose bars homr measured
+    wrongly gets a numerator that is wrong in the same way — what it removes is
+    the case that could not be right however well the page was read.
+    """
+    spans: list[list[Fraction]] = []
+    current: list[Fraction] = []
+    in_measure = Fraction(0)
+    started = False
+    for chord in voice:
+        if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
+            if started:
+                if in_measure > Fraction(0):
+                    current.append(in_measure)
+                    in_measure = Fraction(0)
+                spans.append(current)
+                current = []
+            started = True
+            continue
+        if chord.is_barline() and in_measure > Fraction(0):
+            current.append(in_measure)
+            in_measure = Fraction(0)
+        else:
+            duration = chord.get_duration()
+            if duration > Fraction(0):
+                in_measure += duration
+    if in_measure > Fraction(0):
+        current.append(in_measure)
+    if started:
+        spans.append(current)
+    return [Fraction(np.median(span)) if span else fallback for span in spans]
 
 
 def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tuple[int, Fraction]:
