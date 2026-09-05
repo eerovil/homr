@@ -181,6 +181,11 @@ class Result:
     staves_page: int = 0
     staves_homr: int = 0
     staves_printed: int = 0
+    #: Bars where the two disagree about the meter, judged only where one side
+    #: or the other changes it. A wrong answer about the bar rather than about
+    #: a notehead, so it is counted like `structure` and not folded into the
+    #: note percentage -- see `compare_meter`.
+    meter: int = 0
     rows: list[Row] = field(default_factory=list)
 
     @property
@@ -215,7 +220,8 @@ class Result:
         with nothing to judge is not perfect — it is unread, and saying
         otherwise would let an empty parse pass the gate.
         """
-        return bool(self.scored) and self.agree == self.scored and not self.structure
+        return (bool(self.scored) and self.agree == self.scored
+                and not self.structure and not self.meter)
 
     @property
     def structure(self) -> int:
@@ -387,6 +393,11 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     heads_homr = _heads_per_bar(got)
     result = Result(staves_page=printed_staves(reference), staves_homr=printed_staves(parsed),
                     staves_printed=staves_a_person_counted(case) if case else 0)
+    # The meter first: it is what the bars below are read in, so a disagreement
+    # about it belongs above them rather than buried among the notes.
+    for row in compare_meter(reference, parsed):
+        result.meter += 1
+        result.rows.append(row)
     if result.structure:
         blame = {
             "reference": "the page agrees with homr — the REFERENCE is wrong here, "
@@ -461,6 +472,82 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
             emit(f"{a['name']} · voice {mine_rank}", f"{b['name']} · voice {their_rank}",
                  "the voice the page prints", "agree")
     return result
+
+
+def meter_in_force(path: Path) -> tuple[dict, list]:
+    """The meter each bar is read in, and the bars where it changes.
+
+    A signature is declared on every staff of a system, so the same change
+    arrives several times; what matters is the meter *in force*, which is the
+    last one declared. A bar is a **change** when what it declares differs from
+    what was already running — including the first bar, which changes from
+    nothing.
+    """
+    force: dict = {}
+    changes: list = []
+    order: list = []
+    running = ""
+    seen = set()
+    for part in ET.parse(path).getroot().findall("part"):
+        for measure in part.findall("measure"):
+            number = measure.get("number", "")
+            if number not in seen:
+                seen.add(number)
+                order.append(number)
+    for number in order:
+        declared = ""
+        for part in ET.parse(path).getroot().findall("part"):
+            for measure in part.findall("measure"):
+                if measure.get("number") != number:
+                    continue
+                for attributes in measure.findall("attributes"):
+                    for time in attributes.findall("time"):
+                        beats = time.findtext("beats", "")
+                        kind = time.findtext("beat-type", "")
+                        if beats and kind:
+                            declared = f"{beats}/{kind}"
+        if declared and declared != running:
+            running = declared
+            changes.append(number)
+        force[number] = running
+    return force, changes
+
+
+def compare_meter(reference: Path, parsed: Path) -> list[Row]:
+    """Where the two disagree about the meter — judged only where it changes.
+
+    The check read `<divisions>` to turn durations into beats and never looked
+    at the signature itself, so a misread meter was invisible: `sammon-ryosto`
+    goes 3/4, 5/4, 5/2 on the page and 7/4, nothing, 3/2 in homr's reading, and
+    the report said 88.4% and nothing else.
+
+    **Only bars where one side or the other declares a change are judged**, and
+    they are judged on the meter in force there. That one rule covers the three
+    shapes this can take — a change the page makes and homr misses, a change
+    homr invents, and a change both make but to different meters — while a run
+    of bars nobody changed is never looked at, so an early mistake cannot report
+    itself once per bar for the rest of the system.
+
+    A **missing** signature is the same error as a wrong one. Whether homr wrote
+    7/4 or wrote nothing and carried 7/4 forward, the bar is in the wrong meter
+    and a singer meets the same problem.
+    """
+    want, want_changes = meter_in_force(reference)
+    got, got_changes = meter_in_force(parsed)
+    rows = []
+    for bar in sorted(set(want_changes) | set(got_changes),
+                      key=lambda b: (len(b), b)):
+        here, there = want.get(bar, ""), got.get(bar, "")
+        if here == there:
+            continue
+        rows.append(Row(
+            f"bar {bar}", here or "no meter", there or "no meter",
+            "a change homr did not make" if bar in want_changes
+            and bar not in got_changes else
+            ("a change the page does not make" if bar in got_changes
+             and bar not in want_changes else "changed to a different meter"),
+            "meter", bar=bar, staff=0))
+    return rows
 
 
 def bar_contents(path: Path, bar: str, staff: int) -> list[dict]:

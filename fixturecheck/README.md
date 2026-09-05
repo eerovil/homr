@@ -37,6 +37,30 @@ voices** a note is in rather than the voice's number, which neither file agrees
 about. A **unison** — one printed head serving two voices, which older choral
 engraving does constantly — counts once.
 
+## When the two disagree about the meter
+
+The check read `<divisions>` to turn durations into beats and never looked at
+the time signature itself, so homr putting the music in the wrong meter cost
+nothing at all. `sammon-ryosto` goes **3/4, 5/4, 5/2** on the page and **7/4,
+nothing, 3/2** in homr's reading — three errors, and the report said 88.4% and
+not one word about them.
+
+**Only bars where one side or the other changes the meter are judged**, on the
+meter in force there. One rule covers the three shapes this takes: a change the
+page makes and homr misses, a change homr invents, and a change both make but to
+different meters. A run of bars nobody changed is never looked at, so a mistake
+at the top of a system reports itself once, where it was made, rather than on
+every bar below it.
+
+A **missing** signature is the same error as a wrong one — whether homr wrote
+7/4 or wrote nothing and carried 7/4 forward, the bar is in the wrong meter and
+the singer meets the same problem.
+
+It is counted like `structure` rather than like a note: its own count, its own
+rows, and it stops a fixture being `perfect`, so it **fails the gate**. It stays
+out of the note percentage, which counts note events and has meant that since it
+was defined.
+
 ## When the two disagree about the staves
 
 Every note is matched on its staff, so if the reference and the parse hold a

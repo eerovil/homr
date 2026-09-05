@@ -65,6 +65,7 @@ tr.voice td { background: #fdecec; }
 tr.pitch td { background: #fde8d8; }
 tr.size  td { background: #fff8e1; }
 tr.timing td { background: #eef4fb; }
+tr.meter td { background: #f0e6fb; font-weight: 600; }
 tr.structure td { background: #f3e8fb; font-weight: 600; }
 tr.unison td { background: #f4f4f7; }
 td.ok { color: #1c5c2c; } td.no { color: #8a1f1f; font-weight: 600; }
@@ -556,6 +557,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
   <div><b>{result.pitch}</b>wrong pitch {moved('pitch')}</div>
   <div><b>{result.size}</b>different number of notes {moved('size')}</div>
   <div><b>{result.timing}</b>beat shifted {moved('timing')}</div>
+  <div><b>{result.meter}</b>bar(s) in the wrong meter</div>
   <div><b>{result.unison}</b>unisons</div>
 </div>
 {structure}
@@ -626,7 +628,7 @@ def _with_standing(entries: list[dict]) -> list[dict]:
         page = OUT / f"{name}.html"
         counts = {k: case.get(k, 0) for k in
                   ("agree", "voice", "pitch", "size", "timing", "unison",
-                   "staves_page", "staves_homr")}
+                   "staves_page", "staves_homr", "meter")}
         scored = sum(counts[k] for k in ("agree", "voice", "pitch", "size", "timing"))
         combined.append({
             "name": name,
@@ -663,8 +665,9 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
     # had last been measured under the previous one, which is precisely the
     # thing this whole harness was built to stop saying.
     counted = [e for e in entries if not e.get("elsewhere")]
-    total = {k: sum(e[k] for e in counted)
-             for k in ("agree", "voice", "pitch", "size", "timing", "structure", "unison")}
+    total = {k: sum(e.get(k, 0) for e in counted)
+             for k in ("agree", "voice", "pitch", "size", "timing", "structure",
+                       "unison", "meter")}
     # Notes homr lost and beats it moved are faults, and are in the denominator.
     # Leaving them out asks only "of the notes homr wrote, how many are right",
     # under which a system missing half its notes reads 100%.
@@ -698,6 +701,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
         f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
         f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
         f"<td>{cell(e, 'timing')}</td>"
+        f"<td>{cell(e, 'meter')}</td>"
         f"<td>{_staves(e)}</td>"
         f"<td>{e['score']:.1f}%</td></tr>"
         # Worst first means worst by what went wrong, and a case can go wrong
@@ -731,6 +735,7 @@ case.</p>
   <div><b>{total['size']}</b>different number of notes</div>
   <div><b>{total['timing']}</b>beat shifted</div>
   <div><b>{total['structure']}</b>case(s) with the wrong staves</div>
+  <div><b>{total['meter']}</b>bar(s) in the wrong meter</div>
   <div><b>{100.0 * total['agree'] / judged if judged else 0:.1f}%</b>of everything judged is right</div>
 </div>
 <p class="lead">The percentage counts a note homr <b>lost</b> and a beat it
@@ -744,7 +749,8 @@ answer it is has to be settled against the printed page. Where somebody has look
 written the count into <code>fixturecheck/printed.json</code>, the staves column
 names the side at fault; where nobody has, it does not guess.</p>
 <table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
-<th>note count</th><th>beat shifted</th><th>staves (who is wrong)</th><th>score</th></tr>
+<th>note count</th><th>beat shifted</th><th>meter</th>
+<th>staves (who is wrong)</th><th>score</th></tr>
 {rows}</table>
 {NOT_MEASURED}
 </body></html>"""
