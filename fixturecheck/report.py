@@ -147,15 +147,26 @@ def _series_change(now: dict) -> str:
         except ValueError:
             was = None
     stamp.write_text(json.dumps(now))
-    if not was or was.get("checkout") == now.get("checkout"):
+    if not was:
         return ""
-    return (f"<p class='warn'>This page was rendered from the <b>"
-            f"{html.escape(str(now.get('checkout')))}</b> checkout's series "
-            f"({now.get('runs')} run(s)). The previous render at this address "
+    # **Compared by identity, never by the label.** A checkout's directory name
+    # is not a history: switching branches replaces `series.jsonl` under the
+    # same name, and two checkouts on two hosts can share a basename. Comparing
+    # names left the warning silent in exactly the cases it is for.
+    if series.continues(was):
+        return ""
+    same_id = was.get("series_id") == now.get("series_id")
+    why = ("the same series, rewritten after the point that render reached"
+           if same_id else "a different series")
+    return (f"<p class='warn'>This page was rendered from <b>"
+            f"{html.escape(str(now.get('checkout')))}</b> "
+            f"(<code>{html.escape(str(now.get('series_id')))}</code>, "
+            f"{now.get('runs')} run(s)). The previous render at this address "
             f"came from <b>{html.escape(str(was.get('checkout')))}</b> "
-            f"({was.get('runs')} run(s)) &mdash; a different history, so the "
-            f"numbers below are not a continuation of the ones you saw before. "
-            f"The series is committed per checkout; the folder is shared.</p>")
+            f"(<code>{html.escape(str(was.get('series_id', '?')))}</code>, "
+            f"{was.get('runs')} run(s)) &mdash; {why}, so the numbers below are "
+            f"not a continuation of the ones you saw before. The series is "
+            f"committed per checkout; the folder is shared.</p>")
 
 
 def _provenance(run: dict | None) -> str:

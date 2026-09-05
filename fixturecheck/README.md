@@ -195,12 +195,29 @@ records. Each page is right on its own; what is wrong is reading them in
 sequence at one URL and taking them for one history. A gate that "went from 5/5
 to 3/5" can be somebody rendering from a branch rather than a regression.
 
-So the page **declares its series** the way it already declares its homr — the
-checkout it lives in and how many runs it holds — and the folder remembers what
-last rendered it (`rendered-from.json`). A render arriving from a different
-checkout says so at the top, because that is the moment the numbers at this
-address stopped being a continuation of the ones before them. Rendering
-repeatedly from the same checkout is the ordinary case and says nothing.
+So the page **declares its series** the way it already declares its homr, and
+the folder remembers what last rendered it (`rendered-from.json`).
+
+**The identity is not the checkout's name**, which the first attempt at this got
+wrong: switching branches replaces `series.jsonl` under the same folder name,
+and two checkouts on two hosts can share a basename — so a name comparison stays
+silent in exactly the cases it exists for. `series_id` is the **resolved path**
+and a **root fingerprint** (the first run ever recorded) hashed together: the
+path separates two folders that share a name, the root separates two histories
+that share a path, and it is stable across appends, which it must be or every
+ordinary run would cry wolf.
+
+An id alone still cannot see one thing — the same path and the same first run,
+with the history rewritten after the point the last render reached. So that is
+asked as a **prefix**: the marker keeps the last run it saw, hashed, and the
+next render checks that run is still at that position. `at` is not enough to
+compare a position by, since it has second resolution and two runs a moment
+apart carry the same stamp.
+
+A render that fails either check says so at the top, naming which of the two it
+was. Rendering repeatedly from the same series is the ordinary case and says
+nothing, so the banner means something when it appears. The checkout name stays
+for reading.
 
 **A worktree therefore needs no setup.** The homr venv is host state, the report
 folder is fixed, and a run from anywhere lands at the same address — which is

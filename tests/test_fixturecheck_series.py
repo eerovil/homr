@@ -620,7 +620,8 @@ def test_the_page_says_which_series_it_was_rendered_from(tmp_path, monkeypatch):
     _under(path, [_perfect("a", True)], homr="A")
 
     where = series.origin()
-    assert where == {"checkout": "issue-142", "runs": 1}
+    assert where["checkout"] == "issue-142" and where["runs"] == 1
+    assert where["series_id"] and where["root"]
     # ...and it is on the page beside the homr and the references.
     monkeypatch.setattr(report, "OUT", tmp_path / "report")
     report.OUT.mkdir()
@@ -628,25 +629,109 @@ def test_the_page_says_which_series_it_was_rendered_from(tmp_path, monkeypatch):
     assert "issue-142" in line and "1 run(s)" in line
 
 
-def test_rendering_from_another_checkout_is_said_out_loud(tmp_path, monkeypatch):
+def test_two_checkouts_that_share_a_name_are_not_one_history(tmp_path, monkeypatch):
+    """The defect: the identity was the directory's basename.
+
+    Two checkouts can be called the same thing -- `homr` on two hosts, a
+    worktree named after a branch that another machine also has -- and the
+    comparison then matches, the warning stays silent, and the URL jumps between
+    two records. The name is for reading; the path is part of the identity.
+    """
     from fixturecheck import report
 
     monkeypatch.setattr(report, "OUT", tmp_path / "report")
     report.OUT.mkdir()
 
-    # First render from one checkout: nothing to compare against, so nothing said.
-    assert report._series_change({"checkout": "homr", "runs": 12}) == ""
-    # Rendering again from the same one is the ordinary case.
-    assert report._series_change({"checkout": "homr", "runs": 13}) == ""
+    first = tmp_path / "a" / "homr" / "fixturecheck"
+    second = tmp_path / "b" / "homr" / "fixturecheck"
+    for where in (first, second):
+        where.mkdir(parents=True)
+    _under(first / "series.jsonl", [_perfect("x", True)], homr="A")
+    _under(second / "series.jsonl", [_perfect("x", True)], homr="A")
 
-    # A render from somewhere else is the moment the numbers stopped being a
-    # continuation of the ones at this address before.
-    said = report._series_change({"checkout": "issue-142", "runs": 2})
-    assert "issue-142" in said and "homr" in said
-    assert "not a continuation" in said
+    one = series.origin(first / "series.jsonl")
+    two = series.origin(second / "series.jsonl")
+    assert one["checkout"] == two["checkout"] == "homr"      # the same label...
+    assert one["series_id"] != two["series_id"]              # ...and not the same thing
 
-    # ...and going back says it too, rather than only warning in one direction.
-    assert "homr" in report._series_change({"checkout": "homr", "runs": 13})
+    monkeypatch.setattr(series, "SERIES", first / "series.jsonl")
+    assert report._series_change(one) == ""
+    monkeypatch.setattr(series, "SERIES", second / "series.jsonl")
+    said = report._series_change(two)
+    assert "not a continuation" in said and "a different series" in said
+
+
+def test_a_branch_switch_under_one_path_is_seen(tmp_path, monkeypatch):
+    """One checkout, one name, and `series.jsonl` replaced by another branch's.
+
+    Nothing about the folder changes, so a name comparison cannot see it. The
+    root fingerprint can: a history that starts with a different run is a
+    different history.
+    """
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    checkout = tmp_path / "homr" / "fixturecheck"
+    checkout.mkdir(parents=True)
+    path = checkout / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+
+    _under(path, [_perfect("x", True)], homr="A")
+    assert report._series_change(series.origin()) == ""
+
+    # A different branch is checked out; the committed series is another one.
+    path.unlink()
+    _under(path, [_perfect("y", True)], homr="B")
+    said = report._series_change(series.origin())
+    assert "not a continuation" in said and "a different series" in said
+
+
+def test_a_history_rewritten_after_the_last_render_is_seen(tmp_path, monkeypatch):
+    """Same path, same first run, and the tail replaced.
+
+    A branch that forked from a shared start and went its own way matches on
+    every fingerprint that is stable across appends -- because one that noticed
+    would also fire on every ordinary run. So it is asked as a prefix instead.
+    """
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    checkout = tmp_path / "homr" / "fixturecheck"
+    checkout.mkdir(parents=True)
+    path = checkout / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+
+    _under(path, [_perfect("x", True)], homr="A")
+    shared = path.read_text()
+    _under(path, [_perfect("y", True)], homr="A")
+    assert report._series_change(series.origin()) == ""      # two runs, seen
+
+    # Same opening run, different second one: the tail was rewritten.
+    path.write_text(shared)
+    _under(path, [_perfect("z", False)], homr="A")
+    now = series.origin()
+    said = report._series_change(now)
+    assert "rewritten after the point" in said
+
+
+def test_an_ordinary_append_says_nothing(tmp_path, monkeypatch):
+    """It has to, or every run cries wolf and the banner stops meaning anything."""
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    checkout = tmp_path / "homr" / "fixturecheck"
+    checkout.mkdir(parents=True)
+    path = checkout / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+
+    _under(path, [_perfect("x", True)], homr="A")
+    assert report._series_change(series.origin()) == ""
+    for _ in range(3):
+        _under(path, [_perfect("x", True)], homr="A")
+        assert report._series_change(series.origin()) == ""
 
 
 def test_a_damaged_marker_does_not_stop_the_render(tmp_path, monkeypatch):
