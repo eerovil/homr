@@ -251,8 +251,16 @@ def record_benchmark(pages: dict, tree: Optional[str], in_pod: bool) -> None:
         import hashlib
         with open(manifest, "rb") as reading:
             stamp = hashlib.sha256(reading.read()).hexdigest()[:16]
+    # The revision the numbers came from, resolved from the engine that was
+    # chosen -- not from this checkout, which is where the harness lives and not
+    # necessarily where the homr under test does. A pod runs the tree it was
+    # given, so its revision is the tree's; a pod running its own install cannot
+    # be read from here and says so rather than borrowing ours.
+    revision = series.engine_revision(tree)
+    if in_pod and not tree:
+        revision = "pod:unknown"
     run = series.record_run("choir-bench", "benchmark", records,
-                            references=stamp,
+                            references=stamp, homr=revision,
                             extra={"engine": where})
     quality.write()
     head = run["headline"]

@@ -236,6 +236,103 @@ def test_the_two_harnesses_are_reported_apart(tmp_path):
     assert "not** averaged" in written or "not averaged" in written
 
 
+def test_a_run_that_judged_no_fixtures_cannot_turn_a_failing_gate_green(tmp_path):
+    """The bug: a song-only run recorded `passed: true` over a standing FAIL.
+
+    Most runs judge no committed fixture -- a song system, a retry of one case
+    -- and reading "this run had nothing to say" as "the gate is fine" replaced
+    a real `FAIL - 3/5` with `all 0 committed fixtures are perfect`.
+    """
+    path = tmp_path / "series.jsonl"
+    series.record_run("fixturecheck", "all", [case("a", agree=1)], references="r",
+                      gate={"fixtures": 5, "perfect": 3,
+                            "failing": ["hanget-soi", "sammon-ryosto"],
+                            "passed": False},
+                      path=path)
+    # ...then an ordinary run over song systems only, which judges no fixture.
+    series.record_run("fixturecheck", "one", [case("song-s4", agree=20)],
+                      references="r", gate=None, path=path)
+
+    written = quality.render(path)
+    assert "FAIL" in written
+    assert "hanget-soi" in written and "sammon-ryosto" in written
+    assert "all 0 committed fixtures" not in written
+    assert "Carried forward" in written     # and it says the newer run judged none
+
+
+def test_a_run_with_no_fixtures_in_it_records_no_gate():
+    """`gate_over`'s own rule: no fixtures judged is no opinion, not a pass."""
+    from fixturecheck.__main__ import gate_over
+
+    committed = {"system4", "hanget-soi"}
+    assert gate_over([case("song-s1", agree=5)], committed) is None
+    judged = gate_over([series.CaseRecord("system4", counts={"perfect": True})],
+                       committed)
+    assert judged == {"fixtures": 1, "perfect": 1, "failing": [], "passed": True}
+
+
+def test_nothing_recorded_is_not_a_passing_gate(tmp_path):
+    path = tmp_path / "series.jsonl"
+    series.record_run("fixturecheck", "one", [case("song-s1", agree=5)],
+                      references="r", gate=None, path=path)
+    written = quality.render(path)
+    assert "not evaluated" in written
+    assert "pass" not in written.split("## What this does not measure")[0]
+
+
+def test_the_benchmark_records_the_engine_it_measured_not_this_checkout(tmp_path):
+    """`choir-bench` can be measuring an install, a worktree or a pod.
+
+    Letting it fall through to the series' own default keyed its numbers to the
+    checkout holding the harness -- which is this card's complaint, one level
+    down.
+    """
+    import subprocess as sp
+
+    # A worktree answers with its own git revision, uncommitted work marked.
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    sp.run(["git", "init", "-q"], cwd=tree, check=True)
+    (tree / "homr").mkdir()
+    (tree / "homr" / "main.py").write_text("x = 1\n")
+    sp.run(["git", "add", "-A"], cwd=tree, check=True)
+    sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-qm", "one"], cwd=tree, check=True)
+    head = sp.run(["git", "log", "-1", "--format=%h"], cwd=tree,
+                  capture_output=True, text=True).stdout.strip()
+
+    assert series.engine_revision(str(tree)) == head
+    (tree / "homr" / "main.py").write_text("x = 2\n")
+    assert series.engine_revision(str(tree)) == head + "+dirty"
+
+    # An install answers with what pip wrote down when it installed it.
+    venv = tmp_path / "venv"
+    site = venv / "lib" / "python3.12" / "site-packages" / "homr-0.7.0.post103+ec41559.dist-info"
+    site.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "homr").write_text("#!/bin/sh\n")
+    (site / "direct_url.json").write_text(json.dumps(
+        {"url": "https://github.com/eerovil/homr.git",
+         "vcs_info": {"commit_id": "ec4155991a5d7c17b8049dec2a690c86cba7db96"}}))
+
+    assert series.engine_revision(None, str(venv / "bin" / "homr")) == "installed:ec41559"
+
+    # Without a direct_url the version still carries the commit.
+    (site / "direct_url.json").unlink()
+    assert series.engine_revision(None, str(venv / "bin" / "homr")) == "installed:ec41559"
+
+    # And an engine that cannot be identified says so rather than borrowing ours.
+    assert series.engine_revision(None, "") == "unknown"
+    assert series.engine_revision(None, str(tmp_path / "nope" / "bin" / "homr")) == "unknown"
+
+
+def test_an_explicit_revision_beats_the_checkout(tmp_path):
+    path = tmp_path / "series.jsonl"
+    run = series.record_run("choir-bench", "benchmark", [case("a", agree=1)],
+                            references="r", homr="installed:ec41559", path=path)
+    assert run["homr"] == "installed:ec41559"
+
+
 @pytest.mark.parametrize("outcome", [series.UNREADABLE, series.UNBUILDABLE])
 def test_an_unread_case_carries_no_counts(outcome):
     """It scored nothing; writing zeros would read as a case that scored zero."""

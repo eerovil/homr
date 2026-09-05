@@ -20,7 +20,26 @@ from pathlib import Path
 
 from fixturecheck.compare import Result
 
-OUT = Path(__file__).resolve().parent.parent / "check-report"
+#: Where the report is written, and **outside any checkout by default**.
+#:
+#: It used to be `check-report/` beside the source, which meant every worktree
+#: had its own and none of them was at an address. A report you can only reach
+#: by ssh-ing to the host and knowing which branch produced it is most of what
+#: made "how good is it now" unanswerable. One fixed path instead: every run
+#: from every checkout lands here, so there is one thing to serve and it is
+#: never stale for the reason that somebody ran the harness somewhere else.
+#:
+#: The page names the homr it measured, so a run from a branch overwriting a run
+#: from `main` is legible rather than confusing -- and the series, not this, is
+#: what accumulates.
+OUT = Path(os.environ.get("FIXTURECHECK_REPORT")
+           or Path.home() / ".local/share/homr-fixturecheck/report")
+
+#: Where that directory is reachable from, when somebody has served it. Only
+#: used to print a link and to put one in QUALITY.md: nothing here serves
+#: anything, because a static folder on a tailnet is one `tailscale serve`
+#: command and not a service to keep alive. See fixturecheck/README.md.
+URL = os.environ.get("FIXTURECHECK_REPORT_URL", "")
 
 STYLE = """
 body { font: 14px/1.55 system-ui, sans-serif; margin: 0 auto; max-width: 1150px;

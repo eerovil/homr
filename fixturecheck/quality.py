@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fixturecheck import series
+from fixturecheck import report, series
 
 QUALITY = Path(__file__).resolve().parent.parent / "QUALITY.md"
 
@@ -56,22 +56,43 @@ def _trend(harness: str, path: Path) -> list[dict]:
     return [run for run in series.runs(path) if run.get("harness") == harness]
 
 
-def _gate_line(run: dict | None) -> str:
-    if not run or "gate" not in run:
-        return "_not run_"
-    gate = run["gate"]
+def _last_evaluated_gate(runs_of: list[dict]) -> tuple[dict | None, dict | None]:
+    """The most recent run that actually judged a committed fixture.
+
+    **Not simply the most recent run.** Most runs judge no fixture at all — a
+    song system, a retry of one case — and treating "this run had nothing to say
+    about the gate" as "the gate is fine" is how a standing FAIL gets quietly
+    replaced by `all 0 committed fixtures are perfect`. A gate is a claim about
+    the last time anybody looked, so that is the run it is read from, and the
+    summary says which run that was.
+    """
+    for run in reversed(runs_of):
+        gate = run.get("gate")
+        if gate and gate.get("fixtures"):
+            return gate, run
+    return None, None
+
+
+def _gate_line(runs_of: list[dict]) -> str:
+    gate, from_run = _last_evaluated_gate(runs_of)
+    if not gate:
+        return ("_not evaluated_ — no recorded run has judged a committed fixture.")
+    when = from_run.get("at", "")
+    newest = runs_of[-1] if runs_of else from_run
+    stale = ("" if newest is from_run
+             else f" Carried forward: the run of {newest.get('at', '')} judged none.")
     if gate.get("passed"):
-        return f"**pass** — all {gate.get('fixtures', 0)} committed fixtures are perfect"
+        return (f"**pass** — all {gate['fixtures']} committed fixtures were perfect "
+                f"when last judged, {when}.{stale}")
     failing = ", ".join(f"`{name}`" for name in gate.get("failing", [])) or "unknown"
-    return (f"**FAIL** — {gate.get('perfect', 0)}/{gate.get('fixtures', 0)} perfect; "
-            f"below 100%: {failing}")
+    return (f"**FAIL** — {gate.get('perfect', 0)}/{gate['fixtures']} perfect as of "
+            f"{when}; below 100%: {failing}.{stale}")
 
 
 def render(path: Path = series.SERIES) -> str:
     """The whole summary, from the series and nothing else."""
     fixture_runs = _trend("fixturecheck", path)
     bench_runs = _trend("choir-bench", path)
-    newest = fixture_runs[-1] if fixture_runs else None
 
     lines = ["# How good is the scanning right now?", ""]
     if not fixture_runs and not bench_runs:
@@ -105,6 +126,15 @@ def render(path: Path = series.SERIES) -> str:
             f"| `{run.get('homr', '?')}` | `{run.get('references', '?')}` "
             f"| **{_percent(run)}** | {cases} |")
 
+    if report.URL:
+        lines += [
+            "",
+            f"**[Look at the music]({report.URL.rstrip('/')}/index.html)** — the "
+            "printed band, homr's engraving and the reference, system by system. "
+            "A count can say a system agrees on staves, bars and noteheads and "
+            "still not say whether the parse is the music.",
+        ]
+
     lines += [
         "",
         "The two are **not averaged**. `fixturecheck` scores notes across the "
@@ -114,7 +144,7 @@ def render(path: Path = series.SERIES) -> str:
         "",
         "## The gate",
         "",
-        _gate_line(newest),
+        _gate_line(fixture_runs),
         "",
         "The five committed fixtures are small single systems this repository "
         "owns outright, and they are expected to be **perfect**. Anything less "

@@ -6,16 +6,28 @@ Regenerated from `fixturecheck/series.jsonl` on every run — do not edit by han
 
 | harness | measured | homr | references | of everything judged, right | cases |
 | --- | --- | --- | --- | --- | --- |
-| `fixturecheck` | 2026-09-05T04:29:52+00:00 (one) | `71e6819` | `ff33f48a1bcaac77` | **95.8%** | 5 read |
+| `fixturecheck` | 2026-09-05T04:42:20+00:00 (one) | `71e6819` | `ff33f48a1bcaac77` | **95.8%** | 5 read |
 | `choir-bench` | _never_ | — | — | — | — |
+
+**[Look at the music](https://bazzite.taile8d16e.ts.net:8124/index.html)** — the printed band, homr's engraving and the reference, system by system. A count can say a system agrees on staves, bars and noteheads and still not say whether the parse is the music.
 
 The two are **not averaged**. `fixturecheck` scores notes across the printed systems of the repertoire; `choir-bench` scores staves and bars across the public-domain benchmark pages. They answer different questions and a single figure over both would mean nothing.
 
 ## The gate
 
-**FAIL** — 3/5 perfect; below 100%: `hanget-soi`, `sammon-ryosto`
+**FAIL** — 3/5 perfect as of 2026-09-05T04:42:20+00:00; below 100%: `hanget-soi`, `sammon-ryosto`.
 
 The five committed fixtures are small single systems this repository owns outright, and they are expected to be **perfect**. Anything less is a failure of the run, not a row in a table.
+
+## Over time
+
+| when | harness | tier | homr | references | right |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-05T04:29:52+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 95.8% |
+| 2026-09-05T04:37:25+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 95.8% |
+| 2026-09-05T04:42:20+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 95.8% |
+
+A tier is not a sample of the one above it — a ten-case run and a full sweep are different populations, so read a percentage against runs of the same tier.
 
 ## What this does not measure
 

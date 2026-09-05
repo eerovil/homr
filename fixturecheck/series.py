@@ -78,6 +78,57 @@ def homr_commit() -> str:
     return (head or "nogit") + ("+dirty" if dirty.strip() else "")
 
 
+def engine_revision(tree: str | None = None, binary: str | None = None) -> str:
+    """The revision of a homr that is **not** this checkout.
+
+    `homr_commit` above answers for the code running here, which is the right
+    answer only when the harness and the engine are the same homr —
+    `fixturecheck` runs it in its own interpreter, so for it they are.
+    `choir-bench` they are not: it measures the installed venv, a worktree, or a
+    pod, and keying its numbers to the checkout holding the harness would name a
+    homr that did not produce them. Which is this card's own complaint, one
+    level down.
+
+    A worktree answers with git, uncommitted work marked, matching how a parse
+    is keyed. An install answers with what pip wrote down: `direct_url.json`
+    carries the commit, and the distribution's own version carries it too
+    (`0.7.0.post103+ec41559`), which is the fallback when the install was not
+    made from a URL.
+
+    `unknown` rather than a guess when none of it can be read. A run whose
+    engine cannot be identified is still worth recording — the numbers happened
+    — but not worth attributing to a revision nobody checked.
+    """
+    if tree:
+        rev = subprocess.run(["git", "log", "-1", "--format=%h"], cwd=tree,
+                             capture_output=True, text=True).stdout.strip()
+        if not rev:
+            return "unknown"
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "homr"],
+                               cwd=tree, capture_output=True, text=True).stdout
+        return rev + ("+dirty" if dirty.strip() else "")
+
+    binary = binary or os.environ.get("HOMR_BIN") or ""
+    venv = os.path.dirname(os.path.dirname(binary)) if binary else ""
+    if not venv or not os.path.isdir(venv):
+        return "unknown"
+    for info in sorted(Path(venv).glob("lib/python*/site-packages/homr-*.dist-info")):
+        direct = info / "direct_url.json"
+        if direct.exists():
+            try:
+                commit = json.loads(direct.read_text()).get(
+                    "vcs_info", {}).get("commit_id", "")
+                if commit:
+                    return f"installed:{commit[:7]}"
+            except (ValueError, OSError):
+                pass
+        version = info.name[len("homr-"):-len(".dist-info")]
+        if "+" in version:
+            return "installed:" + version.rsplit("+", 1)[1]
+        return f"installed:{version}"
+    return "unknown"
+
+
 def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -240,13 +291,24 @@ def last_rows(name: str, harness: str = "fixturecheck", path: Path = SERIES) -> 
 
 def record_run(harness: str, tier: str, cases: list[CaseRecord],
                references: str, gate: dict | None = None,
-               extra: dict | None = None, path: Path = SERIES) -> dict:
-    """Write one run of one harness into the series."""
+               extra: dict | None = None, homr: str | None = None,
+               path: Path = SERIES) -> dict:
+    """Write one run of one harness into the series.
+
+    `homr` is the revision that actually read the music, and a caller that can
+    know it must say so. The fallback below reads *this checkout*, which is only
+    the right answer when the harness and the engine are the same code —
+    `fixturecheck` runs homr in its own interpreter, so for it they are.
+    `choir-bench` they are not: it can be measuring the installed venv, a
+    worktree, or a pod, and letting it fall through here would key its numbers
+    to a checkout that did not produce them. Which is this card's own complaint,
+    one level down.
+    """
     run = {
         "at": now(),
         "harness": harness,
         "tier": tier,
-        "homr": os.environ.get("FIXTURECHECK_HOMR") or homr_commit(),
+        "homr": homr or os.environ.get("FIXTURECHECK_HOMR") or homr_commit(),
         "references": references,
         "headline": headline(cases),
         "outcomes": outcomes(cases),

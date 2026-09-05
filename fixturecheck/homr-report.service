@@ -1,0 +1,43 @@
+# The fixture check's report, on the tailnet.
+#
+# The report is a folder of static HTML and PNG. Serving it should have been one
+# command and nothing to maintain:
+#
+#     sudo tailscale serve --bg --https=8124 --set-path=/ \
+#         %h/.local/share/homr-fixturecheck/report
+#
+# Tailscale refuses to serve a *path* without root ("must be root, or be an
+# operator and able to run 'sudo tailscale'"), while proxying a *port* needs no
+# privilege at all. So this holds the folder open on loopback and Tailscale
+# proxies that instead:
+#
+#     tailscale serve --bg --https=8124 127.0.0.1:8125
+#
+# Either shape gives the same address. The root one is fewer moving parts and is
+# the one to switch to if you would rather type a password once; this one is
+# what an unprivileged agent can set up, and it is what is running.
+#
+# Install:
+#     cp fixturecheck/homr-report.service ~/.config/systemd/user/
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now homr-report
+#
+# Nothing writes here except a run of the harness, which writes to the same
+# fixed path from whatever checkout it ran in -- that is the point of the path
+# being outside the checkouts (see fixturecheck/report.py).
+
+[Unit]
+Description=fixturecheck report (static, loopback only; Tailscale proxies it)
+After=network.target
+
+[Service]
+# Loopback only, deliberately: the tailnet reaches this through `tailscale
+# serve`, which authenticates. Binding it wider would put the report on every
+# network this machine is on.
+ExecStart=/usr/bin/python3 -m http.server 8125 --bind 127.0.0.1 \
+    --directory %h/.local/share/homr-fixturecheck/report
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

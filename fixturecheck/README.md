@@ -76,6 +76,36 @@ are **never averaged**: this one scores notes across the printed systems of the
 repertoire, that one scores staves and bars across the benchmark pages, and one
 figure over both would mean nothing.
 
+## Reaching the report
+
+The report is written to **one fixed directory outside every checkout** —
+`~/.local/share/homr-fixturecheck/report` by default, `FIXTURECHECK_REPORT` to
+move it. It used to be `check-report/` beside the source, so every worktree had
+its own and none of them was at an address; reaching one meant ssh and knowing
+which branch had produced it, which is most of what made "how good is it now"
+unanswerable.
+
+On this host it is on the tailnet at **https://bazzite.taile8d16e.ts.net:8124/**,
+which reads on a phone as well as a desktop. Two moving parts, and only because
+Tailscale will not serve a *path* without root while it proxies a *port* for
+anybody:
+
+    systemctl --user enable --now homr-report     # fixturecheck/homr-report.service
+    tailscale serve --bg --https=8124 127.0.0.1:8125
+
+With root it is one command and no service at all, and that is the better shape
+if you would rather type a password once:
+
+    sudo tailscale serve --bg --https=8124 --set-path=/ \
+        ~/.local/share/homr-fixturecheck/report
+
+The static server binds **loopback only**. The tailnet reaches it through
+`tailscale serve`, which authenticates; binding it wider would put the report on
+every network this machine is on.
+
+Set `FIXTURECHECK_REPORT_URL` to that address and a run prints the link instead
+of a path, and `QUALITY.md` gains one to the pictures.
+
 ## What a run keeps, and what it does not
 
 Per case: the counts, and the **first three disagreements** — not the first

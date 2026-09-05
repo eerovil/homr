@@ -92,6 +92,12 @@ def gate_over(records: list[series.CaseRecord], committed: set[str]) -> dict:
     worse than reporting none.
     """
     judged = [r for r in records if r.name in committed]
+    if not judged:
+        # No opinion, and `None` is how that is said. Returning `passed: True`
+        # here was a real bug: a song-only run would then record a gate nobody
+        # evaluated, and the summary would replace a standing FAIL with "all 0
+        # committed fixtures are perfect".
+        return None
     failing = [r.name for r in judged if not r.counts.get("perfect")]
     return {"fixtures": len(judged), "perfect": len(judged) - len(failing),
             "failing": sorted(failing), "passed": not failing}
@@ -170,7 +176,9 @@ def run_cases(names: list[str], tier: str) -> int:
     quality.write()
 
     if entries:
-        print("\n" + str(report.index_page(entries, tier, run)))
+        written = report.index_page(entries, tier, run)
+        print("\n" + (f"{report.URL.rstrip('/')}/index.html" if report.URL
+                      else str(written)))
     head = run["headline"]
     print(f"\n{head['percent']:.1f}% of {head['judged']} judged are right "
           f"(homr {run['homr']}, references {run['references']})")
@@ -184,7 +192,7 @@ def run_cases(names: list[str], tier: str) -> int:
               f"  run `python -m fixturecheck freeze` once you have looked at why")
     print(f"recorded in {series.SERIES.name}; summary in {quality.QUALITY.name}")
 
-    if not gate["passed"]:
+    if gate and not gate["passed"]:
         print(f"\nGATE FAILED: {', '.join(gate['failing'])} "
               f"— the committed fixtures are expected to be perfect")
         return 1
