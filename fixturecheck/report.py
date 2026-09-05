@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from fixturecheck import bars, cases, compare
+from fixturecheck import bars, cases, compare, series
 from fixturecheck.compare import Result
 
 #: Where the report is written, and **outside any checkout by default**.
@@ -78,6 +78,8 @@ p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
 p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+tr.stale td { color: #6b6b6b; }
+span.when { font-size: 11px; color: #8a8a8a; }
 tr.detail td { background: #fcfcfc; padding: 0 9px 10px; }
 tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
                     padding: 6px 0; }
@@ -128,17 +130,30 @@ def _provenance(run: dict | None) -> str:
 
 
 def _gate(run: dict | None) -> str:
-    if not run or "gate" not in run or not run["gate"].get("fixtures"):
+    """The gate over all five committed fixtures, not over this run's share.
+
+    The same figure `QUALITY.md` publishes, and it has to be: the table below
+    now lists every case at its own latest measurement, so a banner reporting
+    only what this run happened to judge sat green above two failing rows. A run
+    of one fixture used to say "all 1 committed fixture(s) in this run are
+    perfect" there, which is true and reads as the opposite of what it means.
+    """
+    gate = series.published_gate(series.runs())
+    if not gate:
         return ""
-    gate = run["gate"]
-    if gate.get("passed"):
+    if gate["passed"]:
         return (f"<p class='pass'>Gate <b>passed</b>: all {gate['fixtures']} committed "
-                f"fixture(s) in this run are perfect.</p>")
-    failing = html.escape(", ".join(gate.get("failing", [])))
+                f"fixtures stand perfect, latest as of "
+                f"{html.escape(gate['as_of'])}.</p>")
+    failing = html.escape(", ".join(gate["failing"]))
+    below = f" Below 100%: <b>{failing}</b>." if failing else ""
+    never = ""
+    if gate["unevaluated"]:
+        never = (f" Never judged: <b>{html.escape(', '.join(gate['unevaluated']))}</b>.")
     return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['perfect']}/{gate['fixtures']} "
-            f"committed fixture(s) perfect. Below 100%: <b>{failing}</b>. These are "
-            f"small systems this repository owns outright and are expected to be "
-            f"exactly right.</p>")
+            f"committed fixtures perfect, each counted at its own latest result."
+            f"{below}{never} These are small systems this repository owns outright "
+            f"and are expected to be exactly right.</p>")
 
 
 #: Said on the page as well as in QUALITY.md, because the table above it invites
@@ -428,6 +443,42 @@ def _staves(entry: dict) -> str:
     return f"{said} <span class='down'>({blame})</span>" if blame else said
 
 
+def _with_standing(entries: list[dict]) -> list[dict]:
+    """This run's cases, plus every other case as it last stood.
+
+    A run of one case used to produce an index of one case, and the other
+    ninety-seven pages sat on disk with nothing linking to them — so the
+    cheapest thing you can do, re-reading a single system, threw away the view
+    of everything else. The series has held each case's own last measurement all
+    along; this reads it.
+
+    A case this run measured keeps its live entry, including what moved. Every
+    other case is shown as it last stood, marked with when that was, so a fresh
+    number and a month-old one are not read as the same thing.
+    """
+    fresh = {entry["name"] for entry in entries}
+    combined = [dict(entry, measured="") for entry in entries]
+    for name, (case, when) in series.standing("fixturecheck").items():
+        if name in fresh or case.get("outcome", series.READ) != series.READ:
+            continue
+        page = OUT / f"{name}.html"
+        counts = {k: case.get(k, 0) for k in
+                  ("agree", "voice", "pitch", "size", "timing", "unison",
+                   "staves_page", "staves_homr")}
+        scored = sum(counts[k] for k in ("agree", "voice", "pitch", "size", "timing"))
+        combined.append({
+            "name": name,
+            "page": page.name if page.exists() else "",
+            "score": 100.0 * counts["agree"] / scored if scored else 0.0,
+            "structure": int(counts["staves_page"] != counts["staves_homr"]),
+            "at_fault": case.get("at_fault", ""),
+            "before": None,
+            "measured": when,
+            **counts,
+        })
+    return combined
+
+
 def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
     """The table of every case in this run, with what moved since the last one.
 
@@ -438,6 +489,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
     to another, and no figure anywhere distinguished them.
     """
     OUT.mkdir(parents=True, exist_ok=True)
+    entries = _with_standing(entries)
     total = {k: sum(e[k] for e in entries)
              for k in ("agree", "voice", "pitch", "size", "timing", "structure", "unison")}
     # Notes homr lost and beats it moved are faults, and are in the denominator.
@@ -453,8 +505,21 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
         better = now < was if field != "agree" else now > was
         return f"{now} <span class='{'up' if better else 'down'}'>({now - was:+d})</span>"
 
+    def named(entry: dict) -> str:
+        """The case, linked when its page is on disk, and when it was measured."""
+        label = html.escape(entry["name"])
+        link = (f"<a href='{html.escape(entry['page'])}'>{label}</a>"
+                if entry.get("page") else label)
+        when = entry.get("measured") or ""
+        # Only the older ones are stamped: everything unstamped is this run, and
+        # dating every row would bury the distinction it exists to make.
+        stamp = (f"<br><span class='when'>{html.escape(when[:10])}</span>"
+                 if when else "")
+        return link + stamp
+
     rows = "".join(
-        f"<tr><td><a href='{html.escape(e['page'])}'>{html.escape(e['name'])}</a></td>"
+        f"<tr{' class=\'stale\'' if e.get('measured') else ''}>"
+        f"<td>{named(e)}</td>"
         f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
         f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
         f"<td>{cell(e, 'timing')}</td>"
@@ -476,10 +541,12 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
 {_provenance(run)}
 {_gate(run)}
 <p class="lead">{len(entries)} case(s), each one printed system judged against a
-reference built from its song's cleaned score. Sorted worst first. A number in
-green or red is what changed since the last run of the same case &mdash; taken
-from the series, so a run of ten cases is compared against each case's own last
-measurement rather than against whatever ran immediately before.</p>
+reference built from its song's cleaned score. Sorted worst first. <b>Every case
+the series knows is listed, each at its own latest measurement</b> &mdash; a
+dated, greyed row was not re-read by this run, and an undated one was. A run of
+one case therefore still shows the whole picture rather than replacing it. A
+number in green or red is what changed since the last run of that same
+case.</p>
 <div class="sum">
   <div><b>{total['agree']}</b>agree</div>
   <div><b>{total['voice']}</b>wrong voice</div>

@@ -56,55 +56,8 @@ def _trend(harness: str, path: Path) -> list[dict]:
     return [run for run in series.runs(path) if run.get("harness") == harness]
 
 
-def published_gate(runs_of: list[dict]) -> dict | None:
-    """The gate over **all** the committed fixtures, not over one run's worth.
-
-    Reading it off the newest run that judged anything was still wrong, and the
-    hole is bigger than the zero-fixture one it replaced: `fixturecheck one
-    system4` judges one fixture, passes it, and publishes `1/1 perfect` — so a
-    standing `FAIL — 3/5` goes green because somebody re-ran a fixture that was
-    never the problem. Both of the failing ones are still failing and nothing
-    said so.
-
-    A gate is a claim about the whole set, so it is built from the whole set:
-    each committed fixture's **own latest standing result**, taken across the
-    series. A run can then only ever move the fixtures it actually ran, which is
-    the property that was missing. A fixture nobody has judged is not a pass —
-    it is counted as unevaluated and holds the gate open, because "we have never
-    looked" and "we looked and it was fine" are not the same claim.
-
-    The roster comes out of the runs themselves (`committed`), so the summary
-    does not need the fixtures on disk and an old series stays readable.
-    """
-    roster: list[str] = []
-    for run in runs_of:
-        if run.get("committed"):
-            roster = list(run["committed"])
-    if not roster:
-        return None
-
-    standing: dict[str, tuple[bool, str]] = {}
-    for run in runs_of:
-        for name in roster:
-            case = run.get("cases", {}).get(name)
-            if case and case.get("outcome", series.READ) == series.READ \
-                    and "perfect" in case:
-                standing[name] = (bool(case["perfect"]), run.get("at", ""))
-
-    failing = sorted(n for n in roster if n in standing and not standing[n][0])
-    unevaluated = sorted(n for n in roster if n not in standing)
-    return {
-        "fixtures": len(roster),
-        "perfect": sum(1 for n in roster if standing.get(n, (False,))[0]),
-        "failing": failing,
-        "unevaluated": unevaluated,
-        "passed": not failing and not unevaluated,
-        "as_of": max((when for _, when in standing.values()), default=""),
-    }
-
-
 def _gate_line(runs_of: list[dict]) -> str:
-    gate = published_gate(runs_of)
+    gate = series.published_gate(runs_of)
     if not gate:
         return "_not evaluated_ — no recorded run has judged a committed fixture."
     tail = ""

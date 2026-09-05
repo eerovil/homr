@@ -322,26 +322,57 @@ def test_the_published_gate_is_each_fixtures_own_latest_result(tmp_path):
     """A run moves the fixtures it ran, and only those."""
     path = tmp_path / "series.jsonl"
     _fixture_run(path, [_perfect(n, n not in ("d", "e")) for n in "abcde"], tier="all")
-    gate = quality.published_gate(series.runs(path))
+    gate = series.published_gate(series.runs(path))
     assert (gate["perfect"], gate["fixtures"]) == (3, 5)
     assert gate["failing"] == ["d", "e"] and not gate["passed"]
 
     # Fixing one of them, on its own, moves exactly one.
     _fixture_run(path, [_perfect("d", True)])
-    gate = quality.published_gate(series.runs(path))
+    gate = series.published_gate(series.runs(path))
     assert (gate["perfect"], gate["fixtures"]) == (4, 5)
     assert gate["failing"] == ["e"] and not gate["passed"]
 
     # And fixing the last one passes it, because now all five stand perfect.
     _fixture_run(path, [_perfect("e", True)])
-    assert quality.published_gate(series.runs(path))["passed"]
+    assert series.published_gate(series.runs(path))["passed"]
+
+
+def test_a_one_case_run_still_reports_every_case(tmp_path, monkeypatch):
+    """Re-reading one system used to throw away the view of everything else.
+
+    The index listed exactly what the run judged, so a one-case run produced a
+    one-case report while the other pages sat on disk with nothing linking to
+    them. The series has held each case's own last measurement all along.
+    """
+    from fixturecheck import report
+
+    path = tmp_path / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+
+    _fixture_run(path, [_perfect(n, n != "d") for n in "abcde"], tier="all")
+
+    live = [{"name": "a", "page": "a.html", "score": 100.0, "agree": 10,
+             "voice": 0, "pitch": 0, "size": 0, "timing": 0, "structure": 0,
+             "staves_page": 1, "staves_homr": 1, "at_fault": "", "unison": 0,
+             "before": None}]
+    combined = report._with_standing(live)
+
+    assert sorted(e["name"] for e in combined) == list("abcde")
+    # The one this run read carries no date; the rest carry when they were read.
+    fresh = [e for e in combined if not e["measured"]]
+    assert [e["name"] for e in fresh] == ["a"]
+    assert all(e["measured"] for e in combined if e["name"] != "a")
+    # And a carried-forward case keeps its own numbers, including a failing one.
+    failing = next(e for e in combined if e["name"] == "d")
+    assert failing["pitch"] == 2 and failing["score"] < 100.0
 
 
 def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path):
     """"We have never looked" is not "we looked and it was fine"."""
     path = tmp_path / "series.jsonl"
     _fixture_run(path, [_perfect(n, True) for n in "abc"])
-    gate = quality.published_gate(series.runs(path))
+    gate = series.published_gate(series.runs(path))
     assert not gate["passed"]
     assert gate["unevaluated"] == ["d", "e"]
     assert "Never judged" in quality.render(path)

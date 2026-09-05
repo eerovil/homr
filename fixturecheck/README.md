@@ -194,6 +194,18 @@ every network this machine is on.
 Set `FIXTURECHECK_REPORT_URL` to that address and a run prints the link instead
 of a path, and `QUALITY.md` gains one to the pictures.
 
+## The report shows every case, not the last run
+
+The index lists **every case the series knows, each at its own latest
+measurement**, with the ones this run re-read shown undated and the rest dated
+and greyed. Before, it listed only what the run judged — so re-reading a single
+system, the cheapest thing you can do, produced a one-case report while the
+other ninety-seven pages sat on disk with nothing linking to them.
+
+The gate banner on that page is the same published gate `QUALITY.md` carries,
+for the same reason: a banner reporting only this run's share once sat green
+above two failing rows.
+
 ## What a run keeps, and what it does not
 
 Per case: the counts, and the **first three disagreements** — not the first

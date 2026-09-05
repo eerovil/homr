@@ -263,8 +263,15 @@ def append(record: dict, path: Path = SERIES) -> dict:
     return record
 
 
-def runs(path: Path = SERIES) -> list[dict]:
-    """Every run recorded, oldest first. A damaged line is skipped, not fatal."""
+def runs(path: Path | None = None) -> list[dict]:
+    """Every run recorded, oldest first. A damaged line is skipped, not fatal.
+
+    `SERIES` is read at call time, not bound as a default, so pointing the
+    module at another file actually moves every reader. Bound as a default it
+    did not, and a test that redirected the series still read the host's real
+    one -- which is the sort of thing that passes and means nothing.
+    """
+    path = path or SERIES
     if not path.exists():
         return []
     found = []
@@ -303,6 +310,71 @@ def previous_cases(harness: str, path: Path = SERIES) -> dict:
         for name, case in run.get("cases", {}).items():
             standing[name] = case
     return standing
+
+
+def published_gate(runs_of: list[dict]) -> dict | None:
+    """The gate over **all** the committed fixtures, not over one run's worth.
+
+    Reading it off the newest run that judged anything was still wrong, and the
+    hole is bigger than the zero-fixture one it replaced: `fixturecheck one
+    system4` judges one fixture, passes it, and publishes `1/1 perfect` — so a
+    standing `FAIL — 3/5` goes green because somebody re-ran a fixture that was
+    never the problem. Both of the failing ones are still failing and nothing
+    said so.
+
+    A gate is a claim about the whole set, so it is built from the whole set:
+    each committed fixture's **own latest standing result**, taken across the
+    series. A run can then only ever move the fixtures it actually ran, which is
+    the property that was missing. A fixture nobody has judged is not a pass —
+    it is counted as unevaluated and holds the gate open, because "we have never
+    looked" and "we looked and it was fine" are not the same claim.
+
+    The roster comes out of the runs themselves (`committed`), so the summary
+    does not need the fixtures on disk and an old series stays readable.
+    """
+    roster: list[str] = []
+    for run in runs_of:
+        if run.get("committed"):
+            roster = list(run["committed"])
+    if not roster:
+        return None
+
+    standing: dict[str, tuple[bool, str]] = {}
+    for run in runs_of:
+        for name in roster:
+            case = run.get("cases", {}).get(name)
+            if case and case.get("outcome", READ) == READ \
+                    and "perfect" in case:
+                standing[name] = (bool(case["perfect"]), run.get("at", ""))
+
+    failing = sorted(n for n in roster if n in standing and not standing[n][0])
+    unevaluated = sorted(n for n in roster if n not in standing)
+    return {
+        "fixtures": len(roster),
+        "perfect": sum(1 for n in roster if standing.get(n, (False,))[0]),
+        "failing": failing,
+        "unevaluated": unevaluated,
+        "passed": not failing and not unevaluated,
+        "as_of": max((when for _, when in standing.values()), default=""),
+    }
+
+
+
+def standing(harness: str, path: Path | None = None) -> dict:
+    """Each case as it last stood, with **when** that was.
+
+    `previous_cases` answers what a case last measured; this also answers how
+    long ago, which is what makes a list of every case readable rather than a
+    row of numbers with no idea which are fresh. Same walk, oldest run first, so
+    the newest measurement of each case wins.
+    """
+    held: dict = {}
+    for run in runs(path):
+        if run.get("harness") != harness:
+            continue
+        for name, case in run.get("cases", {}).items():
+            held[name] = (case, run.get("at", ""))
+    return held
 
 
 def last_rows(name: str, harness: str = "fixturecheck", path: Path = SERIES) -> tuple:
