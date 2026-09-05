@@ -13,6 +13,7 @@ against each other without working out what is being shown.
 from __future__ import annotations
 
 import html
+import json
 import os
 import shutil
 import subprocess
@@ -122,8 +123,58 @@ def judged_over(total: dict) -> int:
     return sum(total.get(k, 0) for k in ("agree", "voice", "pitch", "size", "timing"))
 
 
+#: What last rendered this folder, so a render from somewhere else is visible.
+RENDERED_FROM = "rendered-from.json"
+
+
+def _series_change(now: dict) -> str:
+    """Say when the history behind this URL is not the one it showed before.
+
+    The folder is shared and the series is not, so two checkouts render here
+    from two different records. Each page is right on its own; what is wrong is
+    reading them in sequence at one address and taking them for one history —
+    a gate that went from 5/5 to 3/5 because somebody rendered from a branch
+    looks exactly like a gate that regressed.
+
+    Only a *change* is worth a banner. Rendering repeatedly from the same series
+    is the ordinary case and says nothing.
+    """
+    stamp = OUT / RENDERED_FROM
+    was = None
+    if stamp.exists():
+        try:
+            was = json.loads(stamp.read_text())
+        except ValueError:
+            was = None
+    stamp.write_text(json.dumps(now))
+    if not was:
+        return ""
+    # **Compared by identity, never by the label.** A checkout's directory name
+    # is not a history: switching branches replaces `series.jsonl` under the
+    # same name, and two checkouts on two hosts can share a basename. Comparing
+    # names left the warning silent in exactly the cases it is for.
+    if series.continues(was):
+        return ""
+    same_id = was.get("series_id") == now.get("series_id")
+    why = ("the same series, rewritten after the point that render reached"
+           if same_id else "a different series")
+    return (f"<p class='warn'>This page was rendered from <b>"
+            f"{html.escape(str(now.get('checkout')))}</b> "
+            f"(<code>{html.escape(str(now.get('series_id')))}</code>, "
+            f"{now.get('runs')} run(s)). The previous render at this address "
+            f"came from <b>{html.escape(str(was.get('checkout')))}</b> "
+            f"(<code>{html.escape(str(was.get('series_id', '?')))}</code>, "
+            f"{was.get('runs')} run(s)) &mdash; {why}, so the numbers below are "
+            f"not a continuation of the ones you saw before. The series is "
+            f"committed per checkout; the folder is shared.</p>")
+
+
 def _provenance(run: dict | None) -> str:
-    """Which homr, and which references. Without both, no number here is readable."""
+    """Which homr, which references, and **which series**.
+
+    Without all three no number here is readable: the first two say what was
+    measured, and the third says whose record it is being counted into.
+    """
     if not run:
         return ""
     drifted = run.get("reference_drift", {}).get("changed", [])
@@ -136,8 +187,11 @@ def _provenance(run: dict | None) -> str:
     lost = tally.get("unreadable", 0) + tally.get("unbuildable", 0)
     missed = (f" {lost} case(s) could not be read and are recorded as such rather "
               f"than skipped." if lost else "")
+    where = series.origin()
     return (f"<p class='prov'>homr <b>{html.escape(str(run.get('homr', '?')))}</b>, "
             f"references <b>{html.escape(str(run.get('references', '?')))}</b>, "
+            f"series <b>{html.escape(str(where['checkout']))}</b> "
+            f"({where['runs']} run(s)), "
             f"{html.escape(str(run.get('at', '')))}{warn}.{missed}</p>")
 
 
@@ -660,6 +714,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
 <title>fixture check &mdash; {html.escape(tier)}</title><style>{STYLE}</style></head><body>
 <h1>Fixture check &mdash; {html.escape(tier)}</h1>
 {_controls([e['name'] for e in entries])}
+{_series_change(series.origin())}
 {_provenance(run)}
 {_gate(run)}
 <p class="lead">{_counted_note(entries, counted)}{len(entries)} case(s), each one printed system judged against a

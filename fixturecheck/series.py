@@ -33,6 +33,7 @@ then the only table in the file, which is the point.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -372,6 +373,117 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
         "references": under[1],
     }
 
+
+
+def origin(path: Path | None = None) -> dict:
+    """Which history this is — as an identity, not as a name.
+
+    The series is **per checkout and committed** — deliberately, so the record
+    travels with the code that made it — while the report folder is fixed and
+    shared, so there is one address to serve. Both are right and neither should
+    move, but together they leave a seam: two checkouts render into the same
+    folder from two different histories, each page internally consistent, the
+    URL alternating between them with nothing saying so.
+
+    **The checkout's directory name does not identify a history**, which the
+    first attempt at this got wrong. One checkout switching branches replaces
+    `series.jsonl` with a different committed history and keeps its name; two
+    checkouts on two hosts can share a basename. Either way the label matches,
+    the warning stays silent, and the seam is exactly as open as before.
+
+    So `series_id` is the **resolved path** and a **root fingerprint** — the
+    first run ever recorded — hashed together. Both halves earn their place: the
+    path separates two folders that share a name, and the root separates two
+    histories that share a path. It is stable across appends, which it has to be
+    or every ordinary run would cry wolf.
+
+    `checkout`, `runs` and `last_at` come along, the first for display and the
+    other two so `continues` can ask whether what a reader saw is still a prefix
+    of what is here now.
+    """
+    path = path or SERIES
+    found = runs(path)
+    root = ""
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if line.strip():
+                root = hashlib.sha256(line.strip().encode()).hexdigest()[:16]
+                break
+    resolved = str(path.resolve())
+    return {
+        "checkout": resolved.split(os.sep)[-3] if os.sep in resolved else resolved,
+        "path": resolved,
+        "root": root,
+        "series_id": hashlib.sha256(f"{resolved}\0{root}".encode()).hexdigest()[:16],
+        "runs": len(found),
+        "last_at": found[-1].get("at", "") if found else "",
+        # **The whole history shown, hashed** — not its last run. `continues`
+        # compares this against the first `runs` runs found next time, which is
+        # what makes it a prefix check rather than an endpoint check.
+        "prefix": prefix_fingerprint(found),
+        # The last run alone, kept only so a marker written by an older version
+        # still means something for one render. Nothing new compares it.
+        "last_run": run_fingerprint(found[-1]) if found else "",
+    }
+
+
+def run_fingerprint(run: dict) -> str:
+    """One run, as a value — so two runs can be told apart by what they are."""
+    return hashlib.sha256(
+        json.dumps(run, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def prefix_fingerprint(some: list[dict]) -> str:
+    """A run of history, as one value.
+
+    Every run, in order, canonically — so a change anywhere inside it changes
+    this, and appending after it does not. Fingerprinting only the last run was
+    the defect: `[A, B, C]` and `[A, X, C, D]` share their first run, their path
+    and the run at the older endpoint, so an endpoint check calls them the same
+    history while the middle of it has been replaced under a reader.
+    """
+    return hashlib.sha256(
+        json.dumps(some, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def continues(previous: dict | None, path: Path | None = None) -> bool:
+    """Is the history here still the one that render saw, carried on?
+
+    An identity alone cannot answer this. Same folder, same first run, and the
+    history rewritten after the point the last render reached — a branch that
+    forked from a shared start and went its own way — reads as the same series
+    by every stable fingerprint, because a fingerprint that noticed would also
+    change on every ordinary append.
+
+    So the question is asked as a **prefix**, and it has to be the whole prefix.
+    Checking the run at the older endpoint is not the same thing and misses the
+    ordinary shape of a rewrite: `[A, B, C]` against `[A, X, C, D]` agrees on
+    the path, the first run and the run at that endpoint, and disagrees about
+    what happened in between. So every run the last render showed is hashed
+    together, and all of them must still be there, in order, unchanged.
+
+    An append leaves them untouched and says nothing, which is the property that
+    makes a banner worth reading.
+    """
+    if not previous:
+        return True
+    if previous.get("series_id") != origin(path)["series_id"]:
+        return False
+    seen = int(previous.get("runs", 0) or 0)
+    if seen <= 0:
+        return True
+    here = runs(path)
+    if len(here) < seen:
+        return False        # shorter than what was already shown: rewritten
+    was = previous.get("prefix")
+    if was:
+        return prefix_fingerprint(here[:seen]) == was
+    # Markers written before the whole prefix was recorded. One render of the
+    # weaker check rather than a rewrite nobody can evidence; the next marker
+    # carries the prefix and this is never reached again.
+    if previous.get("last_run"):
+        return run_fingerprint(here[seen - 1]) == previous["last_run"]
+    return here[seen - 1].get("at", "") == previous.get("last_at", "")
 
 
 def identity(run: dict) -> tuple:
