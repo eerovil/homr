@@ -67,8 +67,9 @@ tr.size  td { background: #fff8e1; }
 tr.timing td { background: #eef4fb; }
 tr.meter td { background: #f0e6fb; font-weight: 600; }
 tr.structure td { background: #f3e8fb; font-weight: 600; }
-tr.unison td { background: #f4f4f7; }
+tr.unison td { background: #fdf6e3; }
 td.ok { color: #1c5c2c; } td.no { color: #8a1f1f; font-weight: 600; }
+td.warn { color: #8a5a00; font-weight: 600; }
 .sum { display: flex; gap: 22px; flex-wrap: wrap; margin: 8px 0 16px; }
 .sum b { font-size: 20px; display: block; }
 .up { color: #1c5c2c; font-weight: 600; } .down { color: #8a1f1f; font-weight: 600; }
@@ -493,6 +494,13 @@ def _bar_detail_row(case, parsed: Path, row) -> str:
         f"</div>{pictures}</details></td></tr>")
 
 
+def _verdict_class(kind: str) -> str:
+    """Green, amber, red. A unison is amber: nothing was misread and a voice is missing."""
+    if kind == "agree":
+        return "ok"
+    return "warn" if kind == "unison" else "no"
+
+
 def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
     """Write one case's page and return its filename."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -538,7 +546,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
         f"<tr class='{row.kind if row.kind != 'agree' else ''}'>"
         f"<td>{html.escape(row.where)}</td><td>{html.escape(row.page)}</td>"
         f"<td>{html.escape(row.homr)}</td>"
-        f"<td class='{'ok' if row.kind in ('agree', 'unison') else 'no'}'>"
+        f"<td class='{_verdict_class(row.kind)}'>"
         f"{html.escape(row.verdict)}</td></tr>"
         + _bar_detail_row(case, parsed, row)
         for row in result.rows)
@@ -558,7 +566,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
   <div><b>{result.size}</b>different number of notes {moved('size')}</div>
   <div><b>{result.timing}</b>beat shifted {moved('timing')}</div>
   <div><b>{result.meter}</b>bar(s) in the wrong meter</div>
-  <div><b>{result.unison}</b>unisons</div>
+  <div><b>{result.warnings}</b>unison(s) written as one voice</div>
 </div>
 {structure}
 

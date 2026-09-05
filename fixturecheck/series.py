@@ -313,6 +313,21 @@ def previous_cases(harness: str, path: Path = SERIES) -> dict:
     return standing
 
 
+def warnings_only(case: dict) -> bool:
+    """Is a warning the only reason this case is not perfect?
+
+    One definition, read by the run's own gate and by the published one, because
+    the two say the same sentence in two places and a fixture that drifted
+    between them would be described as a wrong note in one and a warning in the
+    other.
+    """
+    if not case.get("unison", 0):
+        return False
+    if any(case.get(kind, 0) for kind in ("voice", "pitch", "size", "timing", "meter")):
+        return False
+    return case.get("staves_page") == case.get("staves_homr")
+
+
 def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | None:
     """The gate over **all** the committed fixtures, not over one run's worth.
 
@@ -358,7 +373,7 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
         for name in roster:
             case = run.get("cases", {}).get(name)
             if case and case.get("outcome", READ) == READ and "perfect" in case:
-                latest[name] = (bool(case["perfect"]), run.get("at", ""))
+                latest[name] = (bool(case["perfect"]), run.get("at", ""), case)
 
     failing = sorted(n for n in roster if n in latest and not latest[n][0])
     unevaluated = sorted(n for n in roster if n not in latest)
@@ -366,9 +381,10 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
         "fixtures": len(roster),
         "perfect": sum(1 for n in roster if latest.get(n, (False,))[0]),
         "failing": failing,
+        "warned": sorted(n for n in failing if warnings_only(latest[n][2])),
         "unevaluated": unevaluated,
         "passed": not failing and not unevaluated,
-        "as_of": max((when for _, when in latest.values()), default=""),
+        "as_of": max((when for _, when, _case in latest.values()), default=""),
         "homr": under[0],
         "references": under[1],
     }
