@@ -113,12 +113,28 @@ where it drew one. Finding a bar in a photograph is not: it needs the barlines,
 which come from **homr's own detection**
 (`bars.geometry`, the same segmentation pass `scripts/homr_staves.py` uses in
 the choir app, cached per case). The lines have to cut the system into exactly
-the bars the reference says it holds, and a system's *opening* rule is normally
-not detected — it is one of a pair with the bracket — so `n` bars usually come
-back as `n` lines and the staff's own left edge is added back as the first
-boundary. Anything else is **refused**, and the row says why. A crop of the
-wrong bar is a confident picture of the wrong music underneath a finding, which
-is the mistake this whole harness exists to stop.
+the bars the score says it holds, and two things are corrected first — each on
+its own evidence, never on the count:
+
+- **The opening rule is normally not detected**, being one of a pair with the
+  bracket. Whether it is missing is decided by *where it would be*: if the first
+  detected line is nowhere near the staff's own left edge, the edge is added
+  back as the first boundary.
+- **Two lines too close together are one boundary** — a double barline, thin
+  against thick, or a line the detector invented beside a real one. Measured
+  against the system's own median gap, since how wide a bar is depends on how
+  many the system holds. The right-hand line is kept, because at a thin-thick
+  double bar the music ends at the thick one.
+
+Anything left over is **refused**, and the row says what was found. A crop of
+the wrong bar is a confident picture of the wrong music underneath a finding,
+which is the mistake this whole harness exists to stop.
+
+Deciding either of these **by the count is not safe**, and `sammon-ryosto` is
+why. Its detection missed the opening rule *and* found one stray line, which
+came to exactly four bars' worth of boundaries and was accepted — so every crop
+on that case was one bar to the right of the row that named it. Counting cannot
+tell two cancelling errors from none.
 
 Song systems keep the first-three-faults treatment in the series. This is the
 report, and the report has always been where the music is shown.

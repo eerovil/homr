@@ -115,8 +115,35 @@ def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out():
     """
     geo = {"bar_lines": [0.218, 0.332, 0.661, 0.710, 0.960],
            "staves": [{"top": 0.2, "bottom": 0.33, "left": 0.042, "right": 0.958}]}
+    # Both errors are corrected on their own evidence: the opening is added
+    # back because the first line is nowhere near the staff's edge, and the
+    # 0.049 gap is folded away because it is a fifth of a real bar here.
+    assert bars.boundaries_for(geo, 4) == [0.042, 0.218, 0.332, 0.710, 0.960]
+    # Which means bar 2 is bar 2 -- it used to come out as bar 3's box.
+    box = bars.bar_box(geo, 1, 2, 4)
+    assert box is not None
+    assert box["left"] < 0.218 and 0.332 < box["right"] < 0.5
+
+
+def test_two_lines_too_close_to_be_a_bar_are_one_boundary():
+    """A double barline is two lines and one boundary, and so is a stray.
+
+    Measured against the system's own median gap, because how wide a bar is
+    depends on how many the system holds. The right-hand line is kept: at a
+    thin-thick double bar the music ends at the thick one.
+    """
+    geo = {"bar_lines": [0.05, 0.30, 0.55, 0.58, 0.80],
+           "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}]}
+    # Five lines, but 0.55 and 0.58 are one boundary — so three bars, not four.
+    assert bars.boundaries_for(geo, 3) == [0.05, 0.30, 0.58, 0.80]
     assert bars.boundaries_for(geo, 4) is None
-    assert bars.bar_box(geo, 1, 2, 4) is None
+
+
+def test_bars_that_are_merely_uneven_are_left_alone():
+    """Real music has short bars; only implausible ones are folded away."""
+    geo = {"bar_lines": [0.05, 0.28, 0.42, 0.70, 0.95],
+           "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}]}
+    assert bars.boundaries_for(geo, 4) == [0.05, 0.28, 0.42, 0.70, 0.95]
     """The numbering would be a guess, and a guessed crop is worse than none."""
     assert bars.boundaries_for(_geo([0.3, 0.9]), 4) is None
     assert bars.boundaries_for(_geo([0.2, 0.4, 0.6, 0.8, 0.9]), 2) is None

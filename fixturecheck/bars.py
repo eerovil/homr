@@ -37,6 +37,16 @@ SAME_LINE = 0.01
 #: system's opening rule is one of a pair with the bracket.
 OPENING_NEAR = 0.03
 
+#: A gap this much smaller than the system's typical bar is not a bar. Two lines
+#: that close are a **double barline** — a section end, thin against thick — or
+#: one of them is not a barline at all. `sammon-ryosto` has such a pair 0.049 of
+#: the width apart where its bars average 0.23, and treating it as a fifth bar
+#: is what put every crop on that case one bar out.
+#:
+#: Measured against the median gap rather than a fixed distance, because how
+#: wide a bar is depends entirely on how many the system holds.
+NARROW_SHARE = 0.35
+
 #: How much wider than the bar itself a crop is drawn, as a fraction of the
 #: bar's own size. A bar cut exactly at its barlines reads as a fragment: what
 #: the note before it was, and whether the phrase carries on, are part of
@@ -217,9 +227,41 @@ def boundaries_for(geo: dict, expected_bars: int) -> list[float] | None:
     opening = min(s.get("left", 0.0) for s in staves)
     if lines[0] - opening > OPENING_NEAR:
         lines = [opening] + lines
+    lines = _merge_narrow(lines)
     if len(lines) - 1 != expected_bars:
         return None
     return lines
+
+
+def _merge_narrow(lines: list[float]) -> list[float]:
+    """Fold away boundaries too close together to be separate bars.
+
+    A double barline is two lines a few millimetres apart and one bar boundary,
+    and so is a line the detector invented beside a real one. Either way the
+    gap it opens is a small fraction of a real bar, so it is measured against
+    the system's own median gap rather than against a distance.
+
+    The **right-hand** line is the one kept: at a thin-thick double bar the
+    music ends at the thick one, and where the extra line is noise the two are
+    close enough that the crop's own widening covers the difference.
+
+    Nothing here looks at how many bars the score has. Merging until the count
+    came out right would be fitting the geometry to the answer, which is how
+    the off-by-one it fixes got in.
+    """
+    if len(lines) < 3:
+        return lines
+    gaps = sorted(b - a for a, b in zip(lines, lines[1:]))
+    median = gaps[len(gaps) // 2]
+    if median <= 0:
+        return lines
+    kept = [lines[0]]
+    for line in lines[1:]:
+        if line - kept[-1] < NARROW_SHARE * median:
+            kept[-1] = line          # the right-hand line is the boundary
+        else:
+            kept.append(line)
+    return kept
 
 
 def implied_bars(geo: dict) -> int:
