@@ -99,8 +99,13 @@ def gate_over(records: list[series.CaseRecord], committed: set[str]) -> dict:
         # committed fixtures are perfect".
         return None
     failing = [r.name for r in judged if not r.counts.get("perfect")]
+    # Said apart from the rest, because "below 100%" is not true of them: their
+    # notes are all right and what they hold is a voice the page means and the
+    # parse does not. A gate message that called that a wrong note would send
+    # somebody looking for a misreading that is not there.
+    warned = sorted(r.name for r in judged if series.warnings_only(r.counts))
     return {"fixtures": len(judged), "perfect": len(judged) - len(failing),
-            "failing": sorted(failing), "passed": not failing}
+            "failing": sorted(failing), "warned": warned, "passed": not failing}
 
 
 def run_cases(names: list[str], tier: str) -> int:
@@ -167,9 +172,13 @@ def run_cases(names: list[str], tier: str) -> int:
         # A misread meter is a wrong answer about the bars the notes are read
         # in, so it belongs on the line rather than only on the page.
         meter = f", {result.meter} bar(s) in the wrong meter" if result.meter else ""
+        # Not a fault and not silent: the notes are right and a voice the page
+        # means is missing from the file, which the note counts cannot say.
+        warned = (f", {result.warnings} unison(s) homr wrote as one voice"
+                  if result.warnings else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
-              f"{result.timing} beat{meter}{staves}{moved}")
+              f"{result.timing} beat{meter}{warned}{staves}{moved}")
 
     gate = gate_over(records, committed)
     moved = references.drift(built)
@@ -203,7 +212,14 @@ def run_cases(names: list[str], tier: str) -> int:
     print(f"recorded in {series.SERIES.name}; summary in {quality.QUALITY.name}")
 
     if gate and not gate["passed"]:
-        print(f"\nGATE FAILED: {', '.join(gate['failing'])} "
+        warned = set(gate.get("warned") or [])
+        wrong = [name for name in gate["failing"] if name not in warned]
+        parts = []
+        if wrong:
+            parts.append(", ".join(wrong))
+        if warned:
+            parts.append(f"{', '.join(sorted(warned))} (warnings only)")
+        print(f"\nGATE FAILED: {'; '.join(parts)} "
               f"— the committed fixtures are expected to be perfect")
         return 1
     return 0

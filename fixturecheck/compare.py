@@ -213,15 +213,39 @@ class Result:
         return 100.0 * self.agree / self.scored if self.scored else 0.0
 
     @property
+    def warnings(self) -> int:
+        """Moments the parse holds a voice short of what the page means.
+
+        A unison is printed as one notehead serving two parts, so homr writes
+        one note and the second part is simply not in the file. Nothing about
+        the reading is wrong -- the head is where the page puts it, at the pitch
+        the page prints -- which is why this is not a fault and stays out of the
+        note percentage.
+
+        It is not nothing either. A choir sings the second part, and everything
+        downstream reads the parts out of the file, so a system full of unisons
+        is a system whose lower voice does not exist as far as a practice track
+        is concerned. Counted, said, and counted against `perfect`, which is
+        what makes it visible rather than a green row nobody reads.
+        """
+        return self.unison
+
+    @property
     def perfect(self) -> bool:
-        """Nothing wrong at all: every note right, and no argument about staves.
+        """Nothing wrong at all: every note right, no argument about staves, no warning.
 
         What the gate on the committed fixtures is written in terms of. A case
         with nothing to judge is not perfect — it is unread, and saying
         otherwise would let an empty parse pass the gate.
+
+        A warning costs perfection although it is not a fault, because the five
+        committed fixtures are held to "nothing to look at here" rather than to
+        "nothing measurably wrong". Note that this is a claim about the
+        *fixtures*, not about the repertoire: unisons are ordinary in it, and the
+        song systems are not gated on anything.
         """
         return (bool(self.scored) and self.agree == self.scored
-                and not self.structure and not self.meter)
+                and not self.structure and not self.meter and not self.warnings)
 
     @property
     def structure(self) -> int:
@@ -451,8 +475,9 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
                 continue
             if a.get("unison"):
                 result.unison += 1
-                emit(f"{a['name']} · both voices", b["name"],
-                     "a unison — one head, both parts", "unison")
+                emit(f"{a['name']} · both voices", f"{b['name']} · one voice",
+                     "a unison — the page means both parts, the parse holds one",
+                     "unison")
                 continue
             mine_rank, their_rank = here[staff][a["voice"]], there[staff][b["voice"]]
             if lines.get((bar, staff), 1) < 2:

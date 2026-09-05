@@ -267,7 +267,8 @@ def test_a_run_with_no_fixtures_in_it_records_no_gate():
     assert gate_over([case("song-s1", agree=5)], committed) is None
     judged = gate_over([series.CaseRecord("system4", counts={"perfect": True})],
                        committed)
-    assert judged == {"fixtures": 1, "perfect": 1, "failing": [], "passed": True}
+    assert judged == {"fixtures": 1, "perfect": 1, "failing": [], "warned": [],
+                      "passed": True}
 
 
 def test_nothing_recorded_is_not_a_passing_gate(tmp_path):

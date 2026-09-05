@@ -69,8 +69,18 @@ def _gate_line(runs_of: list[dict]) -> str:
         return (f"**pass** — all {gate['fixtures']} committed fixtures stand "
                 f"perfect under homr `{gate['homr']}`, latest as of "
                 f"{gate['as_of']}.")
-    failing = ", ".join(f"`{n}`" for n in gate["failing"])
-    below = f"; below 100%: {failing}" if failing else ""
+    warned = set(gate.get("warned") or [])
+    wrong = [n for n in gate["failing"] if n not in warned]
+    reasons = []
+    if wrong:
+        reasons.append("below 100%: " + ", ".join(f"`{n}`" for n in wrong))
+    if warned:
+        # Not "below 100%": every note is right and a voice the page means is
+        # missing from the parse. Saying it the other way sends a reader looking
+        # for a misreading that is not there.
+        reasons.append("holding a unison as one voice: "
+                       + ", ".join(f"`{n}`" for n in sorted(warned)))
+    below = "; " + "; ".join(reasons) if reasons else ""
     return (f"**FAIL** — {gate['perfect']}/{gate['fixtures']} perfect under homr "
             f"`{gate['homr']}`, latest as of {gate['as_of']}{below}.{tail} Each "
             f"fixture counts by its own latest result under that homr, so "
