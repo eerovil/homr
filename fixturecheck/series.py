@@ -53,7 +53,7 @@ KEPT_FAULTS = 3
 #: The counts a case carries. Same names the report uses, so nothing has to be
 #: translated between what is shown and what is recorded.
 COUNTS = ("agree", "voice", "pitch", "size", "timing", "unison",
-          "staves_page", "staves_homr", "staves_printed")
+          "staves_page", "staves_homr", "staves_printed", "meter")
 
 #: A case that was not compared, and why. Kept apart from a case that scored
 #: badly: "homr crashed on this" and "homr read it and got everything wrong"

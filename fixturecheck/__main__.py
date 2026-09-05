@@ -136,7 +136,7 @@ def run_cases(names: list[str], tier: str) -> int:
                         "timing": result.timing, "structure": result.structure,
                         "staves_page": result.staves_page,
                         "staves_homr": result.staves_homr,
-                        "at_fault": result.at_fault,
+                        "at_fault": result.at_fault, "meter": result.meter,
                         "unison": result.unison, "before": before})
 
         counts = {k: getattr(result, k) for k in series.COUNTS}
@@ -164,9 +164,12 @@ def run_cases(names: list[str], tier: str) -> int:
             moved = "  (no change)" if change == 0 else f"  ({change:+d} faults)"
         staves = (f", staves {result.staves_page} vs {result.staves_homr}"
                   if result.structure else "")
+        # A misread meter is a wrong answer about the bars the notes are read
+        # in, so it belongs on the line rather than only on the page.
+        meter = f", {result.meter} bar(s) in the wrong meter" if result.meter else ""
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
-              f"{result.timing} beat{staves}{moved}")
+              f"{result.timing} beat{meter}{staves}{moved}")
 
     gate = gate_over(records, committed)
     moved = references.drift(built)
