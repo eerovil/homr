@@ -86,7 +86,11 @@ class Config:
     def __init__(self) -> None:
         self.vocab = Vocabulary()
         self.forbidden_rhythm_tokens: set[int] = set()
-        self.record_confidence = False
+        # On by default because `homr.reread` reads them: a fused grand staff is
+        # read again one staff at a time when the decoder was unsure of a note,
+        # and without the probabilities there is nothing to be unsure with.
+        # `--output-confidence` decides whether they also reach a sidecar.
+        self.record_confidence = True
         self.use_stem_voice_hints = True
         self.filepaths = FilePaths()
         self.channels = 1

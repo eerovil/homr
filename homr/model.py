@@ -283,6 +283,11 @@ class Staff(DebugDrawable):
         self.average_unit_size = np.median([p.average_unit_size for p in grid])
         self.symbols: list[SymbolOnStaff] = []
         self.is_grandstaff = False
+        # The two staffs this one was fused out of, kept so that a doubtful
+        # reading of the fused image can be read again one staff at a time
+        # (homr.reread). Fusing happens before inference, so without this the
+        # halves are gone by the time the decoder tells us it was unsure.
+        self.merged_from: tuple[Staff, Staff] | None = None
         self._y_tolerance = constants.max_number_of_ledger_lines * self.average_unit_size
 
     def is_on_staff_zone(self, item: AngledBoundingBox) -> bool:
@@ -310,6 +315,7 @@ class Staff(DebugDrawable):
         result.symbols.extend(self.symbols)
         result.symbols.extend(other.symbols)
         result.is_grandstaff = True
+        result.merged_from = (self, other) if self.min_y <= other.min_y else (other, self)
         return result
 
     def add_symbol(self, symbol: SymbolOnStaff) -> None:
@@ -398,6 +404,7 @@ class Staff(DebugDrawable):
         copy = Staff([point.transform_coordinates(transformation) for point in self.grid])
         copy.symbols = [symbol.transform_coordinates(transformation) for symbol in self.symbols]
         copy.is_grandstaff = self.is_grandstaff
+        copy.merged_from = self.merged_from
         return copy
 
 

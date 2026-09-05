@@ -3,7 +3,7 @@ import math
 import cv2
 import numpy as np
 
-from homr import constants
+from homr import constants, reread
 from homr.debug import Debug
 from homr.image_utils import crop_image_and_return_new_top
 from homr.model import MultiStaff, Note, Staff
@@ -363,6 +363,38 @@ def parse_staff_image(
     return result
 
 
+def _reread_if_doubtful(
+    debug: Debug,
+    index: int,
+    staff: Staff,
+    fused: list[EncodedSymbol],
+    image: NDArray,
+    config: Config,
+) -> list[EncodedSymbol]:
+    """Read a fused pair again one staff at a time when the decoder doubted a note.
+
+    Each half is framed as if it were an ordinary lone staff, against regions
+    naming only the pair: the page's own regions describe the *fused* staff, and
+    asking them where the staff below the upper half starts answers with the
+    fused staff's own top, which is above it.
+
+    Giving each half more paper than that was tried and is worse. Running each
+    one inwards to the other staff's lines -- everything the fused image held,
+    split once -- reads `sammon-ryosto`'s crowded bar as four noteheads against
+    the ordinary framing's five, because a taller crop is fitted to the decoder's
+    canvas by its height and loses the width the crowded bar needs.
+    """
+    if staff.merged_from is None or not reread.doubtful(fused):
+        return fused
+    upper, lower = staff.merged_from
+    eprint("Reading staff", index, "again, one staff at a time: a note was read unsurely")
+    halves = StaffRegions([MultiStaff([upper], []), MultiStaff([lower], [])])
+    upper_symbols = parse_staff_image(debug, index, upper, image, halves, config)
+    lower_symbols = parse_staff_image(debug, index, lower, image, halves, config)
+    result, _ = reread.better_of(fused, reread.splice(upper_symbols, lower_symbols))
+    return result
+
+
 def parse_staffs(
     debug: Debug, staffs: list[MultiStaff], image: NDArray, config: Config, selected_staff: int = -1
 ) -> list[list[EncodedSymbol]]:
@@ -386,6 +418,7 @@ def parse_staffs(
                 i += 1
                 continue
             result_staff = parse_staff_image(debug, i, staff, image, regions, config)
+            result_staff = _reread_if_doubtful(debug, i, staff, result_staff, image, config)
             if len(result_staff) == 0:
                 eprint("Skipping empty staff", i)
                 i += 1
