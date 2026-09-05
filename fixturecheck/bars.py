@@ -243,8 +243,31 @@ def bar_box(geo: dict, staff: int, index: int, expected_bars: int) -> dict | Non
     return {"left": l, "right": r, "top": t, "bottom": b}
 
 
-def crop(image: Path, box: dict, into: Path) -> Path | None:
-    """Cut the box out of the picture."""
+#: A MuseScore staff is 4 spatia tall and the default spatium is 1.764 mm, so a
+#: five-line staff is 0.2778 in however big the paper is. Used to put an
+#: engraving on the same scale as a scan.
+STAFF_INCHES = 4 * 1.764 / 25.4
+
+#: How tall one staff is drawn in a crop, in pixels. The three pictures under a
+#: fault come from a scan and from two engravings and are naturally at three
+#: different scales; left alone they were shown at three more, because each was
+#: stretched to the column it sat in. Scaling every crop so that **a staff is
+#: the same size** puts the music at one scale, which is the thing being
+#: compared.
+STAFF_PIXELS = 58
+
+#: The resolution the engravings are drawn at, and what `.mpos` units are
+#: converted with. One place, because the crop's scale depends on it too.
+RENDER_DPI = 220
+
+
+def crop(image: Path, box: dict, into: Path, staff_px: float = 0.0) -> Path | None:
+    """Cut the box out of the picture, and put the music on the common scale.
+
+    `staff_px` is how tall one staff is in *this* picture. Given it, the crop is
+    resized so a staff comes out `STAFF_PIXELS` tall, the same as in the crops
+    beside it. Without it the crop is cut and not resized.
+    """
     try:
         from PIL import Image
     except ImportError:
@@ -263,6 +286,14 @@ def crop(image: Path, box: dict, into: Path) -> Path | None:
                 cut = cut.convert("RGBA")
                 paper = Image.new("RGBA", cut.size, (255, 255, 255, 255))
                 cut = Image.alpha_composite(paper, cut).convert("RGB")
+            if staff_px > 1:
+                scale = STAFF_PIXELS / staff_px
+                # Bounded, so a badly measured staff cannot produce a picture
+                # of a few pixels or of tens of thousands.
+                scale = max(0.15, min(6.0, scale))
+                cut = cut.resize((max(1, round(cut.width * scale)),
+                                  max(1, round(cut.height * scale))),
+                                 Image.LANCZOS)
             into.parent.mkdir(parents=True, exist_ok=True)
             cut.save(into)
     except Exception:                                        # noqa: BLE001
@@ -284,7 +315,7 @@ def crop(image: Path, box: dict, into: Path) -> Path | None:
 MPOS_UNITS_PER_INCH = 2649.2
 
 
-def engraved(source: Path, cli: str, into: Path, dpi: int = 220
+def engraved(source: Path, cli: str, into: Path, dpi: int = RENDER_DPI
              ) -> tuple[Path, list[dict]] | None:
     """Draw a score once, and ask MuseScore where each bar of it landed.
 
@@ -321,7 +352,7 @@ def engraved(source: Path, cli: str, into: Path, dpi: int = 220
 
 
 def engraved_box(boxes: list[dict], numbers: list[str], bar: str,
-                 size: tuple[int, int], dpi: int = 220) -> dict | None:
+                 size: tuple[int, int], dpi: int = RENDER_DPI) -> dict | None:
     """The box around one bar of an engraving, as fractions of the picture.
 
     Refused when the boxes and the score disagree about how many bars there are,

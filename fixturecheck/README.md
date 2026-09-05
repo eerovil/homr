@@ -93,6 +93,14 @@ crops to the ink and moves the origin the boxes are measured from. It is also
 fewer MuseScore calls: one render and one `.mpos` per side per case, rather than
 an engraving per fault.
 
+**All three are written to one scale**, so that a staff is `STAFF_PIXELS` tall
+in every one of them — measured from homr's detection for the scan, and from
+MuseScore's own staff size (4 spatia, 1.764 mm each) for the engravings. Nothing
+downstream is allowed to resize them again: they are shown at exactly the size
+they were written, and the row scrolls if it does not fit. Stretching each to
+fill the column it sat in was the bug — it put the same bar on screen at three
+different scales, one of them blown up several times.
+
 A measure box covers the whole system, so those two show the bar across every
 staff, while the printed crop shows the staff the fault is on. The labels say
 so. Cropping the printed one to the system too was tried and is worse on real

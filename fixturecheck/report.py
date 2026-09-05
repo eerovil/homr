@@ -87,9 +87,16 @@ tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
             letter-spacing: .05em; color: #666; }
 table.bar { margin: 0 0 8px; }
 table.bar th, table.bar td { padding: 3px 7px; font-size: 12px; }
-.crops { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
-.crops > div { flex: 1 1 260px; min-width: 0; }
-.crops img { margin: 2px 0 6px; }
+.crops { display: flex; gap: 18px; margin-top: 6px; align-items: flex-start;
+         flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+.crops > div { flex: 0 0 auto; }
+/* Shown at exactly the size they were written at, because they were written to
+   a common scale: one staff is the same height in all three
+   (bars.STAFF_PIXELS). Anything that resizes them here -- stretching each to
+   fill its column, or capping the width -- undoes that and puts the same bar
+   on screen at three scales, which is what this looked like before. So the row
+   scrolls instead of the pictures shrinking. */
+.crops img { margin: 2px 0 6px; width: auto; max-width: none; }
 """
 
 
@@ -213,6 +220,15 @@ def _bar_pictures(case, parsed: Path, row) -> str:
     return f"<div class='crops'>{''.join(parts)}</div>"
 
 
+def _size(image: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image
+        with Image.open(image) as picture:
+            return picture.size
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
 #: One render of a score, kept for as long as the report is being written. Each
 #: side is drawn once per case rather than once per fault -- the bar is cut out
 #: of the picture, so the picture is the thing worth keeping.
@@ -238,18 +254,16 @@ def _engraved_crop(case, source: Path, row, suffix: str, stem: str,
         return "", "MuseScore could not draw this score, so there is no bar to cut out."
     page, boxes = drawn
     numbers = bars.bars_in(source)
-    try:
-        from PIL import Image
-        with Image.open(page) as picture:
-            size = picture.size
-    except Exception:                                        # noqa: BLE001
+    size = _size(page)
+    if not size:
         return "", "the engraving could not be read."
     box = bars.engraved_box(boxes, numbers, row.bar, size)
     if not box:
         return "", (f"MuseScore reported {len(boxes)} bar position(s) for "
                     f"{len(numbers)} bar(s) here, so which box is this bar is a "
                     f"guess.")
-    cut = bars.crop(page, box, OUT / f"{stem}-{suffix}.png")
+    cut = bars.crop(page, box, OUT / f"{stem}-{suffix}.png",
+                    staff_px=bars.STAFF_INCHES * bars.RENDER_DPI)
     return (cut.name, "") if cut else ("", "the crop could not be written.")
 
 
@@ -270,7 +284,12 @@ def _printed_crop(case, row, stem: str) -> tuple[str, str]:
                     f"{len(numbers)} plus its opening line — so which bar is "
                     f"which is a guess, and a crop of the wrong bar is worse "
                     f"than none.")
-    cut = bars.crop(case.image, box, OUT / f"{stem}-page.png")
+    # How tall a staff is in this scan, so the crop comes out on the same scale
+    # as the engravings beside it.
+    band = geo["staves"][row.staff - 1]
+    shape = _size(case.image)
+    staff_px = (band["bottom"] - band["top"]) * shape[1] if shape else 0.0
+    cut = bars.crop(case.image, box, OUT / f"{stem}-page.png", staff_px=staff_px)
     if not cut:
         return "", "the crop could not be written."
     return cut.name, ""

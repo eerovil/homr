@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from fixturecheck import bars, compare
 
 TWO_BARS = """<?xml version="1.0"?>
@@ -169,6 +171,46 @@ def test_a_box_that_falls_outside_the_picture_is_refused():
     """Which is what a wrong resolution or paper size looks like from here."""
     wide = [{"x": 1000.0, "y": 100.0, "sx": 90000.0, "sy": 2637.07, "page": 0}]
     assert bars.engraved_box(wide, ["1"], "1", (1819, 2572)) is None
+
+
+def test_the_crops_are_written_to_one_common_scale(tmp_path):
+    """A scan and two engravings are naturally at three different scales.
+
+    Left alone they were shown at three more, because each was stretched to
+    fill the column it sat in, and the same bar appeared three sizes. Every
+    crop is resized so that one staff is `STAFF_PIXELS` tall, and nothing
+    downstream is allowed to resize them again.
+    """
+    Image = pytest.importorskip("PIL.Image")
+    picture = tmp_path / "wide.png"
+    Image.new("RGB", (400, 200), "white").save(picture)
+    box = {"left": 0.0, "top": 0.0, "right": 1.0, "bottom": 1.0}
+
+    # A staff drawn 40px tall here has to come back STAFF_PIXELS tall.
+    cut = bars.crop(picture, box, tmp_path / "a.png", staff_px=40)
+    with Image.open(cut) as out:
+        assert abs(out.height - 200 * bars.STAFF_PIXELS / 40) <= 1
+
+    # ...and one drawn twice as big comes back the same size as the first.
+    cut = bars.crop(picture, box, tmp_path / "b.png", staff_px=80)
+    with Image.open(cut) as out:
+        assert abs(out.height - 200 * bars.STAFF_PIXELS / 80) <= 1
+
+    # No measurement means no resizing, rather than a guess.
+    cut = bars.crop(picture, box, tmp_path / "c.png")
+    with Image.open(cut) as out:
+        assert (out.width, out.height) == (400, 200)
+
+
+def test_an_absurd_staff_measurement_cannot_make_an_absurd_picture(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    picture = tmp_path / "p.png"
+    Image.new("RGB", (100, 100), "white").save(picture)
+    box = {"left": 0.0, "top": 0.0, "right": 1.0, "bottom": 1.0}
+    for staff_px in (0.001, 100000):
+        cut = bars.crop(picture, box, tmp_path / f"{staff_px}.png", staff_px=staff_px)
+        with Image.open(cut) as out:
+            assert 1 <= out.width <= 600 and 1 <= out.height <= 600
 
 
 def test_a_row_knows_which_bar_it_is_about():
