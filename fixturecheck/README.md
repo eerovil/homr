@@ -55,6 +55,90 @@ same as nobody being wrong.
 
 Adding one is a look at the crop the case page already shows, and a line of JSON.
 
+## Every run is kept
+
+`check-report/results.json` held the last run and only the last run, so a
+three-case run overwrote a sweep of ninety-eight and there was no way to ask
+whether any of this is getting better over months. Runs now append to
+**`fixturecheck/series.jsonl`**, which is committed — one run per line, so a run
+adds a line and rewrites nothing above it.
+
+    python -m fixturecheck status      # instant: the last run of each harness
+
+Every run also rewrites **`QUALITY.md`**, which is the answer to "how good is it
+now" for somebody who is not going to run anything: GitHub renders it on a phone
+and on a desktop, and it names the homr it is describing. That last part was
+half the problem — "the current homr" meant the fork's tip to one reader and the
+venv the choir sings from to another, and no number anywhere distinguished them.
+
+`choir-bench.py` records into the same file under its own harness name. The two
+are **never averaged**: this one scores notes across the printed systems of the
+repertoire, that one scores staves and bars across the benchmark pages, and one
+figure over both would mean nothing.
+
+## What a run keeps, and what it does not
+
+Per case: the counts, and the **first three disagreements** — not the first
+three rows, which on an ordinary system are three notes that agree and diagnose
+nothing. Three faults are usually enough to tell "homr misread this" from "our
+reference is wrong here" months later without re-running anything.
+
+The whole note-by-note table is kept **only for the five committed fixtures**,
+and only when it differs from the last one recorded — they are gated at 100%, so
+otherwise every run would append the same clean table forever. A run that
+matches names the run it matches instead, and a change is then the only table in
+the file.
+
+The songs get no table, and that is a licence matter rather than a size one:
+this repository is public and their music is not ours.
+
+## The score counts what was lost
+
+`agree / (agree + voice + pitch + size + timing)`. A note homr **lost** and a
+beat it **moved** count against it, as well as a note it read wrongly. They did
+not before, and under the older denominator a system missing half its notes
+could read 100%. **No percentage here is comparable with one quoted before
+2026-09-05.**
+
+A case homr could not read at all is not folded in as a zero — it has no notes
+to be right or wrong about. It is recorded as `unreadable`, or `unbuildable`
+where the case itself could not be made, and counted separately. Before, such a
+case was skipped entirely, which made a case that had stopped parsing look
+exactly like a case nobody ran.
+
+## The gate
+
+**The five committed fixtures are expected to be perfect**, and a run in which
+any of them is below 100% exits non-zero. They are small single systems this
+repository owns outright; if they are wrong, nothing measured on top of them
+means much.
+
+They are not all passing today — `hanget-soi` and `sammon-ryosto` are not — and
+the gate is hard anyway rather than set to whatever they currently score.
+
+The eighty-eight song systems are **not** gated. Their references are derived
+from cleaned scores that are themselves sometimes wrong, and gating on those
+would be gating on our own transcription.
+
+## What is committed
+
+The references are frozen as a **fingerprint per case** (`references.json`), not
+as files. A reference is a song's cleaned score imploded back to the shape of
+the print, and those scores get edited — so a series built against them partly
+measures them, and a number can improve because somebody fixed a score. A hash
+makes a reference changing a line in a diff that somebody had to commit.
+
+    python -m fixturecheck freeze      # fingerprint what is on this host now
+
+Committing the references themselves would be better and is not available: this
+repository is public and the ninety-three systems are Fazer, Sulasol, Breitkopf
+and Fennica Gehrman. The cost of the fingerprint is worth saying plainly — a
+fresh clone has the five fixtures and no songs, and cannot rebuild the other
+eighty-eight to check any figure in the series against them.
+
+A run whose references have moved says so in its own key (`+drift2`), so a run
+measured against something other than the manifest cannot be read as if it were.
+
 ## Cost
 
 Cached by what each file depends on: the crop and the reference by the PDF,

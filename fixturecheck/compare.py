@@ -179,11 +179,37 @@ class Result:
 
     @property
     def judged(self) -> int:
+        """The notes matched one against one: right, wrong voice, wrong pitch."""
         return self.agree + self.voice + self.pitch
 
     @property
+    def scored(self) -> int:
+        """Everything the score is taken over — the matched notes and the misses.
+
+        `size` and `timing` are in here and were not before, and the difference
+        is not cosmetic. The old denominator was `judged` alone, which asks only
+        *of the notes homr wrote, how many are right* — so a system whose notes
+        were half missing, or whose every beat had walked out of step, could
+        score 100%. Both are wrong parses and a singer meets both of them.
+
+        The consequence is that no percentage from this file is comparable with
+        one quoted before 2026-09-05. That is the intended trade.
+        """
+        return self.judged + self.size + self.timing
+
+    @property
     def score(self) -> float:
-        return 100.0 * self.agree / self.judged if self.judged else 0.0
+        return 100.0 * self.agree / self.scored if self.scored else 0.0
+
+    @property
+    def perfect(self) -> bool:
+        """Nothing wrong at all: every note right, and no argument about staves.
+
+        What the gate on the committed fixtures is written in terms of. A case
+        with nothing to judge is not perfect — it is unread, and saying
+        otherwise would let an empty parse pass the gate.
+        """
+        return bool(self.scored) and self.agree == self.scored and not self.structure
 
     @property
     def structure(self) -> int:

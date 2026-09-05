@@ -13,7 +13,6 @@ against each other without working out what is being shown.
 from __future__ import annotations
 
 import html
-import json
 import os
 import shutil
 import subprocess
@@ -54,6 +53,65 @@ td.ok { color: #1c5c2c; } td.no { color: #8a1f1f; font-weight: 600; }
 .same { color: #888; }
 p.warn { background: #f3e8fb; border: 1px solid #ddc7ee; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; }
+p.prov { color: #555; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
+         padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
+p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
+         padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+"""
+
+
+def judged_over(total: dict) -> int:
+    """Everything the headline is taken over — matched notes, losses and shifts."""
+    return sum(total.get(k, 0) for k in ("agree", "voice", "pitch", "size", "timing"))
+
+
+def _provenance(run: dict | None) -> str:
+    """Which homr, and which references. Without both, no number here is readable."""
+    if not run:
+        return ""
+    drifted = run.get("reference_drift", {}).get("changed", [])
+    warn = ""
+    if drifted:
+        warn = (f" &mdash; <b>{len(drifted)} reference(s) have moved since they were "
+                f"frozen</b>, so this run is not measured against the manifest: "
+                f"{html.escape(', '.join(drifted))}")
+    tally = run.get("outcomes", {})
+    lost = tally.get("unreadable", 0) + tally.get("unbuildable", 0)
+    missed = (f" {lost} case(s) could not be read and are recorded as such rather "
+              f"than skipped." if lost else "")
+    return (f"<p class='prov'>homr <b>{html.escape(str(run.get('homr', '?')))}</b>, "
+            f"references <b>{html.escape(str(run.get('references', '?')))}</b>, "
+            f"{html.escape(str(run.get('at', '')))}{warn}.{missed}</p>")
+
+
+def _gate(run: dict | None) -> str:
+    if not run or "gate" not in run or not run["gate"].get("fixtures"):
+        return ""
+    gate = run["gate"]
+    if gate.get("passed"):
+        return (f"<p class='pass'>Gate <b>passed</b>: all {gate['fixtures']} committed "
+                f"fixture(s) in this run are perfect.</p>")
+    failing = html.escape(", ".join(gate.get("failing", [])))
+    return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['perfect']}/{gate['fixtures']} "
+            f"committed fixture(s) perfect. Below 100%: <b>{failing}</b>. These are "
+            f"small systems this repository owns outright and are expected to be "
+            f"exactly right.</p>")
+
+
+#: Said on the page as well as in QUALITY.md, because the table above it invites
+#: precisely this conclusion and the conclusion is wrong.
+NOT_MEASURED = """
+<h2>What this does not measure</h2>
+<p class="lead"><b>Whether the choir gets a correct practice track.</b> This
+compares homr's output against a reference for the same printed system &mdash;
+one stage before the score anybody sings from, and several before a video.
+Everything <code>clean_score</code> does afterwards is unmeasured, and so is
+every repair a person made by hand.</p>
+<p class="lead"><b>Detection.</b> The noteheads and stems found in the picture
+are a different layer from the MusicXML homr writes and disagree with it in both
+directions. There is no ground truth for detection here, so there is no number
+for it.</p>
 """
 
 
@@ -165,12 +223,22 @@ def _staves(entry: dict) -> str:
     return f"{said} <span class='down'>({blame})</span>" if blame else said
 
 
-def index_page(entries: list[dict], tier: str) -> Path:
-    """The table of every case in this run, with what moved since the last one."""
+def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
+    """The table of every case in this run, with what moved since the last one.
+
+    `run` is the series record this run just wrote. It carries the two things
+    the page could not say before and that made every number here ambiguous:
+    which homr was measured, and what state the references were in. "The current
+    homr" meant the fork's tip to one reader and the venv the choir sings from
+    to another, and no figure anywhere distinguished them.
+    """
     OUT.mkdir(parents=True, exist_ok=True)
     total = {k: sum(e[k] for e in entries)
              for k in ("agree", "voice", "pitch", "size", "timing", "structure", "unison")}
-    judged = total["agree"] + total["voice"] + total["pitch"]
+    # Notes homr lost and beats it moved are faults, and are in the denominator.
+    # Leaving them out asks only "of the notes homr wrote, how many are right",
+    # under which a system missing half its notes reads 100%.
+    judged = judged_over(total)
 
     def cell(entry: dict, field: str) -> str:
         now = entry[field]
@@ -200,9 +268,13 @@ def index_page(entries: list[dict], tier: str) -> Path:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fixture check &mdash; {html.escape(tier)}</title><style>{STYLE}</style></head><body>
 <h1>Fixture check &mdash; {html.escape(tier)}</h1>
+{_provenance(run)}
+{_gate(run)}
 <p class="lead">{len(entries)} case(s), each one printed system judged against a
 reference built from its song's cleaned score. Sorted worst first. A number in
-green or red is what changed since the last run of the same case.</p>
+green or red is what changed since the last run of the same case &mdash; taken
+from the series, so a run of ten cases is compared against each case's own last
+measurement rather than against whatever ran immediately before.</p>
 <div class="sum">
   <div><b>{total['agree']}</b>agree</div>
   <div><b>{total['voice']}</b>wrong voice</div>
@@ -210,8 +282,12 @@ green or red is what changed since the last run of the same case.</p>
   <div><b>{total['size']}</b>different number of notes</div>
   <div><b>{total['timing']}</b>beat shifted</div>
   <div><b>{total['structure']}</b>case(s) with the wrong staves</div>
-  <div><b>{100.0 * total['agree'] / judged if judged else 0:.1f}%</b>of judged notes right</div>
+  <div><b>{100.0 * total['agree'] / judged if judged else 0:.1f}%</b>of everything judged is right</div>
 </div>
+<p class="lead">The percentage counts a note homr <b>lost</b> and a beat it
+<b>moved</b> against it, as well as a note it read wrongly. It did not before,
+and under the older definition a system missing half its notes could read 100%.
+No figure here is comparable with one quoted before 2026-09-05.</p>
 <p class="lead">A case whose staff count disagrees is one wrong answer about the
 structure, and the note rows under it are then comparing different music &mdash;
 read its counts as a consequence of that, not as many wrong notes. Whose wrong
@@ -221,20 +297,8 @@ names the side at fault; where nobody has, it does not guess.</p>
 <table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
 <th>note count</th><th>beat shifted</th><th>staves (who is wrong)</th><th>score</th></tr>
 {rows}</table>
+{NOT_MEASURED}
 </body></html>"""
     target = OUT / "index.html"
     target.write_text(body)
     return target
-
-
-def load_previous() -> dict:
-    path = OUT / "results.json"
-    return json.loads(path.read_text()) if path.exists() else {}
-
-
-def save_results(entries: list[dict]) -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "results.json").write_text(json.dumps(
-        {e["name"]: {k: e[k] for k in ("agree", "voice", "pitch", "size", "timing",
-                                       "structure", "unison")}
-         for e in entries}, indent=1))
