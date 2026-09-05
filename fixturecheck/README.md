@@ -185,6 +185,28 @@ network this machine is on. (Tailscale will not serve a *path* without root
 while it proxies a *port* for anybody, which is why there is a port here at
 all.)
 
+## One folder, more than one history
+
+The report directory is **fixed and shared**, so there is one address to serve.
+The series is **per checkout and committed**, so the record travels with the
+code that made it. Both are deliberate and neither should move — but together
+they leave a seam: two checkouts render into the same folder from two different
+records. Each page is right on its own; what is wrong is reading them in
+sequence at one URL and taking them for one history. A gate that "went from 5/5
+to 3/5" can be somebody rendering from a branch rather than a regression.
+
+So the page **declares its series** the way it already declares its homr — the
+checkout it lives in and how many runs it holds — and the folder remembers what
+last rendered it (`rendered-from.json`). A render arriving from a different
+checkout says so at the top, because that is the moment the numbers at this
+address stopped being a continuation of the ones before them. Rendering
+repeatedly from the same checkout is the ordinary case and says nothing.
+
+**A worktree therefore needs no setup.** The homr venv is host state, the report
+folder is fixed, and a run from anywhere lands at the same address — which is
+the whole reason that path moved out of the checkouts. What a worktree does have
+is its own branch's series, and that is now visible rather than silent.
+
 ## Starting a run from the page
 
 Reading the report needed no ssh; **starting the run that refreshes it still

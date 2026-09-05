@@ -374,6 +374,27 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
 
 
 
+def origin(path: Path | None = None) -> dict:
+    """Which history this is, and how much of it there is.
+
+    The series is **per checkout and committed** — deliberately, so the record
+    travels with the code that made it — while the report folder is fixed and
+    shared, so there is one address to serve. Both are right and neither should
+    move, but together they leave a seam: two checkouts render into the same
+    folder from two different histories, each page internally consistent, the
+    URL alternating between them with nothing saying so.
+
+    So the page declares its series the way it already declares its homr. The
+    checkout's own directory name is the label because that is what a person
+    recognises — `homr` for the working copy, the branch's worktree name for a
+    worktree — and the run count is there because two histories can share a name
+    across hosts but rarely a length.
+    """
+    path = path or SERIES
+    return {"checkout": path.resolve().parent.parent.name,
+            "runs": len(runs(path))}
+
+
 def identity(run: dict) -> tuple:
     """What a measurement is a measurement *of*: the homr, and the references.
 

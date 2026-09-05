@@ -601,3 +601,58 @@ def test_an_explicit_revision_beats_the_checkout(tmp_path):
 def test_an_unread_case_carries_no_counts(outcome):
     """It scored nothing; writing zeros would read as a case that scored zero."""
     assert series.CaseRecord("x", outcome=outcome).to_json() == {"outcome": outcome}
+
+
+def test_the_page_says_which_series_it_was_rendered_from(tmp_path, monkeypatch):
+    """The folder is shared; the series is not.
+
+    Two checkouts render into one address from two different records. Each page
+    is right on its own -- what is wrong is reading them in sequence and taking
+    them for one history, which is how a gate that "went from 5/5 to 3/5" can be
+    somebody rendering from a branch rather than a regression.
+    """
+    from fixturecheck import report
+
+    checkout = tmp_path / "issue-142" / "fixturecheck"
+    checkout.mkdir(parents=True)
+    path = checkout / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+    _under(path, [_perfect("a", True)], homr="A")
+
+    where = series.origin()
+    assert where == {"checkout": "issue-142", "runs": 1}
+    # ...and it is on the page beside the homr and the references.
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    line = report._provenance(series.runs(path)[-1])
+    assert "issue-142" in line and "1 run(s)" in line
+
+
+def test_rendering_from_another_checkout_is_said_out_loud(tmp_path, monkeypatch):
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+
+    # First render from one checkout: nothing to compare against, so nothing said.
+    assert report._series_change({"checkout": "homr", "runs": 12}) == ""
+    # Rendering again from the same one is the ordinary case.
+    assert report._series_change({"checkout": "homr", "runs": 13}) == ""
+
+    # A render from somewhere else is the moment the numbers stopped being a
+    # continuation of the ones at this address before.
+    said = report._series_change({"checkout": "issue-142", "runs": 2})
+    assert "issue-142" in said and "homr" in said
+    assert "not a continuation" in said
+
+    # ...and going back says it too, rather than only warning in one direction.
+    assert "homr" in report._series_change({"checkout": "homr", "runs": 13})
+
+
+def test_a_damaged_marker_does_not_stop_the_render(tmp_path, monkeypatch):
+    from fixturecheck import report
+
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+    report.OUT.mkdir()
+    (report.OUT / report.RENDERED_FROM).write_text("{not json")
+    assert report._series_change({"checkout": "homr", "runs": 1}) == ""
