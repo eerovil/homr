@@ -31,6 +31,12 @@ from pathlib import Path
 #: another staff. A system is rarely more than ~12 bars, so bars are wide.
 SAME_LINE = 0.01
 
+#: How close to the staff's own left edge a detected line has to be to *be* the
+#: system's opening rule. Further than this and the opening was not detected,
+#: which is the ordinary case: `detect_bar_lines` looks for barlines, and a
+#: system's opening rule is one of a pair with the bracket.
+OPENING_NEAR = 0.03
+
 #: How much wider than the bar itself a crop is drawn, as a fraction of the
 #: bar's own size. A bar cut exactly at its barlines reads as a fragment: what
 #: the note before it was, and whether the phrase carries on, are part of
@@ -201,13 +207,36 @@ def boundaries_for(geo: dict, expected_bars: int) -> list[float] | None:
     staves = geo.get("staves", [])
     if not lines or not staves:
         return None
-    if len(lines) == expected_bars + 1:
-        return lines
-    if len(lines) == expected_bars:
-        opening = min(s.get("left", 0.0) for s in staves)
-        if opening < lines[0]:
-            return [opening] + lines
-    return None
+    # **Whether the opening line is there is decided by where it would be, not
+    # by the count.** Counting was the first rule and it is not safe: on
+    # `sammon-ryosto` the detection missed the opening rule *and* found one
+    # spurious line, which came to exactly `n + 1` and was accepted, so every
+    # crop on that case was a bar to the right of the one its row named. Two
+    # errors cancelling in a count is indistinguishable from no errors; two
+    # errors cancelling against the staff's own left edge is not.
+    opening = min(s.get("left", 0.0) for s in staves)
+    if lines[0] - opening > OPENING_NEAR:
+        lines = [opening] + lines
+    if len(lines) - 1 != expected_bars:
+        return None
+    return lines
+
+
+def implied_bars(geo: dict) -> int:
+    """How many bars the detected lines cut this system into.
+
+    The same reading `boundaries_for` does, minus the check against the score,
+    so a refusal can say what was actually found instead of restating its own
+    rule back at the reader.
+    """
+    lines = _boundaries(geo.get("bar_lines", []))
+    staves = geo.get("staves", [])
+    if not lines or not staves:
+        return 0
+    opening = min(s.get("left", 0.0) for s in staves)
+    if lines[0] - opening > OPENING_NEAR:
+        lines = [opening] + lines
+    return max(0, len(lines) - 1)
 
 
 def bar_box(geo: dict, staff: int, index: int, expected_bars: int) -> dict | None:
@@ -254,7 +283,11 @@ STAFF_INCHES = 4 * 1.764 / 25.4
 #: stretched to the column it sat in. Scaling every crop so that **a staff is
 #: the same size** puts the music at one scale, which is the thing being
 #: compared.
-STAFF_PIXELS = 58
+#:
+#: Small enough that the three of them fit side by side without the row having
+#: to scroll: on the widest fixture bar they come to a little over a thousand
+#: pixels together, against the page's 1150.
+STAFF_PIXELS = 38
 
 #: The resolution the engravings are drawn at, and what `.mpos` units are
 #: converted with. One place, because the crop's scale depends on it too.

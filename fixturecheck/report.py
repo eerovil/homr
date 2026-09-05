@@ -88,15 +88,18 @@ tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
 table.bar { margin: 0 0 8px; }
 table.bar th, table.bar td { padding: 3px 7px; font-size: 12px; }
 .crops { display: flex; gap: 18px; margin-top: 6px; align-items: flex-start;
-         flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+         flex-wrap: wrap; overflow-x: auto; padding-bottom: 4px; }
 .crops > div { flex: 0 0 auto; }
 /* Shown at exactly the size they were written at, because they were written to
    a common scale: one staff is the same height in all three
    (bars.STAFF_PIXELS). Anything that resizes them here -- stretching each to
    fill its column, or capping the width -- undoes that and puts the same bar
-   on screen at three scales, which is what this looked like before. So the row
-   scrolls instead of the pictures shrinking. */
+   on screen at three scales, which is what this looked like before. So they
+   wrap to the next line instead of shrinking, and the scale survives. */
 .crops img { margin: 2px 0 6px; width: auto; max-width: none; }
+/* A panel that has no picture says why instead, and that sentence must not be
+   the thing that makes the row too wide. */
+.crops p.lead { max-width: 300px; font-size: 12px; }
 """
 
 
@@ -278,12 +281,13 @@ def _printed_crop(case, row, stem: str) -> tuple[str, str]:
         return "", "the reference does not hold a bar of this number."
     box = bars.bar_box(geo, row.staff, numbers.index(row.bar) + 1, len(numbers))
     if not box:
-        found = len(bars._boundaries(geo.get("bar_lines", [])))
-        return "", (f"homr's detection found {found} barline(s) here, which cuts "
-                    f"this system into neither {len(numbers)} bars nor "
-                    f"{len(numbers)} plus its opening line — so which bar is "
-                    f"which is a guess, and a crop of the wrong bar is worse "
-                    f"than none.")
+        found = bars.implied_bars(geo)
+        return "", (f"homr's detection cuts this system into {found} bar(s) and "
+                    f"the score here holds {len(numbers)}, so which bar is which "
+                    f"is a guess. No crop: the wrong bar under a fault is worse "
+                    f"than no picture. The engravings beside this are unaffected "
+                    f"— MuseScore says where it drew each bar, so they need no "
+                    f"detection.")
     # How tall a staff is in this scan, so the crop comes out on the same scale
     # as the engravings beside it.
     band = geo["staves"][row.staff - 1]

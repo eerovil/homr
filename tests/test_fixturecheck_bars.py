@@ -99,7 +99,24 @@ def test_an_opening_line_that_was_detected_is_not_added_twice():
     assert bars.boundaries_for(_geo([0.05, 0.4, 0.95]), 2) == [0.05, 0.4, 0.95]
 
 
-def test_a_count_that_matches_nothing_is_refused():
+def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out():
+    """`sammon-ryosto`, and the reason the rule is not about counting.
+
+    Its detection missed the system's opening rule *and* found one line that is
+    not a barline. That came to exactly four bars' worth of boundaries, was
+    accepted, and every crop on the case came out one bar to the right of the
+    row that named it — a confident picture of the wrong music, which is the one
+    thing this must never produce.
+
+    Counting cannot tell two cancelling errors from none. Where the opening line
+    *would be* can: the first detected line is nowhere near the staff's left
+    edge, so the opening is missing, and once it is added back the count no
+    longer works out and the crop is refused.
+    """
+    geo = {"bar_lines": [0.218, 0.332, 0.661, 0.710, 0.960],
+           "staves": [{"top": 0.2, "bottom": 0.33, "left": 0.042, "right": 0.958}]}
+    assert bars.boundaries_for(geo, 4) is None
+    assert bars.bar_box(geo, 1, 2, 4) is None
     """The numbering would be a guess, and a guessed crop is worse than none."""
     assert bars.boundaries_for(_geo([0.3, 0.9]), 4) is None
     assert bars.boundaries_for(_geo([0.2, 0.4, 0.6, 0.8, 0.9]), 2) is None
