@@ -202,6 +202,72 @@ def _score(page: benchmark.BenchmarkPage, systems: List[dict],
     return "; ".join(parts)
 
 
+def record_benchmark(pages: dict, tree: Optional[str], in_pod: bool) -> None:
+    """Put this run in the series, beside `fixturecheck`'s and not mixed into it.
+
+    The two harnesses answer different questions -- this one scores staves, bars
+    and a little note-level truth across three public-domain pages, the other
+    scores notes across the printed systems of the whole repertoire -- so they
+    are recorded under separate harness names and never averaged. A baseline
+    written to a file under an invented name in `/var/tmp`, which is how this was
+    kept before, is not a series and cannot be asked a question about months.
+
+    A system homr could not read is recorded as unread rather than as a zero,
+    for the same reason it is in `fixturecheck`: a crash and a bad parse are
+    different failures.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from fixturecheck import quality, series
+
+    records = []
+    for page_id, page in pages.items():
+        for system in page.get("systems", []):
+            name = f"{page_id}-s{system['index']}"
+            if "staves" not in system:
+                records.append(series.CaseRecord(name, outcome=series.UNREADABLE))
+                continue
+            # Two checks the page itself settles, plus one per bar of hand
+            # transcribed truth where there is any.
+            checks = [system["staves"] == system["expected_staves"],
+                      system["bars"] == system["expected_bars"]]
+            checks += [row["found"] == row["truth"]
+                       for row in system.get("truth_rows", [])
+                       if row.get("truth") is not None]
+            records.append(series.CaseRecord(name, counts={
+                "agree": sum(1 for ok in checks if ok),
+                "judged": len(checks),
+                "staves_page": system["expected_staves"],
+                "staves_homr": system["staves"],
+                "perfect": all(checks),
+            }))
+
+    where = "pod" if in_pod else (os.path.basename(tree) if tree else "installed")
+    # This harness's reference is the benchmark manifest, which is committed in
+    # the choir repository -- so unlike `fixturecheck`'s it is already frozen,
+    # and its content hash is enough to key a run by.
+    manifest = os.path.join(CHOIR_REPO, "fixtures", "omr-benchmark", "pages.json")
+    stamp = "missing"
+    if os.path.exists(manifest):
+        import hashlib
+        with open(manifest, "rb") as reading:
+            stamp = hashlib.sha256(reading.read()).hexdigest()[:16]
+    # The revision the numbers came from, resolved from the engine that was
+    # chosen -- not from this checkout, which is where the harness lives and not
+    # necessarily where the homr under test does. A pod runs the tree it was
+    # given, so its revision is the tree's; a pod running its own install cannot
+    # be read from here and says so rather than borrowing ours.
+    revision = series.engine_revision(tree)
+    if in_pod and not tree:
+        revision = "pod:unknown"
+    run = series.record_run("choir-bench", "benchmark", records,
+                            references=stamp, homr=revision,
+                            extra={"engine": where})
+    quality.write()
+    head = run["headline"]
+    log(f"\nrecorded: {head['percent']:.1f}% of {head['judged']} checks "
+        f"(homr {run['homr']}, {where}) -> {series.SERIES.name}, {quality.QUALITY.name}")
+
+
 # --- the fixture, end to end ---------------------------------------------
 
 
@@ -396,6 +462,9 @@ def main() -> int:
         results["benchmark"] = run_benchmark(scratch, only)
     if targets["scan"]:
         results["scan"] = run_scan(scratch)
+
+    if targets["benchmark"]:
+        record_benchmark(results["benchmark"], tree, args.kubernetes)
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:

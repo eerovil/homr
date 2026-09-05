@@ -67,3 +67,7 @@ fixtures/*.fixture-probe.json
 stem-failures/
 .check-cache/
 check-report/
+
+# An issue worker checks its branch out here; a worktree is a separate working
+# directory, so leaving it visible only makes this checkout permanently dirty.
+.worktrees/

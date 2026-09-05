@@ -1,0 +1,26 @@
+{
+ "cases": {
+  "hanget-soi": {
+   "image": "068b31fc1ff37214",
+   "reference": "17062fdda97de069"
+  },
+  "kolme-kakea": {
+   "image": "b95e747c6ce251b8",
+   "reference": "fd08d7d9b346058d"
+  },
+  "laulun-aika-s2": {
+   "image": "1cfe1678f1d0c16a",
+   "reference": "b863e0b8d93ea5aa"
+  },
+  "sammon-ryosto": {
+   "image": "76fae301b00ef10e",
+   "reference": "713a7ff1394ffc44"
+  },
+  "system4": {
+   "image": "8792777f6b4397b0",
+   "reference": "3eb7f8e201a2322a"
+  }
+ },
+ "digest": "ff33f48a1bcaac77",
+ "why": "A fingerprint per case, not the music: this repository is public and the songs are not ours. A reference changing is then a deliberate commit rather than a silent drift under a number. See fixturecheck/references.py."
+}
