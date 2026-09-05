@@ -162,6 +162,12 @@ class Row:
     homr: str
     verdict: str
     kind: str          # agree | voice | pitch | size | timing | structure | unison
+    #: Which bar and staff this row is about, as data rather than as prose in
+    #: `where`. The report opens a fault out into that bar in full, on both
+    #: sides, and re-parsing our own sentence to find out which bar to show
+    #: would be a second definition of the same fact.
+    bar: str = ""
+    staff: int = 0
 
 
 @dataclass
@@ -403,54 +409,75 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     for key in sorted(want, key=lambda k: (int(re.sub(r"\D", "", k[0]) or 0), k[1], k[2])):
         bar, staff, onset = key
         where = f"bar {bar}, staff {staff}, beat {onset:g}"
+
+        def emit(page: str, homr: str, verdict: str, kind: str,
+                 _bar: str = bar, _staff: int = staff, _where: str = where) -> None:
+            """One row, stamped with the bar and staff it is about."""
+            result.rows.append(Row(_where, page, homr, verdict, kind,
+                                   bar=_bar, staff=_staff))
+
         mine = sorted(want[key], key=lambda n: -n["position"])
         theirs = sorted(got.get(key, []), key=lambda n: -n["position"])
         if len(mine) != len(theirs):
             if not theirs and heads_homr.get((bar, staff), 0) >= heads_page.get((bar, staff), 0):
                 result.timing += 1
-                result.rows.append(Row(
-                    where, f"{len(mine)} notehead(s)", "nothing at this beat",
-                    "homr has this bar's notes at other beats — a duration read "
-                    "differently, not a note lost", "timing"))
+                emit(f"{len(mine)} notehead(s)", "nothing at this beat",
+                     "homr has this bar's notes at other beats — a duration read "
+                     "differently, not a note lost", "timing")
             else:
                 result.size += 1
-                result.rows.append(Row(where, f"{len(mine)} notehead(s)",
-                                       f"{len(theirs)} notehead(s)",
-                                       "a different number of notes here", "size"))
+                emit(f"{len(mine)} notehead(s)", f"{len(theirs)} notehead(s)",
+                     "a different number of notes here", "size")
             continue
         for a, b in zip(mine, theirs):
             if a["position"] != b["position"]:
                 result.pitch += 1
                 gap = abs(a["position"] - b["position"])
-                result.rows.append(Row(
-                    where, f"{a['name']} · position {a['position']}",
-                    f"{b['name']} · position {b['position']}",
-                    f"a different note, {gap} position(s) "
-                    f"{'higher' if b['position'] > a['position'] else 'lower'}", "pitch"))
+                emit(f"{a['name']} · position {a['position']}",
+                     f"{b['name']} · position {b['position']}",
+                     f"a different note, {gap} position(s) "
+                     f"{'higher' if b['position'] > a['position'] else 'lower'}", "pitch")
                 continue
             if a.get("unison"):
                 result.unison += 1
-                result.rows.append(Row(where, f"{a['name']} · both voices", b["name"],
-                                       "a unison — one head, both parts", "unison"))
+                emit(f"{a['name']} · both voices", b["name"],
+                     "a unison — one head, both parts", "unison")
                 continue
             mine_rank, their_rank = here[staff][a["voice"]], there[staff][b["voice"]]
             if lines.get((bar, staff), 1) < 2:
                 result.agree += 1
-                result.rows.append(Row(where, f"{a['name']} · the only line",
-                                       b["name"], "one line here — no voice to "
-                                       "get wrong", "agree"))
+                emit(f"{a['name']} · the only line", b["name"],
+                     "one line here — no voice to get wrong", "agree")
                 continue
             if mine_rank != their_rank:
                 result.voice += 1
-                result.rows.append(Row(
-                    where, f"{a['name']} · voice {mine_rank}",
-                    f"{b['name']} · voice {their_rank}"
-                    + ("" if b["stem"] else " (no stem)"),
-                    "folded into the other voice as a chord member" if b["chord"]
-                    else "written in the other voice", "voice"))
+                emit(f"{a['name']} · voice {mine_rank}",
+                     f"{b['name']} · voice {their_rank}"
+                     + ("" if b["stem"] else " (no stem)"),
+                     "folded into the other voice as a chord member" if b["chord"]
+                     else "written in the other voice", "voice")
                 continue
             result.agree += 1
-            result.rows.append(Row(where, f"{a['name']} · voice {mine_rank}",
-                                   f"{b['name']} · voice {their_rank}",
-                                   "the voice the page prints", "agree"))
+            emit(f"{a['name']} · voice {mine_rank}", f"{b['name']} · voice {their_rank}",
+                 "the voice the page prints", "agree")
     return result
+
+
+def bar_contents(path: Path, bar: str, staff: int) -> list[dict]:
+    """Everything one bar of one staff holds, in the order it sounds.
+
+    What a fault row cannot say on its own. "homr has this bar's notes at other
+    beats" is true and useless: *which* beats, and which of the two noteheads
+    did it write? Both sides of the bar, laid out, answer that without opening
+    the score — which is the whole point of there being a report.
+    """
+    found = []
+    for (this_bar, this_staff, onset), group in sorted(read_score(path).items()):
+        if this_bar != bar or this_staff != staff:
+            continue
+        for note in sorted(group, key=lambda n: -n["position"]):
+            found.append({"beat": onset, "name": note["name"],
+                          "position": note["position"], "voice": note["voice"],
+                          "chord": note.get("chord", False),
+                          "stem": note.get("stem", True)})
+    return found

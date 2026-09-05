@@ -55,6 +55,41 @@ same as nobody being wrong.
 
 Adding one is a look at the crop the case page already shows, and a line of JSON.
 
+## A fault opens out into its bar
+
+A fault row says a fault happened. It cannot say what happened: *"homr has this
+bar's notes at other beats"* is exactly true and does not say **which** beats,
+and *"2 noteheads against 1"* does not say which one survived. Judging whether a
+reading is homr's mistake or the reference's meant opening the score, which is
+the work the report exists to save.
+
+So every fault row folds out — collapsed, so nothing moves for the rows that
+agree — into that bar and staff in full:
+
+- **The notes, both sides.** Every notehead of the bar with its beat, staff
+  position and voice, the page beside homr. On `hanget-soi`'s bar 3 this settles
+  the question at a glance: the same six notes at the same positions, at beats
+  `0 0 0.75 1 1 1.5` on the page and `0 0 1 1.25 1.25 1.5` in homr's reading. A
+  duration read differently, and nothing lost.
+- **The same bar as pictures**: the printed crop, that bar engraved from homr's
+  parse, and that bar engraved from the reference. The printed one is the one
+  that matters, because on this repertoire it has settled every disagreement
+  that anybody checked.
+
+Cutting a bar out of a MusicXML file is reliable. Finding it in a photograph is
+not: it needs the barlines, which come from **homr's own detection**
+(`bars.geometry`, the same segmentation pass `scripts/homr_staves.py` uses in
+the choir app, cached per case). The lines have to cut the system into exactly
+the bars the reference says it holds, and a system's *opening* rule is normally
+not detected — it is one of a pair with the bracket — so `n` bars usually come
+back as `n` lines and the staff's own left edge is added back as the first
+boundary. Anything else is **refused**, and the row says why. A crop of the
+wrong bar is a confident picture of the wrong music underneath a finding, which
+is the mistake this whole harness exists to stop.
+
+Song systems keep the first-three-faults treatment in the series. This is the
+report, and the report has always been where the music is shown.
+
 ## Every run is kept
 
 `check-report/results.json` held the last run and only the last run, so a

@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fixturecheck import bars, cases, compare
 from fixturecheck.compare import Result
 
 #: Where the report is written, and **outside any checkout by default**.
@@ -77,6 +78,18 @@ p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
 p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+tr.detail td { background: #fcfcfc; padding: 0 9px 10px; }
+tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
+                    padding: 6px 0; }
+.sides { display: flex; gap: 18px; flex-wrap: wrap; }
+.sides > div { flex: 1 1 260px; min-width: 0; }
+.sides h4 { margin: 6px 0 4px; font-size: 12px; text-transform: uppercase;
+            letter-spacing: .05em; color: #666; }
+table.bar { margin: 0 0 8px; }
+table.bar th, table.bar td { padding: 3px 7px; font-size: 12px; }
+.crops { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+.crops > div { flex: 1 1 260px; min-width: 0; }
+.crops img { margin: 2px 0 6px; }
 """
 
 
@@ -145,6 +158,115 @@ def _engrave(source: Path, into: Path, dpi: int = 220) -> str:
     return into.name if run.returncode == 0 and into.exists() else ""
 
 
+#: Rows that get opened out into the whole bar. A row that agrees needs no
+#: explaining, and a structural row is about the system rather than a bar.
+FAULTS = ("voice", "pitch", "size", "timing")
+
+
+def _beats(notes: list[dict]) -> str:
+    """One side of a bar, as the notes it holds in the order they sound."""
+    if not notes:
+        return "<p class='lead'>nothing in this bar</p>"
+    cells = "".join(
+        f"<tr><td>{note['beat']:g}</td><td>{html.escape(str(note['name']))}</td>"
+        f"<td>{note['position']}</td>"
+        f"<td>{html.escape(str(note['voice']))}"
+        f"{' · chord' if note.get('chord') else ''}"
+        f"{'' if note.get('stem', True) else ' · no stem'}</td></tr>"
+        for note in notes)
+    return ("<table class='bar'><tr><th>beat</th><th>note</th><th>position</th>"
+            f"<th>voice</th></tr>{cells}</table>")
+
+
+def _bar_pictures(case, parsed: Path, row) -> str:
+    """The same bar three ways: the printed ink, homr's reading, the reference.
+
+    The tables above say what each side holds. Only the page says which of them
+    is right, and on this repertoire the reference has been the wrong one every
+    time anybody checked -- so the printed crop is the picture that matters and
+    the other two are what it is being read against.
+
+    Every piece is optional and says so when it is missing. A missing MuseScore
+    costs the engravings, a bar the detection cannot place costs the crop, and
+    neither costs the finding.
+    """
+    cli = (os.environ.get("MUSESCORE_CLI_PATH") or "musescore3").strip().strip('"')
+    stem = f"{case.name}-b{row.bar}-s{row.staff}"
+    parts = []
+
+    printed, why = _printed_crop(case, row, stem)
+    if printed:
+        parts.append(f"<div><h4>the printed bar</h4><img src='{printed}' "
+                     f"alt='bar {html.escape(row.bar)} as printed'></div>")
+    else:
+        parts.append(f"<div><h4>the printed bar</h4><p class='lead'>{html.escape(why)}"
+                     f"</p></div>")
+
+    for label, source, suffix in (("homr, engraved", parsed, "homr"),
+                                  ("the reference, engraved", case.reference, "ref")):
+        drawn = bars.engrave_bar(source, row.bar,
+                                 cases.CACHE / "bars" / f"{stem}-{suffix}.musicxml",
+                                 OUT / f"{stem}-{suffix}.png", cli)
+        if drawn:
+            parts.append(f"<div><h4>{label}</h4><img src='{drawn.name}' "
+                         f"alt='{label}'></div>")
+    return f"<div class='crops'>{''.join(parts)}</div>"
+
+
+def _printed_crop(case, row, stem: str) -> tuple[str, str]:
+    """The bar cut out of the printed band, or why it is not shown."""
+    geo = bars.geometry(case.image, cases.CACHE / "geometry" / f"{case.name}.json")
+    if not geo:
+        return "", ("homr's own staff detection could not measure this picture, "
+                    "so there is nothing to cut the bar out by.")
+    numbers = bars.bars_in(case.reference)
+    if row.bar not in numbers:
+        return "", "the reference does not hold a bar of this number."
+    box = bars.bar_box(geo, row.staff, numbers.index(row.bar) + 1, len(numbers))
+    if not box:
+        found = len(bars._boundaries(geo.get("bar_lines", [])))
+        return "", (f"homr's detection found {found} barline(s) here, which cuts "
+                    f"this system into neither {len(numbers)} bars nor "
+                    f"{len(numbers)} plus its opening line — so which bar is "
+                    f"which is a guess, and a crop of the wrong bar is worse "
+                    f"than none.")
+    cut = bars.crop(case.image, box, OUT / f"{stem}-page.png")
+    if not cut:
+        return "", "the crop could not be written."
+    return cut.name, ""
+
+
+def _bar_detail_row(case, parsed: Path, row) -> str:
+    """The whole bar, both sides, folded away under a fault.
+
+    A fault row says a fault happened; it cannot say what happened. "homr has
+    this bar's notes at other beats" is exactly true and tells you nothing about
+    *which* beats, and "2 noteheads against 1" does not say which one survived.
+    Deciding whether a reading is homr's mistake or our reference's needs the
+    bar, and needing the bar meant opening the score -- which is the work the
+    report exists to save.
+
+    Collapsed, so nothing moves for the rows that agree, and only on faults.
+    """
+    if row.kind not in FAULTS or not row.bar:
+        return ""
+    try:
+        page = compare.bar_contents(case.reference, row.bar, row.staff)
+        homr = compare.bar_contents(parsed, row.bar, row.staff)
+    except Exception:                                        # noqa: BLE001
+        # A detail that cannot be built must cost the detail and not the report:
+        # the row above it is the finding, and this is an explanation of it.
+        return ""
+    pictures = _bar_pictures(case, parsed, row)
+    return (
+        "<tr class='detail'><td colspan='4'>"
+        f"<details><summary>bar {html.escape(row.bar)}, staff {row.staff} in full"
+        "</summary><div class='sides'>"
+        f"<div><h4>the page</h4>{_beats(page)}</div>"
+        f"<div><h4>homr</h4>{_beats(homr)}</div>"
+        f"</div>{pictures}</details></td></tr>")
+
+
 def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
     """Write one case's page and return its filename."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -192,6 +314,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
         f"<td>{html.escape(row.homr)}</td>"
         f"<td class='{'ok' if row.kind in ('agree', 'unison') else 'no'}'>"
         f"{html.escape(row.verdict)}</td></tr>"
+        + _bar_detail_row(case, parsed, row)
         for row in result.rows)
 
     body = f"""<!doctype html>
