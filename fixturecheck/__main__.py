@@ -170,9 +170,16 @@ def run_cases(names: list[str], tier: str) -> int:
 
     gate = gate_over(records, committed)
     moved = references.drift(built)
+    # The roster goes in every run, not just one that judged a fixture: the
+    # published gate is built from each committed fixture's own latest result
+    # (`quality.published_gate`), so the summary has to know the whole set even
+    # when this run touched none of it.
+    extra = {"committed": sorted(committed)}
+    if moved["changed"]:
+        extra["reference_drift"] = moved
     run = series.record_run("fixturecheck", tier, records,
                             references=references.stamp(built), gate=gate,
-                            extra={"reference_drift": moved} if moved["changed"] else None)
+                            extra=extra)
     quality.write()
 
     if entries:

@@ -193,13 +193,12 @@ def test_freezing_a_few_does_not_drop_the_rest(tmp_path):
 
 def test_the_summary_names_which_homr_and_says_what_it_cannot_measure(tmp_path):
     path = tmp_path / "series.jsonl"
-    series.record_run("fixturecheck", "all", [case("a", agree=9, pitch=1)],
-                      references="ref9", gate={"fixtures": 5, "perfect": 5,
-                                               "failing": [], "passed": True},
+    series.record_run("fixturecheck", "all",
+                      [case("a", agree=9, pitch=1)] + [_perfect(n, True) for n in "abcde"],
+                      references="ref9", extra={"committed": list("abcde")},
                       path=path)
     written = quality.render(path)
 
-    assert "90.0%" in written
     assert "ref9" in written
     assert "pass" in written
     # The two things it is not allowed to let a reader assume.
@@ -209,12 +208,11 @@ def test_the_summary_names_which_homr_and_says_what_it_cannot_measure(tmp_path):
 
 def test_the_summary_names_the_failing_fixtures(tmp_path):
     path = tmp_path / "series.jsonl"
-    series.record_run("fixturecheck", "ten", [case("a", agree=1)],
-                      references="r",
-                      gate={"fixtures": 5, "perfect": 3,
-                            "failing": ["hanget-soi", "sammon-ryosto"],
-                            "passed": False},
-                      path=path)
+    roster = ["hanget-soi", "kolme-kakea", "laulun-aika-s2", "sammon-ryosto", "system4"]
+    series.record_run(
+        "fixturecheck", "ten",
+        [_perfect(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
+        references="r", extra={"committed": roster}, path=path)
     written = quality.render(path)
 
     assert "FAIL" in written
@@ -244,20 +242,21 @@ def test_a_run_that_judged_no_fixtures_cannot_turn_a_failing_gate_green(tmp_path
     a real `FAIL - 3/5` with `all 0 committed fixtures are perfect`.
     """
     path = tmp_path / "series.jsonl"
-    series.record_run("fixturecheck", "all", [case("a", agree=1)], references="r",
-                      gate={"fixtures": 5, "perfect": 3,
-                            "failing": ["hanget-soi", "sammon-ryosto"],
-                            "passed": False},
-                      path=path)
+    roster = ["hanget-soi", "kolme-kakea", "laulun-aika-s2", "sammon-ryosto", "system4"]
+    series.record_run(
+        "fixturecheck", "all",
+        [_perfect(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
+        references="r", extra={"committed": roster}, path=path)
     # ...then an ordinary run over song systems only, which judges no fixture.
     series.record_run("fixturecheck", "one", [case("song-s4", agree=20)],
-                      references="r", gate=None, path=path)
+                      references="r", gate=None,
+                      extra={"committed": roster}, path=path)
 
     written = quality.render(path)
     assert "FAIL" in written
     assert "hanget-soi" in written and "sammon-ryosto" in written
     assert "all 0 committed fixtures" not in written
-    assert "Carried forward" in written     # and it says the newer run judged none
+    assert "3/5" in written                 # still speaking for all five
 
 
 def test_a_run_with_no_fixtures_in_it_records_no_gate():
@@ -278,6 +277,74 @@ def test_nothing_recorded_is_not_a_passing_gate(tmp_path):
     written = quality.render(path)
     assert "not evaluated" in written
     assert "pass" not in written.split("## What this does not measure")[0]
+
+
+def _fixture_run(path, cases_, at_committed=("a", "b", "c", "d", "e"), **kw):
+    return series.record_run("fixturecheck", kw.pop("tier", "one"), cases_,
+                             references="r",
+                             extra={"committed": sorted(at_committed)},
+                             path=path, **kw)
+
+
+def _perfect(name, ok):
+    counts = {k: 0 for k in series.COUNTS}
+    counts.update({"agree": 10, "perfect": ok})
+    if not ok:
+        counts["pitch"] = 2
+    return series.CaseRecord(name, counts=counts)
+
+
+def test_rerunning_one_passing_fixture_cannot_turn_a_failing_gate_green(tmp_path):
+    """The hole the zero-fixture fix left open.
+
+    `fixturecheck one system4` judges one fixture, passes it, and used to
+    publish `1/1 perfect` — so a standing `FAIL - 3/5` went green because
+    somebody re-ran a fixture that was never the problem, while both failing
+    ones were still failing and nothing said so.
+    """
+    path = tmp_path / "series.jsonl"
+    # A full run: three perfect, two not.
+    _fixture_run(path, [_perfect("a", True), _perfect("b", True), _perfect("c", True),
+                        _perfect("d", False), _perfect("e", False)], tier="all")
+    assert "FAIL" in quality.render(path)
+
+    # ...then one passing fixture on its own, which says nothing about d and e.
+    _fixture_run(path, [_perfect("a", True)])
+
+    written = quality.render(path)
+    assert "FAIL" in written
+    assert "3/5" in written
+    assert "`d`" in written and "`e`" in written
+    assert "all 1 committed fixtures" not in written
+
+
+def test_the_published_gate_is_each_fixtures_own_latest_result(tmp_path):
+    """A run moves the fixtures it ran, and only those."""
+    path = tmp_path / "series.jsonl"
+    _fixture_run(path, [_perfect(n, n not in ("d", "e")) for n in "abcde"], tier="all")
+    gate = quality.published_gate(series.runs(path))
+    assert (gate["perfect"], gate["fixtures"]) == (3, 5)
+    assert gate["failing"] == ["d", "e"] and not gate["passed"]
+
+    # Fixing one of them, on its own, moves exactly one.
+    _fixture_run(path, [_perfect("d", True)])
+    gate = quality.published_gate(series.runs(path))
+    assert (gate["perfect"], gate["fixtures"]) == (4, 5)
+    assert gate["failing"] == ["e"] and not gate["passed"]
+
+    # And fixing the last one passes it, because now all five stand perfect.
+    _fixture_run(path, [_perfect("e", True)])
+    assert quality.published_gate(series.runs(path))["passed"]
+
+
+def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path):
+    """"We have never looked" is not "we looked and it was fine"."""
+    path = tmp_path / "series.jsonl"
+    _fixture_run(path, [_perfect(n, True) for n in "abc"])
+    gate = quality.published_gate(series.runs(path))
+    assert not gate["passed"]
+    assert gate["unevaluated"] == ["d", "e"]
+    assert "Never judged" in quality.render(path)
 
 
 def test_the_benchmark_records_the_engine_it_measured_not_this_checkout(tmp_path):
@@ -322,8 +389,84 @@ def test_the_benchmark_records_the_engine_it_measured_not_this_checkout(tmp_path
     assert series.engine_revision(None, str(venv / "bin" / "homr")) == "installed:ec41559"
 
     # And an engine that cannot be identified says so rather than borrowing ours.
-    assert series.engine_revision(None, "") == "unknown"
     assert series.engine_revision(None, str(tmp_path / "nope" / "bin" / "homr")) == "unknown"
+
+
+def test_the_ordinary_run_finds_the_install_without_being_told(tmp_path, monkeypatch):
+    """The documented invocation sets no `HOMR_BIN` and got `unknown`.
+
+    `scripts/choir-bench.py --benchmark` with no `--tree` is *the* case this
+    provenance exists for, and it was the one case that recorded nothing: the
+    app resolves its own default venv, so nothing put `HOMR_BIN` in the
+    environment for `engine_revision` to read. This exercises that path -- no
+    `HOMR_BIN`, no `--tree`, nothing handed in.
+    """
+    venv = tmp_path / "homr-venv"
+    site = venv / "lib" / "python3.12" / "site-packages" / "homr-0.7.0.post103+ec41559.dist-info"
+    site.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "homr").write_text("#!/bin/sh\n")
+    (site / "direct_url.json").write_text(json.dumps(
+        {"vcs_info": {"commit_id": "ec4155991a5d7c17b8049dec2a690c86cba7db96"}}))
+
+    monkeypatch.delenv("HOMR_BIN", raising=False)
+    monkeypatch.setattr(series, "DEFAULT_VENV", str(venv))
+
+    assert series.installed_binary() == str(venv / "bin" / "homr")
+    assert series.engine_revision() == "installed:ec41559"
+
+    # And an explicit HOMR_BIN still wins, the way the app resolves it.
+    monkeypatch.setenv("HOMR_BIN", str(venv / "bin" / "homr"))
+    assert series.engine_revision() == "installed:ec41559"
+
+
+def test_no_install_anywhere_is_unknown_rather_than_a_guess(tmp_path, monkeypatch):
+    monkeypatch.delenv("HOMR_BIN", raising=False)
+    monkeypatch.setattr(series, "DEFAULT_VENV", str(tmp_path / "nothing-here"))
+    assert series.installed_binary() == "homr"
+    assert series.engine_revision() == "unknown"
+
+
+def test_a_worktree_is_keyed_by_its_homr_code_not_by_its_head(tmp_path):
+    """A harness commit is not a new homr, and must not read as one.
+
+    This pull request is the case: its head is several commits past the last
+    change to `homr/`, and every one of them is harness and report. Keying a
+    benchmark to the head would file its numbers under a homr that has never
+    existed -- and would disagree with `homr_commit` and the parse cache, which
+    both key on `homr/`.
+    """
+    import subprocess as sp
+
+    tree = tmp_path / "tree"
+    (tree / "homr").mkdir(parents=True)
+    (tree / "fixturecheck").mkdir()
+    sp.run(["git", "init", "-q"], cwd=tree, check=True)
+
+    def commit(message):
+        sp.run(["git", "add", "-A"], cwd=tree, check=True)
+        sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-qm", message], cwd=tree, check=True)
+        return sp.run(["git", "log", "-1", "--format=%h"], cwd=tree,
+                      capture_output=True, text=True).stdout.strip()
+
+    (tree / "homr" / "main.py").write_text("x = 1\n")
+    engine = commit("a real homr change")
+
+    (tree / "fixturecheck" / "report.py").write_text("# harness only\n")
+    head = commit("harness only, no homr")
+    assert head != engine
+
+    assert series.engine_revision(str(tree)) == engine     # not `head`
+
+    # Uncommitted work in homr/ is still marked, on the homr commit.
+    (tree / "homr" / "main.py").write_text("x = 2\n")
+    assert series.engine_revision(str(tree)) == engine + "+dirty"
+
+    # ...and uncommitted work outside homr/ is not homr changing.
+    sp.run(["git", "checkout", "--", "homr"], cwd=tree, check=True)
+    (tree / "fixturecheck" / "report.py").write_text("# edited\n")
+    assert series.engine_revision(str(tree)) == engine
 
 
 def test_an_explicit_revision_beats_the_checkout(tmp_path):

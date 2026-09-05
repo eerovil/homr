@@ -155,7 +155,11 @@ and on a desktop, and it names the homr it is describing. That last part was
 half the problem — "the current homr" meant the fork's tip to one reader and the
 venv the choir sings from to another, and no number anywhere distinguished them.
 
-`choir-bench.py` records into the same file under its own harness name. The two
+`choir-bench.py` records into the same file under its own harness name, keyed by
+**the engine it measured** — the install found the way the app finds it
+(`HOMR_BIN`, else the venv the installer writes), or a worktree's **last commit
+touching `homr/`** rather than its `HEAD`, since a harness commit is not a new
+homr. The two
 are **never averaged**: this one scores notes across the printed systems of the
 repertoire, that one scores staves and bars across the benchmark pages, and one
 figure over both would mean nothing.
@@ -223,7 +227,21 @@ exactly like a case nobody ran.
 ## The gate
 
 **The five committed fixtures are expected to be perfect**, and a run in which
-any of them is below 100% exits non-zero. They are small single systems this
+any of them is below 100% exits non-zero.
+
+**The published gate speaks for all five, whatever a run touched.** It is built
+from each fixture's *own latest standing result* across the series, so a run can
+only ever move the fixtures it actually ran. Reading it off the newest run that
+judged anything was wrong twice over: a song-only run published `0/0 passed`,
+and — less obviously — `fixturecheck one system4` published `1/1 perfect`, so a
+standing `FAIL — 3/5` went green because somebody re-ran a fixture that was
+never the problem. A fixture nobody has judged is not a pass either; it is
+counted as unevaluated and holds the gate open, because "we have never looked"
+and "we looked and it was fine" are different claims.
+
+The command's own exit status stays scoped to what it ran, which is what you
+want when re-running one case; the summary is the thing that has to speak for
+the whole set. They are small single systems this
 repository owns outright; if they are wrong, nothing measured on top of them
 means much.
 

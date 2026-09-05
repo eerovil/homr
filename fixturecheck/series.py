@@ -78,6 +78,34 @@ def homr_commit() -> str:
     return (head or "nogit") + ("+dirty" if dirty.strip() else "")
 
 
+#: Where `scripts/install-homr.sh` puts the one install, and therefore what the
+#: choir app runs when nothing says otherwise. Kept in step with
+#: `src/song_app/omr.py`'s `DEFAULT_VENV` by hand, because this repository
+#: cannot import that one.
+DEFAULT_VENV = os.path.join(os.path.expanduser("~"), ".local", "share",
+                            "musescore-choir-plugins", "homr-venv")
+
+
+def installed_binary() -> str:
+    """The homr the app would run: `HOMR_BIN`, else the venv the installer writes.
+
+    The same order `omr.homr_binary` resolves in, and it has to be, because the
+    point is to name *the binary that read the music*. Looking only at
+    `HOMR_BIN` was the defect: the documented benchmark invocation sets nothing
+    and lets the app find its own default, so the ordinary run recorded
+    `unknown` while measuring a perfectly identifiable install.
+
+    Falls back to the bare name, which resolves on `PATH` — and if there is no
+    venv behind it there is nothing to read a revision out of, so that ends up
+    `unknown`, honestly this time.
+    """
+    configured = os.environ.get("HOMR_BIN")
+    if configured:
+        return configured
+    default = os.path.join(DEFAULT_VENV, "bin", "homr")
+    return default if os.path.exists(default) else "homr"
+
+
 def engine_revision(tree: str | None = None, binary: str | None = None) -> str:
     """The revision of a homr that is **not** this checkout.
 
@@ -89,26 +117,38 @@ def engine_revision(tree: str | None = None, binary: str | None = None) -> str:
     homr that did not produce them. Which is this card's own complaint, one
     level down.
 
-    A worktree answers with git, uncommitted work marked, matching how a parse
-    is keyed. An install answers with what pip wrote down: `direct_url.json`
-    carries the commit, and the distribution's own version carries it too
+    A worktree answers with **the last commit that touched `homr/`**, not with
+    its `HEAD`, uncommitted work in `homr/` marked. Those are different commits
+    and the difference is not hypothetical: the branch this was written on sits
+    several commits past `ec41559` and every one of them is harness and report,
+    so keying a benchmark to its `HEAD` would name a homr that has never existed.
+    `homr_commit` and the parse cache already key this way, and all three have to
+    agree or a cached parse and the run that used it are filed under different
+    engines.
+
+    An install answers with what pip wrote down: `direct_url.json` carries the
+    commit, and the distribution's own version carries it too
     (`0.7.0.post103+ec41559`), which is the fallback when the install was not
-    made from a URL.
+    made from a URL. **Which install is found the way the app finds it** —
+    `HOMR_BIN` if it is set, else the venv `scripts/install-homr.sh` writes.
+    Requiring `HOMR_BIN` meant the documented invocation, which sets nothing and
+    lets the app resolve its own default, recorded `unknown` every time: the
+    ordinary case, the one this is for.
 
     `unknown` rather than a guess when none of it can be read. A run whose
     engine cannot be identified is still worth recording — the numbers happened
     — but not worth attributing to a revision nobody checked.
     """
     if tree:
-        rev = subprocess.run(["git", "log", "-1", "--format=%h"], cwd=tree,
-                             capture_output=True, text=True).stdout.strip()
+        rev = subprocess.run(["git", "log", "-1", "--format=%h", "--", "homr"],
+                             cwd=tree, capture_output=True, text=True).stdout.strip()
         if not rev:
             return "unknown"
         dirty = subprocess.run(["git", "status", "--porcelain", "--", "homr"],
                                cwd=tree, capture_output=True, text=True).stdout
         return rev + ("+dirty" if dirty.strip() else "")
 
-    binary = binary or os.environ.get("HOMR_BIN") or ""
+    binary = binary or installed_binary()
     venv = os.path.dirname(os.path.dirname(binary)) if binary else ""
     if not venv or not os.path.isdir(venv):
         return "unknown"

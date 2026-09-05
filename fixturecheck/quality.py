@@ -56,37 +56,69 @@ def _trend(harness: str, path: Path) -> list[dict]:
     return [run for run in series.runs(path) if run.get("harness") == harness]
 
 
-def _last_evaluated_gate(runs_of: list[dict]) -> tuple[dict | None, dict | None]:
-    """The most recent run that actually judged a committed fixture.
+def published_gate(runs_of: list[dict]) -> dict | None:
+    """The gate over **all** the committed fixtures, not over one run's worth.
 
-    **Not simply the most recent run.** Most runs judge no fixture at all — a
-    song system, a retry of one case — and treating "this run had nothing to say
-    about the gate" as "the gate is fine" is how a standing FAIL gets quietly
-    replaced by `all 0 committed fixtures are perfect`. A gate is a claim about
-    the last time anybody looked, so that is the run it is read from, and the
-    summary says which run that was.
+    Reading it off the newest run that judged anything was still wrong, and the
+    hole is bigger than the zero-fixture one it replaced: `fixturecheck one
+    system4` judges one fixture, passes it, and publishes `1/1 perfect` — so a
+    standing `FAIL — 3/5` goes green because somebody re-ran a fixture that was
+    never the problem. Both of the failing ones are still failing and nothing
+    said so.
+
+    A gate is a claim about the whole set, so it is built from the whole set:
+    each committed fixture's **own latest standing result**, taken across the
+    series. A run can then only ever move the fixtures it actually ran, which is
+    the property that was missing. A fixture nobody has judged is not a pass —
+    it is counted as unevaluated and holds the gate open, because "we have never
+    looked" and "we looked and it was fine" are not the same claim.
+
+    The roster comes out of the runs themselves (`committed`), so the summary
+    does not need the fixtures on disk and an old series stays readable.
     """
-    for run in reversed(runs_of):
-        gate = run.get("gate")
-        if gate and gate.get("fixtures"):
-            return gate, run
-    return None, None
+    roster: list[str] = []
+    for run in runs_of:
+        if run.get("committed"):
+            roster = list(run["committed"])
+    if not roster:
+        return None
+
+    standing: dict[str, tuple[bool, str]] = {}
+    for run in runs_of:
+        for name in roster:
+            case = run.get("cases", {}).get(name)
+            if case and case.get("outcome", series.READ) == series.READ \
+                    and "perfect" in case:
+                standing[name] = (bool(case["perfect"]), run.get("at", ""))
+
+    failing = sorted(n for n in roster if n in standing and not standing[n][0])
+    unevaluated = sorted(n for n in roster if n not in standing)
+    return {
+        "fixtures": len(roster),
+        "perfect": sum(1 for n in roster if standing.get(n, (False,))[0]),
+        "failing": failing,
+        "unevaluated": unevaluated,
+        "passed": not failing and not unevaluated,
+        "as_of": max((when for _, when in standing.values()), default=""),
+    }
 
 
 def _gate_line(runs_of: list[dict]) -> str:
-    gate, from_run = _last_evaluated_gate(runs_of)
+    gate = published_gate(runs_of)
     if not gate:
-        return ("_not evaluated_ — no recorded run has judged a committed fixture.")
-    when = from_run.get("at", "")
-    newest = runs_of[-1] if runs_of else from_run
-    stale = ("" if newest is from_run
-             else f" Carried forward: the run of {newest.get('at', '')} judged none.")
-    if gate.get("passed"):
-        return (f"**pass** — all {gate['fixtures']} committed fixtures were perfect "
-                f"when last judged, {when}.{stale}")
-    failing = ", ".join(f"`{name}`" for name in gate.get("failing", [])) or "unknown"
-    return (f"**FAIL** — {gate.get('perfect', 0)}/{gate['fixtures']} perfect as of "
-            f"{when}; below 100%: {failing}.{stale}")
+        return "_not evaluated_ — no recorded run has judged a committed fixture."
+    tail = ""
+    if gate["unevaluated"]:
+        names = ", ".join(f"`{n}`" for n in gate["unevaluated"])
+        tail = (f" Never judged, so the gate cannot pass: {names}.")
+    if gate["passed"]:
+        return (f"**pass** — all {gate['fixtures']} committed fixtures stand "
+                f"perfect, latest as of {gate['as_of']}.")
+    failing = ", ".join(f"`{n}`" for n in gate["failing"])
+    below = f"; below 100%: {failing}" if failing else ""
+    return (f"**FAIL** — {gate['perfect']}/{gate['fixtures']} perfect, latest as "
+            f"of {gate['as_of']}{below}.{tail} Each fixture counts by its own "
+            f"latest result, so re-running one cannot speak for the others.")
 
 
 def render(path: Path = series.SERIES) -> str:
