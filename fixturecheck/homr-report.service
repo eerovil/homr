@@ -34,8 +34,19 @@ After=network.target
 # Loopback only, deliberately: the tailnet reaches this through `tailscale
 # serve`, which authenticates. Binding it wider would put the report on every
 # network this machine is on.
-ExecStart=/usr/bin/python3 -m http.server 8125 --bind 127.0.0.1 \
-    --directory %h/.local/share/homr-fixturecheck/report
+#
+# `fixturecheck.serve` rather than `http.server`, because the page can now start
+# a run: the report answered "how good is it now" without running anything, and
+# could not start the run that refreshes it without ssh and a checkout.
+#
+# Under **homr's venv**, or a queued run cannot import homr. MUSESCORE_CLI_PATH
+# engraves the case pages; FIXTURECHECK_REPORT_URL only puts a link in
+# QUALITY.md.
+Environment=MUSESCORE_CLI_PATH=%h/.local/bin/MuseScore3.AppImage
+Environment=FIXTURECHECK_REPORT_URL=https://bazzite.taile8d16e.ts.net:8124
+WorkingDirectory=%h/homr
+ExecStart=%h/.local/share/musescore-choir-plugins/homr-venv/bin/python \
+    -m fixturecheck.serve
 Restart=on-failure
 RestartSec=5
 

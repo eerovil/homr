@@ -78,6 +78,17 @@ p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
 p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+#runbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+          margin: 0 0 12px; padding: 9px 11px; background: #fff;
+          border: 1px solid #e2e2e2; border-radius: 6px; font-size: 13px; }
+#runbar button { font: inherit; padding: 4px 10px; border-radius: 5px;
+                 border: 1px solid #c9c9c9; background: #f6f6f6; cursor: pointer; }
+#runbar button:hover { background: #ececec; }
+#runbar.busy button { opacity: .55; }
+#runbar .one { color: #666; }
+#runbar select { font: inherit; padding: 3px; }
+#runstate { color: #555; font-variant-numeric: tabular-nums; }
+#runbar.busy #runstate { color: #8a5a00; }
 tr.stale td { color: #6b6b6b; }
 span.when { font-size: 11px; color: #8a8a8a; }
 tr.detail td { background: #fcfcfc; padding: 0 9px 10px; }
@@ -154,6 +165,84 @@ def _gate(run: dict | None) -> str:
             f"committed fixtures perfect, each counted at its own latest result."
             f"{below}{never} These are small systems this repository owns outright "
             f"and are expected to be exactly right.</p>")
+
+
+def _controls(names: list[str]) -> str:
+    """Buttons that start a run, when something is serving that can start one.
+
+    The page is a folder of files, so these do nothing on their own —
+    `fixturecheck/serve.py` answers `/run` and `/queue`, and the bar hides
+    itself when it cannot reach them. That way the same HTML is right whether it
+    is being served or opened off disk, with no second version to keep in step.
+
+    `all` is thirty-five minutes and says so before it is pressed, because a
+    button whose cost is invisible gets pressed by mistake exactly once.
+    """
+    options = "".join(f"<option>{html.escape(n)}</option>" for n in sorted(names))
+    return f"""
+<div id="runbar" hidden>
+  <button data-tier="ten">Run the ten</button>
+  <button data-tier="all" data-cost="the whole repertoire, about 35 minutes">Run everything</button>
+  <span class="one">or one:
+    <select id="onecase">{options}</select>
+    <button data-tier="one">Run it</button>
+  </span>
+  <span id="runstate"></span>
+</div>
+<script>
+(function () {{
+  const bar = document.getElementById('runbar');
+  const state = document.getElementById('runstate');
+  const say = (text, busy) => {{
+    state.textContent = text;
+    bar.classList.toggle('busy', !!busy);
+  }};
+  const draw = (q) => {{
+    if (q.running) {{
+      const behind = q.waiting.length ? ` \\u00b7 ${{q.waiting.length}} waiting` : '';
+      say(`running ${{q.running}}${{behind}}`, true);
+    }} else if (q.last) {{
+      say(`last: ${{q.last.label}} \\u2014 ${{q.last.said || 'done'}}`, false);
+    }} else {{
+      say('', false);
+    }}
+  }};
+  const poll = () => fetch('queue', {{cache: 'no-store'}})
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(q => {{ bar.hidden = false; draw(q); }})
+    .catch(() => {{ bar.hidden = true; }});
+  bar.addEventListener('click', (event) => {{
+    const button = event.target.closest('button[data-tier]');
+    if (!button) return;
+    const cost = button.dataset.cost;
+    if (cost && !confirm(`Run ${{cost}}?`)) return;
+    const body = {{tier: button.dataset.tier}};
+    if (button.dataset.tier === 'one') {{
+      body.names = [document.getElementById('onecase').value];
+    }}
+    say('queueing\\u2026', true);
+    fetch('run', {{method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                  body: JSON.stringify(body)}})
+      .then(r => r.json())
+      .then(a => a.error ? say(a.error, false) : poll())
+      .catch(() => say('could not reach the runner', false));
+  }});
+  poll();
+  // The page is rewritten by a run, so a finished run is a reload rather than
+  // a redraw: the numbers below are what actually changed.
+  let wasRunning = false;
+  setInterval(() => fetch('queue', {{cache: 'no-store'}})
+    .then(r => r.json())
+    .then(q => {{
+      bar.hidden = false;
+      if (wasRunning && !q.running) {{ location.reload(); return; }}
+      wasRunning = !!q.running;
+      draw(q);
+    }})
+    .catch(() => {{ bar.hidden = true; }}), 3000);
+}})();
+</script>
+"""
 
 
 #: Said on the page as well as in QUALITY.md, because the table above it invites
@@ -538,6 +627,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fixture check &mdash; {html.escape(tier)}</title><style>{STYLE}</style></head><body>
 <h1>Fixture check &mdash; {html.escape(tier)}</h1>
+{_controls([e['name'] for e in entries])}
 {_provenance(run)}
 {_gate(run)}
 <p class="lead">{len(entries)} case(s), each one printed system judged against a

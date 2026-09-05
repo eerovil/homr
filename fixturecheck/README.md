@@ -174,22 +174,39 @@ which branch had produced it, which is most of what made "how good is it now"
 unanswerable.
 
 On this host it is on the tailnet at **https://bazzite.taile8d16e.ts.net:8124/**,
-which reads on a phone as well as a desktop. Two moving parts, and only because
-Tailscale will not serve a *path* without root while it proxies a *port* for
-anybody:
+which reads on a phone as well as a desktop:
 
     systemctl --user enable --now homr-report     # fixturecheck/homr-report.service
     tailscale serve --bg --https=8124 127.0.0.1:8125
 
-With root it is one command and no service at all, and that is the better shape
-if you would rather type a password once:
+The server binds **loopback only**. The tailnet reaches it through `tailscale
+serve`, which authenticates; binding it wider would put the report on every
+network this machine is on. (Tailscale will not serve a *path* without root
+while it proxies a *port* for anybody, which is why there is a port here at
+all.)
 
-    sudo tailscale serve --bg --https=8124 --set-path=/ \
-        ~/.local/share/homr-fixturecheck/report
+## Starting a run from the page
 
-The static server binds **loopback only**. The tailnet reaches it through
-`tailscale serve`, which authenticates; binding it wider would put the report on
-every network this machine is on.
+Reading the report needed no ssh; **starting the run that refreshes it still
+did** — a checkout, the right `MUSESCORE_CLI_PATH`, and the incantation. So the
+page carries a bar: `Run the ten`, `Run everything`, and one named case.
+`fixturecheck/serve.py` answers the two routes behind it.
+
+    POST /run    {"tier": "ten"}       queue a run
+    GET  /queue  what is running, what is waiting, what finished last
+
+**Presses queue rather than collide.** A run is minutes of every core the
+machine has, so a worker takes one at a time and the bar says what is running
+and how many are behind it — a button that appears to do nothing for four
+minutes is a button people press again. When a run finishes the page reloads
+itself, because the numbers below the bar are what changed.
+
+**The command is built from what the harness knows**, never from request text: a
+tier has to be one of three, and a case name has to be one `cases.every()`
+returns. `Run everything` says it is thirty-five minutes before it starts.
+
+The bar is in every copy of the page and **hides itself when `/queue` does not
+answer**, so the same HTML is right whether it is served or opened off disk.
 
 Set `FIXTURECHECK_REPORT_URL` to that address and a run prints the link instead
 of a path, and `QUALITY.md` gains one to the pictures.
