@@ -215,7 +215,10 @@ of a path, and `QUALITY.md` gains one to the pictures.
 
 The index lists **every case the series knows, each at its own latest
 measurement**, with the ones this run re-read shown undated and the rest dated
-and greyed. Before, it listed only what the run judged — so re-reading a single
+and greyed. A row last measured under a **different** `(homr, references)` is
+shown in italics with the homr that produced it, and is **not in the totals** —
+it is history, not evidence about the engine being reported. The page says how
+many such rows there are rather than quietly showing a smaller total. Before, it listed only what the run judged — so re-reading a single
 system, the cheapest thing you can do, produced a one-case report while the
 other ninety-seven pages sat on disk with nothing linking to them.
 
@@ -258,9 +261,19 @@ exactly like a case nobody ran.
 **The five committed fixtures are expected to be perfect**, and a run in which
 any of them is below 100% exits non-zero.
 
-**The published gate speaks for all five, whatever a run touched.** It is built
-from each fixture's *own latest standing result* across the series, so a run can
-only ever move the fixtures it actually ran. Reading it off the newest run that
+**The published gate speaks for all five, whatever a run touched — and for one
+homr.** It is built from each fixture's *own latest standing result* **under the
+identity being reported**, `(homr, references)`, so a run can only ever move the
+fixtures it actually ran, and only for the engine that ran them.
+
+That second half is not a refinement. Aggregating across identities let a 5/5
+pass under homr A stay a published pass after a single fixture was re-run under
+homr B, with the other four never tested on B at all — a number that does not say
+what it describes, arriving inside the fix for a number that did not say what it
+described. A fixture not yet judged under the current identity is therefore
+`unevaluated` and holds the gate open, exactly like one nobody has ever judged:
+"it passed on the old homr" is not a claim about this one. A moved reference key
+does the same thing, for the same reason. Reading it off the newest run that
 judged anything was wrong twice over: a song-only run published `0/0 passed`,
 and — less obviously — `fixturecheck one system4` published `1/1 perfect`, so a
 standing `FAIL — 3/5` went green because somebody re-ran a fixture that was

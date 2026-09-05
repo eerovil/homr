@@ -63,15 +63,18 @@ def _gate_line(runs_of: list[dict]) -> str:
     tail = ""
     if gate["unevaluated"]:
         names = ", ".join(f"`{n}`" for n in gate["unevaluated"])
-        tail = (f" Never judged, so the gate cannot pass: {names}.")
+        tail = (f" Not judged under this homr, so the gate cannot pass: {names}. "
+                f"A pass under an earlier homr is not a claim about this one.")
     if gate["passed"]:
         return (f"**pass** — all {gate['fixtures']} committed fixtures stand "
-                f"perfect, latest as of {gate['as_of']}.")
+                f"perfect under homr `{gate['homr']}`, latest as of "
+                f"{gate['as_of']}.")
     failing = ", ".join(f"`{n}`" for n in gate["failing"])
     below = f"; below 100%: {failing}" if failing else ""
-    return (f"**FAIL** — {gate['perfect']}/{gate['fixtures']} perfect, latest as "
-            f"of {gate['as_of']}{below}.{tail} Each fixture counts by its own "
-            f"latest result, so re-running one cannot speak for the others.")
+    return (f"**FAIL** — {gate['perfect']}/{gate['fixtures']} perfect under homr "
+            f"`{gate['homr']}`, latest as of {gate['as_of']}{below}.{tail} Each "
+            f"fixture counts by its own latest result under that homr, so "
+            f"re-running one cannot speak for the others.")
 
 
 def render(path: Path = series.SERIES) -> str:

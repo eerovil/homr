@@ -90,6 +90,7 @@ p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
 #runstate { color: #555; font-variant-numeric: tabular-nums; }
 #runbar.busy #runstate { color: #8a5a00; }
 tr.stale td { color: #6b6b6b; }
+tr.other td { color: #8a8a8a; background: #fbfbfb; font-style: italic; }
 span.when { font-size: 11px; color: #8a8a8a; }
 tr.detail td { background: #fcfcfc; padding: 0 9px 10px; }
 tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
@@ -149,18 +150,21 @@ def _gate(run: dict | None) -> str:
     of one fixture used to say "all 1 committed fixture(s) in this run are
     perfect" there, which is true and reads as the opposite of what it means.
     """
-    gate = series.published_gate(series.runs())
+    gate = series.published_gate(
+        [r for r in series.runs() if r.get("harness") == "fixturecheck"])
     if not gate:
         return ""
     if gate["passed"]:
         return (f"<p class='pass'>Gate <b>passed</b>: all {gate['fixtures']} committed "
-                f"fixtures stand perfect, latest as of "
+                f"fixtures stand perfect under homr "
+                f"<b>{html.escape(gate['homr'])}</b>, latest as of "
                 f"{html.escape(gate['as_of'])}.</p>")
     failing = html.escape(", ".join(gate["failing"]))
     below = f" Below 100%: <b>{failing}</b>." if failing else ""
     never = ""
     if gate["unevaluated"]:
-        never = (f" Never judged: <b>{html.escape(', '.join(gate['unevaluated']))}</b>.")
+        never = (f" Not judged under homr <b>{html.escape(gate['homr'])}</b>: "
+                 f"<b>{html.escape(', '.join(gate['unevaluated']))}</b>.")
     return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['perfect']}/{gate['fixtures']} "
             f"committed fixtures perfect, each counted at its own latest result."
             f"{below}{never} These are small systems this repository owns outright "
@@ -532,6 +536,19 @@ def _staves(entry: dict) -> str:
     return f"{said} <span class='down'>({blame})</span>" if blame else said
 
 
+def _counted_note(entries: list[dict], counted: list[dict]) -> str:
+    """Say when some rows are on the page but out of the numbers above it."""
+    other = len(entries) - len(counted)
+    if not other:
+        return ""
+    homrs = sorted({e["elsewhere"] for e in entries if e.get("elsewhere")})
+    return (f"<b>{other} row(s) below were last measured under "
+            f"{html.escape(', '.join(homrs))} and are not in the totals above</b>"
+            f" &mdash; they are shown so a re-run of one case does not hide the "
+            f"rest, but a number taken under another homr is not evidence about "
+            f"this one. Re-run them to bring them in. ")
+
+
 def _with_standing(entries: list[dict]) -> list[dict]:
     """This run's cases, plus every other case as it last stood.
 
@@ -546,8 +563,10 @@ def _with_standing(entries: list[dict]) -> list[dict]:
     number and a month-old one are not read as the same thing.
     """
     fresh = {entry["name"] for entry in entries}
-    combined = [dict(entry, measured="") for entry in entries]
-    for name, (case, when) in series.standing("fixturecheck").items():
+    combined = [dict(entry, measured="", elsewhere="") for entry in entries]
+    under = series.current_identity(
+        [r for r in series.runs() if r.get("harness") == "fixturecheck"])
+    for name, (case, when, was) in series.standing("fixturecheck").items():
         if name in fresh or case.get("outcome", series.READ) != series.READ:
             continue
         page = OUT / f"{name}.html"
@@ -563,6 +582,11 @@ def _with_standing(entries: list[dict]) -> list[dict]:
             "at_fault": case.get("at_fault", ""),
             "before": None,
             "measured": when,
+            # What produced it, when that is not what this report is about. Such
+            # a row is history: still shown, because losing it is how a one-case
+            # run threw the picture away, but **not counted**, because a number
+            # measured under another homr is not evidence about this one.
+            "elsewhere": "" if was == under else (was[0] or "?"),
             **counts,
         })
     return combined
@@ -579,7 +603,13 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
     """
     OUT.mkdir(parents=True, exist_ok=True)
     entries = _with_standing(entries)
-    total = {k: sum(e[k] for e in entries)
+    # **Only rows measured under the identity being reported are counted.** The
+    # rest are shown as history and excluded here: folding them in produced a
+    # 98-case aggregate labelled with the newest run's homr when 97 of the rows
+    # had last been measured under the previous one, which is precisely the
+    # thing this whole harness was built to stop saying.
+    counted = [e for e in entries if not e.get("elsewhere")]
+    total = {k: sum(e[k] for e in counted)
              for k in ("agree", "voice", "pitch", "size", "timing", "structure", "unison")}
     # Notes homr lost and beats it moved are faults, and are in the denominator.
     # Leaving them out asks only "of the notes homr wrote, how many are right",
@@ -602,12 +632,14 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
         when = entry.get("measured") or ""
         # Only the older ones are stamped: everything unstamped is this run, and
         # dating every row would bury the distinction it exists to make.
-        stamp = (f"<br><span class='when'>{html.escape(when[:10])}</span>"
-                 if when else "")
+        other = entry.get("elsewhere") or ""
+        mark = html.escape(when[:10]) + (f" &middot; homr {html.escape(other)}"
+                                         if other else "")
+        stamp = f"<br><span class='when'>{mark}</span>" if when else ""
         return link + stamp
 
     rows = "".join(
-        f"<tr{' class=\'stale\'' if e.get('measured') else ''}>"
+        f"<tr class='{('other' if e.get('elsewhere') else 'stale') if e.get('measured') else ''}'>"
         f"<td>{named(e)}</td>"
         f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
         f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
@@ -630,7 +662,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
 {_controls([e['name'] for e in entries])}
 {_provenance(run)}
 {_gate(run)}
-<p class="lead">{len(entries)} case(s), each one printed system judged against a
+<p class="lead">{_counted_note(entries, counted)}{len(entries)} case(s), each one printed system judged against a
 reference built from its song's cleaned score. Sorted worst first. <b>Every case
 the series knows is listed, each at its own latest measurement</b> &mdash; a
 dated, greyed row was not re-read by this run, and an undated one was. A run of

@@ -312,7 +312,7 @@ def previous_cases(harness: str, path: Path = SERIES) -> dict:
     return standing
 
 
-def published_gate(runs_of: list[dict]) -> dict | None:
+def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | None:
     """The gate over **all** the committed fixtures, not over one run's worth.
 
     Reading it off the newest run that judged anything was still wrong, and the
@@ -331,6 +331,15 @@ def published_gate(runs_of: list[dict]) -> dict | None:
 
     The roster comes out of the runs themselves (`committed`), so the summary
     does not need the fixtures on disk and an old series stays readable.
+
+    **And it is a claim about one homr.** Only results measured under the
+    identity being reported count — `(homr, references)`, the newest run's
+    unless told otherwise. Aggregating across identities let a 5/5 pass under
+    homr A stay a published pass after a single fixture was re-run under homr B,
+    with the other four never tested on B at all; a reference change does the
+    same. A fixture not yet judged under the current identity is therefore
+    `unevaluated` and holds the gate open, exactly like one nobody has ever
+    judged, because "it passed on the old homr" is not a claim about this one.
     """
     roster: list[str] = []
     for run in runs_of:
@@ -338,42 +347,73 @@ def published_gate(runs_of: list[dict]) -> dict | None:
             roster = list(run["committed"])
     if not roster:
         return None
+    if under is None:
+        under = current_identity(runs_of)
 
-    standing: dict[str, tuple[bool, str]] = {}
+    latest: dict[str, tuple[bool, str]] = {}
     for run in runs_of:
+        if identity(run) != under:
+            continue
         for name in roster:
             case = run.get("cases", {}).get(name)
-            if case and case.get("outcome", READ) == READ \
-                    and "perfect" in case:
-                standing[name] = (bool(case["perfect"]), run.get("at", ""))
+            if case and case.get("outcome", READ) == READ and "perfect" in case:
+                latest[name] = (bool(case["perfect"]), run.get("at", ""))
 
-    failing = sorted(n for n in roster if n in standing and not standing[n][0])
-    unevaluated = sorted(n for n in roster if n not in standing)
+    failing = sorted(n for n in roster if n in latest and not latest[n][0])
+    unevaluated = sorted(n for n in roster if n not in latest)
     return {
         "fixtures": len(roster),
-        "perfect": sum(1 for n in roster if standing.get(n, (False,))[0]),
+        "perfect": sum(1 for n in roster if latest.get(n, (False,))[0]),
         "failing": failing,
         "unevaluated": unevaluated,
         "passed": not failing and not unevaluated,
-        "as_of": max((when for _, when in standing.values()), default=""),
+        "as_of": max((when for _, when in latest.values()), default=""),
+        "homr": under[0],
+        "references": under[1],
     }
 
 
 
-def standing(harness: str, path: Path | None = None) -> dict:
-    """Each case as it last stood, with **when** that was.
+def identity(run: dict) -> tuple:
+    """What a measurement is a measurement *of*: the homr, and the references.
+
+    Two numbers taken under different homrs are not two measurements of one
+    thing, and neither are two taken against references that have moved. This
+    pair is therefore the unit an aggregate may be taken over, and rows outside
+    it are history rather than evidence about now.
+    """
+    return (run.get("homr", ""), run.get("references", ""))
+
+
+def current_identity(runs_of: list[dict]) -> tuple:
+    """The identity a report is describing: the newest run's."""
+    return identity(runs_of[-1]) if runs_of else ("", "")
+
+
+def standing(harness: str, path: Path | None = None,
+             under: tuple | None = None) -> dict:
+    """Each case as it last stood, with when that was and **under which homr**.
 
     `previous_cases` answers what a case last measured; this also answers how
-    long ago, which is what makes a list of every case readable rather than a
-    row of numbers with no idea which are fresh. Same walk, oldest run first, so
-    the newest measurement of each case wins.
+    long ago and what it was measured with, which is what makes a list of every
+    case readable rather than a row of numbers with no idea what produced them.
+
+    `under` keeps only the cases measured under one identity. That is not a
+    filter for tidiness: aggregating across identities is how a 5/5 pass under
+    one homr survived a single fixture re-run under the next, with the other
+    four never tested — a number that does not say what it describes, which is
+    the whole complaint this harness exists to answer. Without `under`,
+    everything comes back and the caller is expected to know why it wants that.
     """
     held: dict = {}
     for run in runs(path):
         if run.get("harness") != harness:
             continue
+        here = identity(run)
+        if under is not None and here != under:
+            continue
         for name, case in run.get("cases", {}).items():
-            held[name] = (case, run.get("at", ""))
+            held[name] = (case, run.get("at", ""), here)
     return held
 
 

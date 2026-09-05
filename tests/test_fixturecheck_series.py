@@ -368,6 +368,96 @@ def test_a_one_case_run_still_reports_every_case(tmp_path, monkeypatch):
     assert failing["pitch"] == 2 and failing["score"] < 100.0
 
 
+def _under(path, cases_, homr, references="refA", tier="one",
+           roster=("a", "b", "c", "d", "e")):
+    """A run measured by a named homr, against named references."""
+    return series.record_run("fixturecheck", tier, cases_, references=references,
+                             homr=homr, extra={"committed": sorted(roster)},
+                             path=path)
+
+
+def test_a_pass_under_one_homr_is_not_a_pass_under_the_next(tmp_path):
+    """The measurement identity, and why an aggregate needs one.
+
+    Five out of five perfect under homr A, then a single passing fixture under
+    homr B. The other four have never been run on B at all -- and the old
+    aggregate, which walked every run regardless of what measured it, kept
+    publishing A's pass under B's name.
+    """
+    path = tmp_path / "series.jsonl"
+    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
+    assert series.published_gate(series.runs(path))["passed"]
+
+    _under(path, [_perfect("a", True)], homr="B")
+
+    gate = series.published_gate(series.runs(path))
+    assert gate["homr"] == "B"
+    assert not gate["passed"]
+    assert gate["perfect"] == 1 and gate["fixtures"] == 5
+    assert gate["unevaluated"] == ["b", "c", "d", "e"]
+    assert "FAIL" in quality.render(path)
+    assert "1/5" in quality.render(path)
+
+
+def test_a_pass_does_not_survive_the_references_moving(tmp_path):
+    """The same hole, through the other half of the identity."""
+    path = tmp_path / "series.jsonl"
+    _under(path, [_perfect(n, True) for n in "abcde"], homr="A",
+           references="refA", tier="all")
+    assert series.published_gate(series.runs(path))["passed"]
+
+    # Same homr, corrected references: the earlier results were measured
+    # against something else.
+    _under(path, [_perfect("a", True)], homr="A", references="refB")
+
+    gate = series.published_gate(series.runs(path))
+    assert not gate["passed"]
+    assert gate["references"] == "refB"
+    assert gate["unevaluated"] == ["b", "c", "d", "e"]
+
+
+def test_standing_results_are_kept_apart_by_what_measured_them(tmp_path):
+    path = tmp_path / "series.jsonl"
+    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
+    _under(path, [_perfect("a", True)], homr="B")
+
+    everything = series.standing("fixturecheck", path)
+    assert len(everything) == 5
+    assert everything["a"][2] == ("B", "refA")     # re-read under B
+    assert everything["c"][2] == ("A", "refA")     # still A's measurement
+
+    only_b = series.standing("fixturecheck", path, under=("B", "refA"))
+    assert list(only_b) == ["a"]
+
+
+def test_the_report_does_not_count_rows_from_another_homr(tmp_path, monkeypatch):
+    """A 5-case aggregate labelled homr B, of which 4 rows were measured on A."""
+    from fixturecheck import report
+
+    path = tmp_path / "series.jsonl"
+    monkeypatch.setattr(series, "SERIES", path)
+    monkeypatch.setattr(report, "OUT", tmp_path / "report")
+
+    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
+    _under(path, [_perfect("a", True)], homr="B")
+
+    live = [{"name": "a", "page": "a.html", "score": 100.0, "agree": 10,
+             "voice": 0, "pitch": 0, "size": 0, "timing": 0, "structure": 0,
+             "staves_page": 1, "staves_homr": 1, "at_fault": "", "unison": 0,
+             "before": None}]
+    combined = report._with_standing(live)
+
+    # Every case is still on the page -- losing them is the bug fixed before.
+    assert sorted(e["name"] for e in combined) == list("abcde")
+    # ...but only the one measured under B counts towards B's numbers.
+    counted = [e for e in combined if not e.get("elsewhere")]
+    assert [e["name"] for e in counted] == ["a"]
+    assert all(e["elsewhere"] == "A" for e in combined if e["name"] != "a")
+    # And the page says so rather than quietly showing a smaller total.
+    note = report._counted_note(combined, counted)
+    assert "4 row(s)" in note and "homr" in note
+
+
 def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path):
     """"We have never looked" is not "we looked and it was fine"."""
     path = tmp_path / "series.jsonl"
@@ -375,7 +465,7 @@ def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path):
     gate = series.published_gate(series.runs(path))
     assert not gate["passed"]
     assert gate["unevaluated"] == ["d", "e"]
-    assert "Never judged" in quality.render(path)
+    assert "Not judged under this homr" in quality.render(path)
 
 
 def test_the_benchmark_records_the_engine_it_measured_not_this_checkout(tmp_path):
