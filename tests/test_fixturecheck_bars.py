@@ -132,10 +132,26 @@ def test_musescore_says_where_a_bar_is_and_it_is_cut_out_by_that():
     box = bars.engraved_box(boxes, ["1", "2", "3"], "2", (1819, 2572), dpi=220)
     assert box is not None
     scale = 220 / bars.MPOS_UNITS_PER_INCH
-    # The second bar starts at 4000 units and is 3000 wide.
-    assert abs(box["left"] * 1819 - (4000 * scale - 8)) < 1.0
-    assert abs(box["right"] * 1819 - (7000 * scale + 8)) < 1.0
+    # The second bar starts at 4000 units and is 3000 wide. The crop is centred
+    # on it...
+    middle = (box["left"] + box["right"]) / 2 * 1819
+    assert abs(middle - 5500 * scale) < 1.0
+    # ...and is drawn wider than the bar, so it does not read as a fragment.
+    tight = 3000 * scale + 16
+    assert abs((box["right"] - box["left"]) * 1819 - tight * (1 + bars.ZOOM_OUT)) < 1.0
     assert 0.0 <= box["top"] < box["bottom"] <= 1.0
+
+
+def test_a_crop_is_wider_than_the_bar_on_both_paths():
+    """The printed crop and the engraved ones widen alike, or the three
+    pictures are three different shots of the same music."""
+    printed = bars.bar_box(_geo([0.3, 0.6, 0.95], staves=2), 1, 2, 3)
+    engraved = bars.engraved_box(_mpos(3), ["1", "2", "3"], "2", (1819, 2572))
+    for box in (printed, engraved):
+        assert box is not None
+    # Both come back wider than the bar they name; the tight width is recoverable.
+    assert printed["right"] - printed["left"] > (0.6 - 0.3)
+    assert bars.ZOOM_OUT == 0.30
 
 
 def test_a_bar_count_that_disagrees_is_refused():

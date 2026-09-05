@@ -31,6 +31,22 @@ from pathlib import Path
 #: another staff. A system is rarely more than ~12 bars, so bars are wide.
 SAME_LINE = 0.01
 
+#: How much wider than the bar itself a crop is drawn, as a fraction of the
+#: bar's own size. A bar cut exactly at its barlines reads as a fragment: what
+#: the note before it was, and whether the phrase carries on, are part of
+#: judging whether a reading is wrong. Applied to both the printed crop and the
+#: engraved ones, so the three stay the same shot of the same music.
+ZOOM_OUT = 0.30
+
+
+def _widen(left: float, top: float, right: float, bottom: float,
+           by: float = ZOOM_OUT) -> tuple[float, float, float, float]:
+    """Grow a box around its own middle, without leaving the picture."""
+    grow_x = (right - left) * by / 2
+    grow_y = (bottom - top) * by / 2
+    return (max(0.0, left - grow_x), max(0.0, top - grow_y),
+            min(1.0, right + grow_x), min(1.0, bottom + grow_y))
+
 
 def bars_in(path: Path) -> list[str]:
     """The bar numbers a score holds, in order, as they are written."""
@@ -222,8 +238,9 @@ def bar_box(geo: dict, staff: int, index: int, expected_bars: int) -> dict | Non
     # box per measure and that is what it gives; the labels say which is which,
     # and the tables above have already isolated the staff.
     pad = 0.35 * (row["bottom"] - row["top"])
-    return {"left": max(0.0, left - 0.004), "right": min(1.0, right + 0.004),
-            "top": max(0.0, row["top"] - pad), "bottom": min(1.0, row["bottom"] + pad)}
+    l, t, r, b = _widen(left - 0.004, row["top"] - pad, right + 0.004,
+                        row["bottom"] + pad)
+    return {"left": l, "right": r, "top": t, "bottom": b}
 
 
 def crop(image: Path, box: dict, into: Path) -> Path | None:
@@ -327,5 +344,5 @@ def engraved_box(boxes: list[dict], numbers: list[str], bar: str,
     bottom = (box["y"] + box["sy"]) * scale + pad_y
     if right > width + pad_x or bottom > height + pad_y or right <= left:
         return None
-    return {"left": max(0.0, left / width), "right": min(1.0, right / width),
-            "top": max(0.0, top / height), "bottom": min(1.0, bottom / height)}
+    l, t, r, b = _widen(left / width, top / height, right / width, bottom / height)
+    return {"left": l, "right": r, "top": t, "bottom": b}
