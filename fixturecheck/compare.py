@@ -15,6 +15,7 @@ return separate results, and the report names which is which.
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -173,6 +174,7 @@ class Result:
     unison: int = 0
     staves_page: int = 0
     staves_homr: int = 0
+    staves_printed: int = 0
     rows: list[Row] = field(default_factory=list)
 
     @property
@@ -185,7 +187,7 @@ class Result:
 
     @property
     def structure(self) -> int:
-        """1 where homr and the page disagree about how many staves are printed.
+        """1 where the reference and homr disagree about how many staves there are.
 
         A case and not a note, because that is what it is: one wrong answer,
         which then costs a row at every moment of every staff below it.
@@ -193,8 +195,43 @@ class Result:
         return int(self.staves_page != self.staves_homr)
 
     @property
+    def at_fault(self) -> str:
+        """Which side the printed page says is wrong, where anyone has looked.
+
+        `""` when the two agree or nobody has recorded what the page prints --
+        which is most cases, and is not the same as "nobody is wrong".
+        """
+        if not self.structure or not self.staves_printed:
+            return ""
+        if self.staves_homr == self.staves_printed:
+            return "reference"
+        if self.staves_page == self.staves_printed:
+            return "homr"
+        return "both"
+
+    @property
     def faults(self) -> int:
         return self.voice + self.pitch + self.size
+
+
+PRINTED = Path(__file__).resolve().parent / "printed.json"
+
+
+def staves_a_person_counted(case: str, path: Path = PRINTED) -> int:
+    """How many staves the page prints here, if anyone has said so.
+
+    0 when nobody has, which is most cases. The check has no third party to ask
+    when the reference and a parse disagree about the staves, and on this
+    repertoire it has been the reference's fault as often as homr's -- so the
+    answer is worth writing down the once. See `printed.json`.
+    """
+    if not path.exists():
+        return 0
+    try:
+        recorded = json.loads(path.read_text()).get("systems", {})
+    except ValueError:
+        return 0
+    return int(recorded.get(case, {}).get("staves", 0))
 
 
 def printed_staves(path: Path) -> int:
@@ -224,8 +261,16 @@ def _lines_per_bar(found: dict) -> dict[tuple[str, int], int]:
     return {key: len(voices) for key, voices in lines.items()}
 
 
-def compare_output(reference: Path, parsed: Path) -> Result:
+def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     """The page against homr's MusicXML, note by note.
+
+    `case` is the system's name, and it buys one thing: where somebody has
+    recorded how many staves the page actually prints there (`printed.json`),
+    a structural disagreement is **adjudicated** rather than merely reported.
+    Without it this function has no third party to ask, and on this repertoire
+    the reference has been wrong as often as homr -- three systems in a row
+    were written up as homr losing a staff when the page agreed with homr every
+    time.
 
     A moment where the two files hold a different number of noteheads used to be
     one number, `size`, and across the 93 systems of this repertoire it came to
@@ -308,14 +353,26 @@ def compare_output(reference: Path, parsed: Path) -> Result:
     # that a beat read differently.
     heads_page = _heads_per_bar(want)
     heads_homr = _heads_per_bar(got)
-    result = Result(staves_page=printed_staves(reference), staves_homr=printed_staves(parsed))
+    result = Result(staves_page=printed_staves(reference), staves_homr=printed_staves(parsed),
+                    staves_printed=staves_a_person_counted(case) if case else 0)
     if result.structure:
+        blame = {
+            "reference": "the page agrees with homr — the REFERENCE is wrong here, "
+                         "and the rows below are comparing it against music it "
+                         "does not describe",
+            "homr": "the page agrees with the reference — HOMR is wrong here",
+            "both": "the page agrees with neither",
+            "": "which side is wrong is decided by looking at the page above, not "
+                "by this row — record it in fixturecheck/printed.json and it will "
+                "be decided here next time",
+        }[result.at_fault]
+        printed = (f", page prints {result.staves_printed}"
+                   if result.staves_printed else "")
         result.rows.append(Row(
-            "the system", f"{result.staves_page} staves (the reference)",
+            "the system", f"{result.staves_page} staves (the reference){printed}",
             f"{result.staves_homr} staves",
-            "a different number of staves — every note below is keyed on the "
-            "staff, so from the first one that diverges nothing lines up. Which "
-            "side is wrong is decided by looking at the page, not by this row",
+            f"a different number of staves — every note below is keyed on the "
+            f"staff, so from the first one that diverges nothing lines up. {blame}",
             "structure"))
     for key in sorted(want, key=lambda k: (int(re.sub(r"\D", "", k[0]) or 0), k[1], k[2])):
         bar, staff, onset = key

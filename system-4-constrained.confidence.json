@@ -1,0 +1,6498 @@
+{
+  "version": 1,
+  "symbols": [
+    {
+      "staff": 0,
+      "symbol": 0,
+      "token": {
+        "rhythm": "clef_G2",
+        "pitch": "_",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        23.988468170166016,
+        81.40574645996094
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "clef_G2",
+          "probability": 0.9108951668913324,
+          "alternatives": [
+            {
+              "value": "clef_G2",
+              "probability": 0.9108951668913324
+            },
+            {
+              "value": "clef_F4",
+              "probability": 0.0005451498888765191
+            },
+            {
+              "value": "clef_C3",
+              "probability": 0.0004818775975851076
+            }
+          ],
+          "margin": 0.9103500170024559,
+          "unconstrained": {
+            "value": "clef_G2",
+            "probability": 0.8953028509566086,
+            "alternatives": [
+              {
+                "value": "clef_G2",
+                "probability": 0.8953028509566086
+              },
+              {
+                "value": "clef_F4",
+                "probability": 0.0005358182450078276
+              },
+              {
+                "value": "clef_C3",
+                "probability": 0.00047362902188011755
+              }
+            ],
+            "margin": 0.8947670327116007
+          }
+        },
+        "pitch": {
+          "value": "_",
+          "probability": 0.9999956065727429,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999956065727429
+            },
+            {
+              "value": ".",
+              "probability": 6.649200697631078e-07
+            },
+            {
+              "value": "E5",
+              "probability": 4.182399867336435e-07
+            }
+          ],
+          "margin": 0.9999949416526731
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999976144891568,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999976144891568
+            },
+            {
+              "value": "b",
+              "probability": 9.773850905114437e-07
+            },
+            {
+              "value": ".",
+              "probability": 7.051122074580512e-07
+            }
+          ],
+          "margin": 0.9999966371040663
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999954504248065,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999954504248065
+            },
+            {
+              "value": "lower",
+              "probability": 3.6819201606382115e-06
+            },
+            {
+              "value": ".",
+              "probability": 8.676550329587713e-07
+            }
+          ],
+          "margin": 0.9999917685046459
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999980760995469,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999980760995469
+            },
+            {
+              "value": ".",
+              "probability": 9.44340170214399e-07
+            },
+            {
+              "value": "staccato",
+              "probability": 5.113220795035452e-07
+            }
+          ],
+          "margin": 0.9999971317593768
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999981817322635,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999981817322635
+            },
+            {
+              "value": "slurStart",
+              "probability": 8.08890641293072e-07
+            },
+            {
+              "value": ".",
+              "probability": 8.009923330057058e-07
+            }
+          ],
+          "margin": 0.9999973728416223
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 2,
+      "token": {
+        "rhythm": "clef_F4",
+        "pitch": "_",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        25.625198364257812,
+        192.05821228027344
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "clef_F4",
+          "probability": 0.9190694527125927,
+          "alternatives": [
+            {
+              "value": "clef_F4",
+              "probability": 0.9190694527125927
+            },
+            {
+              "value": "clef_C3",
+              "probability": 0.0005576669068367669
+            },
+            {
+              "value": "clef_G2",
+              "probability": 0.0004876271212684538
+            }
+          ],
+          "margin": 0.9185117858057559,
+          "unconstrained": {
+            "value": "clef_F4",
+            "probability": 0.9047197937709274,
+            "alternatives": [
+              {
+                "value": "clef_F4",
+                "probability": 0.9047197937709274
+              },
+              {
+                "value": "clef_C3",
+                "probability": 0.0005489599153329774
+              },
+              {
+                "value": "clef_G2",
+                "probability": 0.00048001367827972617
+              }
+            ],
+            "margin": 0.9041708338555944
+          }
+        },
+        "pitch": {
+          "value": "_",
+          "probability": 0.9999947307833331,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999947307833331
+            },
+            {
+              "value": ".",
+              "probability": 7.707137075773854e-07
+            },
+            {
+              "value": "C4",
+              "probability": 6.5873317108106e-07
+            }
+          ],
+          "margin": 0.9999939600696255
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999942559604905,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999942559604905
+            },
+            {
+              "value": "b",
+              "probability": 2.5834692915152963e-06
+            },
+            {
+              "value": "#",
+              "probability": 1.6108954657692773e-06
+            }
+          ],
+          "margin": 0.999991672491199
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999901332100755,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999901332100755
+            },
+            {
+              "value": "upper",
+              "probability": 9.418711225932e-06
+            },
+            {
+              "value": ".",
+              "probability": 4.4807869865184576e-07
+            }
+          ],
+          "margin": 0.9999807144988495
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999971249324489,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999971249324489
+            },
+            {
+              "value": ".",
+              "probability": 2.0652405327477626e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 5.137541952470501e-07
+            }
+          ],
+          "margin": 0.9999950596919162
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999976133531052,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999976133531052
+            },
+            {
+              "value": ".",
+              "probability": 1.3436892758927504e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 6.584564549760143e-07
+            }
+          ],
+          "margin": 0.9999962696638294
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 3,
+      "token": {
+        "rhythm": "keySignature_-3",
+        "pitch": ".",
+        "lift": ".",
+        "position": ".",
+        "articulation": ".",
+        "slur": "."
+      },
+      "attention": [
+        55.93378448486328,
+        155.221923828125
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "keySignature_-3",
+          "probability": 0.9217954036114163,
+          "alternatives": [
+            {
+              "value": "keySignature_-3",
+              "probability": 0.9217954036114163
+            },
+            {
+              "value": "keySignature_-2",
+              "probability": 0.0007866704383411412
+            },
+            {
+              "value": "keySignature_-5",
+              "probability": 0.0006734338152908092
+            }
+          ],
+          "margin": 0.9210087331730752,
+          "unconstrained": {
+            "value": "keySignature_-3",
+            "probability": 0.9083860133527091,
+            "alternatives": [
+              {
+                "value": "keySignature_-3",
+                "probability": 0.9083860133527091
+              },
+              {
+                "value": "keySignature_-2",
+                "probability": 0.000775226715719639
+              },
+              {
+                "value": "keySignature_-5",
+                "probability": 0.000663637349819984
+              }
+            ],
+            "margin": 0.9076107866369895
+          }
+        },
+        "pitch": {
+          "value": ".",
+          "probability": 0.999994668536822,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.999994668536822
+            },
+            {
+              "value": "_",
+              "probability": 1.4646791704958897e-06
+            },
+            {
+              "value": "F3",
+              "probability": 2.951526241660063e-07
+            }
+          ],
+          "margin": 0.9999932038576514
+        },
+        "lift": {
+          "value": ".",
+          "probability": 0.9999931084218159,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999931084218159
+            },
+            {
+              "value": "_",
+              "probability": 4.383248807749652e-06
+            },
+            {
+              "value": "b",
+              "probability": 1.5968052139737278e-06
+            }
+          ],
+          "margin": 0.9999887251730081
+        },
+        "position": {
+          "value": ".",
+          "probability": 0.9999942890737362,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999942890737362
+            },
+            {
+              "value": "upper",
+              "probability": 3.4808652355034207e-06
+            },
+            {
+              "value": "lower",
+              "probability": 2.230061028401451e-06
+            }
+          ],
+          "margin": 0.9999908082085007
+        },
+        "articulation": {
+          "value": ".",
+          "probability": 0.9999938428025829,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999938428025829
+            },
+            {
+              "value": "_",
+              "probability": 3.578652633534135e-06
+            },
+            {
+              "value": "accent_tremolo",
+              "probability": 3.818329602911893e-07
+            }
+          ],
+          "margin": 0.9999902641499493
+        },
+        "slur": {
+          "value": ".",
+          "probability": 0.9999944155642276,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999944155642276
+            },
+            {
+              "value": "_",
+              "probability": 4.23718485909112e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 7.096443099763613e-07
+            }
+          ],
+          "margin": 0.9999901783793685
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 4,
+      "token": {
+        "rhythm": "note_2",
+        "pitch": "G5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        88.03873443603516,
+        51.67753219604492
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_2",
+          "probability": 0.91246083207494,
+          "alternatives": [
+            {
+              "value": "note_2",
+              "probability": 0.91246083207494
+            },
+            {
+              "value": "note_3",
+              "probability": 0.0006044713513849478
+            },
+            {
+              "value": "note_36",
+              "probability": 0.0005762236116574411
+            }
+          ],
+          "margin": 0.911856360723555,
+          "unconstrained": {
+            "value": "note_2",
+            "probability": 0.897239589368285,
+            "alternatives": [
+              {
+                "value": "note_2",
+                "probability": 0.897239589368285
+              },
+              {
+                "value": "note_3",
+                "probability": 0.000594387844427474
+              },
+              {
+                "value": "note_36",
+                "probability": 0.0005666113202165052
+              }
+            ],
+            "margin": 0.8966452015238575
+          }
+        },
+        "pitch": {
+          "value": "G5",
+          "probability": 0.999963173846555,
+          "alternatives": [
+            {
+              "value": "G5",
+              "probability": 0.999963173846555
+            },
+            {
+              "value": "F5",
+              "probability": 1.0871641343312342e-05
+            },
+            {
+              "value": "B5",
+              "probability": 4.4217128370116774e-06
+            }
+          ],
+          "margin": 0.9999523022052117
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.999945859693901,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999945859693901
+            },
+            {
+              "value": "b",
+              "probability": 3.899567504654244e-05
+            },
+            {
+              "value": "#",
+              "probability": 1.192255193788039e-05
+            }
+          ],
+          "margin": 0.9999068640188545
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999933526697178,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999933526697178
+            },
+            {
+              "value": "lower",
+              "probability": 4.345379890016654e-06
+            },
+            {
+              "value": ".",
+              "probability": 2.3019503921837598e-06
+            }
+          ],
+          "margin": 0.9999890072898278
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999746295919995,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999746295919995
+            },
+            {
+              "value": "accent",
+              "probability": 6.534628098385068e-06
+            },
+            {
+              "value": "fermata",
+              "probability": 4.303400864542679e-06
+            }
+          ],
+          "margin": 0.999968094963901
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999006277160458,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999006277160458
+            },
+            {
+              "value": "slurStart",
+              "probability": 8.977258280320878e-05
+            },
+            {
+              "value": "slurStop",
+              "probability": 6.55484381863335e-06
+            }
+          ],
+          "margin": 0.9998108551332426
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 6,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        88.01642608642578,
+        83.49853515625
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9122603071806777,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9122603071806777
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0009625725338575964
+            },
+            {
+              "value": "note_4..",
+              "probability": 0.0006122793071578902
+            }
+          ],
+          "margin": 0.9112977346468202,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8970628068977733,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8970628068977733
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0009465368735965175
+              },
+              {
+                "value": "note_4..",
+                "probability": 0.0006020792415949087
+              }
+            ],
+            "margin": 0.8961162700241768
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9999472367971163,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9999472367971163
+            },
+            {
+              "value": "E5",
+              "probability": 3.266436424738721e-05
+            },
+            {
+              "value": "G5",
+              "probability": 2.8521589804317516e-06
+            }
+          ],
+          "margin": 0.9999145724328689
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999368238978539,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999368238978539
+            },
+            {
+              "value": "b",
+              "probability": 5.256387147409759e-05
+            },
+            {
+              "value": "#",
+              "probability": 8.044910576929713e-06
+            }
+          ],
+          "margin": 0.9998842600263798
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999835997167494,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999835997167494
+            },
+            {
+              "value": "lower",
+              "probability": 1.439490760869475e-05
+            },
+            {
+              "value": ".",
+              "probability": 2.0053756420594167e-06
+            }
+          ],
+          "margin": 0.9999692048091408
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999929465070584,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999929465070584
+            },
+            {
+              "value": ".",
+              "probability": 2.2437226199051714e-06
+            },
+            {
+              "value": "accent",
+              "probability": 1.9792400125047134e-06
+            }
+          ],
+          "margin": 0.9999907027844385
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999955202696197,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999955202696197
+            },
+            {
+              "value": ".",
+              "probability": 1.953102991278636e-06
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.8673225560046938e-06
+            }
+          ],
+          "margin": 0.9999935671666285
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 8,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "G3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        87.92427825927734,
+        168.0106658935547
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9160914489529112,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9160914489529112
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0008827391391084459
+            },
+            {
+              "value": "note_4.",
+              "probability": 0.0005946297852688853
+            }
+          ],
+          "margin": 0.9152087098138028,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9013596242591512,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9013596242591512
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0008685436586653852
+              },
+              {
+                "value": "note_4.",
+                "probability": 0.0005850674410681158
+              }
+            ],
+            "margin": 0.9004910806004858
+          }
+        },
+        "pitch": {
+          "value": "G3",
+          "probability": 0.9997017418365362,
+          "alternatives": [
+            {
+              "value": "G3",
+              "probability": 0.9997017418365362
+            },
+            {
+              "value": "A3",
+              "probability": 7.684681668611323e-05
+            },
+            {
+              "value": "G4",
+              "probability": 6.542835020974438e-05
+            }
+          ],
+          "margin": 0.9996248950198501
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999340402293887,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999340402293887
+            },
+            {
+              "value": "b",
+              "probability": 4.9441809914316924e-05
+            },
+            {
+              "value": "#",
+              "probability": 1.449774324161772e-05
+            }
+          ],
+          "margin": 0.9998845984194744
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999451394914273,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999451394914273
+            },
+            {
+              "value": "upper",
+              "probability": 5.388984917967525e-05
+            },
+            {
+              "value": ".",
+              "probability": 9.706593930388526e-07
+            }
+          ],
+          "margin": 0.9998912496422476
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9992891350738755,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9992891350738755
+            },
+            {
+              "value": "staccato",
+              "probability": 0.00024162583933867127
+            },
+            {
+              "value": "accent",
+              "probability": 0.00020889372226160895
+            }
+          ],
+          "margin": 0.9990475092345369
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9988782323031673,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9988782323031673
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0010843822037377325
+            },
+            {
+              "value": "slurStart",
+              "probability": 3.0205641950564036e-05
+            }
+          ],
+          "margin": 0.9977938500994296
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 10,
+      "token": {
+        "rhythm": "note_2",
+        "pitch": "E3",
+        "lift": "b",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        88.1154556274414,
+        199.5731658935547
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_2",
+          "probability": 0.9170880590942744,
+          "alternatives": [
+            {
+              "value": "note_2",
+              "probability": 0.9170880590942744
+            },
+            {
+              "value": "note_2.",
+              "probability": 0.0031284801217286956
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0006880352764161145
+            }
+          ],
+          "margin": 0.9139595789725456,
+          "unconstrained": {
+            "value": "note_2",
+            "probability": 0.9030733771146785,
+            "alternatives": [
+              {
+                "value": "note_2",
+                "probability": 0.9030733771146785
+              },
+              {
+                "value": "note_2.",
+                "probability": 0.003080671567740089
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0006775209146881488
+              }
+            ],
+            "margin": 0.8999927055469384
+          }
+        },
+        "pitch": {
+          "value": "E3",
+          "probability": 0.9996283902358425,
+          "alternatives": [
+            {
+              "value": "E3",
+              "probability": 0.9996283902358425
+            },
+            {
+              "value": "G3",
+              "probability": 0.00022941413441067212
+            },
+            {
+              "value": "B3",
+              "probability": 6.201070308032342e-05
+            }
+          ],
+          "margin": 0.9993989761014318
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9997947544388305,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9997947544388305
+            },
+            {
+              "value": "_",
+              "probability": 0.00020439534407031977
+            },
+            {
+              "value": "#",
+              "probability": 4.733259576735349e-07
+            }
+          ],
+          "margin": 0.9995903590947601
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999953495347944,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999953495347944
+            },
+            {
+              "value": "upper",
+              "probability": 4.375801754581368e-06
+            },
+            {
+              "value": ".",
+              "probability": 2.7466345094690726e-07
+            }
+          ],
+          "margin": 0.9999909737330398
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999960791665019,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999960791665019
+            },
+            {
+              "value": ".",
+              "probability": 1.1761301067941923e-06
+            },
+            {
+              "value": "accent",
+              "probability": 7.640171070493421e-07
+            }
+          ],
+          "margin": 0.9999949030363952
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999939771953424,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999939771953424
+            },
+            {
+              "value": "slurStop",
+              "probability": 4.037359004177944e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 1.1088648066188286e-06
+            }
+          ],
+          "margin": 0.9999899398363382
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 11,
+      "token": {
+        "rhythm": "note_8.",
+        "pitch": "B4",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        120.0802001953125,
+        84.06364440917969
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8.",
+          "probability": 0.9241996865408927,
+          "alternatives": [
+            {
+              "value": "note_8.",
+              "probability": 0.9241996865408927
+            },
+            {
+              "value": "note_2.",
+              "probability": 0.0006989844363067978
+            },
+            {
+              "value": "chord",
+              "probability": 0.0005501264821294394
+            }
+          ],
+          "margin": 0.9235007021045859,
+          "unconstrained": {
+            "value": "note_8.",
+            "probability": 0.9107748314484585,
+            "alternatives": [
+              {
+                "value": "note_8.",
+                "probability": 0.9107748314484585
+              },
+              {
+                "value": "note_2.",
+                "probability": 0.0006888310409898104
+              },
+              {
+                "value": "chord",
+                "probability": 0.0005421353862519453
+              }
+            ],
+            "margin": 0.9100860004074687
+          }
+        },
+        "pitch": {
+          "value": "B4",
+          "probability": 0.9997897298773197,
+          "alternatives": [
+            {
+              "value": "B4",
+              "probability": 0.9997897298773197
+            },
+            {
+              "value": "C5",
+              "probability": 6.805186917428273e-05
+            },
+            {
+              "value": ".",
+              "probability": 4.3195935042181956e-05
+            }
+          ],
+          "margin": 0.9997216780081455
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9985828390945168,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9985828390945168
+            },
+            {
+              "value": "_",
+              "probability": 0.0012010242985402457
+            },
+            {
+              "value": "bb",
+              "probability": 0.00017465129142615242
+            }
+          ],
+          "margin": 0.9973818147959765
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9998680132822042,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9998680132822042
+            },
+            {
+              "value": ".",
+              "probability": 7.824083142655809e-05
+            },
+            {
+              "value": "lower",
+              "probability": 5.374588636923693e-05
+            }
+          ],
+          "margin": 0.9997897724507776
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9997792466378891,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997792466378891
+            },
+            {
+              "value": "trill",
+              "probability": 9.458857995279213e-05
+            },
+            {
+              "value": ".",
+              "probability": 7.465410706745787e-05
+            }
+          ],
+          "margin": 0.9996846580579363
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9997839008670187,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997839008670187
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.00010785217149280129
+            },
+            {
+              "value": ".",
+              "probability": 8.396261939827791e-05
+            }
+          ],
+          "margin": 0.999676048695526
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 13,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "C4",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        119.99213409423828,
+        168.1417236328125
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9130951992130202,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9130951992130202
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0007678874805371541
+            },
+            {
+              "value": "note_8.",
+              "probability": 0.0006368993271278065
+            }
+          ],
+          "margin": 0.912327311732483,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8976686424841473,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8976686424841473
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0007549141785308492
+              },
+              {
+                "value": "note_8.",
+                "probability": 0.0006261390431957629
+              }
+            ],
+            "margin": 0.8969137283056166
+          }
+        },
+        "pitch": {
+          "value": "C4",
+          "probability": 0.9997437281461296,
+          "alternatives": [
+            {
+              "value": "C4",
+              "probability": 0.9997437281461296
+            },
+            {
+              "value": "G4",
+              "probability": 0.00011018763870491821
+            },
+            {
+              "value": "E4",
+              "probability": 6.969577598741936e-05
+            }
+          ],
+          "margin": 0.9996335405074246
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999592984426428,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999592984426428
+            },
+            {
+              "value": "b",
+              "probability": 3.6746224704762464e-05
+            },
+            {
+              "value": ".",
+              "probability": 2.3115755829423214e-06
+            }
+          ],
+          "margin": 0.999922552217938
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999797861251277,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999797861251277
+            },
+            {
+              "value": "upper",
+              "probability": 1.899475604950315e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.2191188229228091e-06
+            }
+          ],
+          "margin": 0.9999607913690782
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9994330713366903,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9994330713366903
+            },
+            {
+              "value": "staccato",
+              "probability": 0.0003235191044580906
+            },
+            {
+              "value": "accent",
+              "probability": 0.00011563085633313591
+            }
+          ],
+          "margin": 0.9991095522322323
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9998838013790066,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998838013790066
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.0001000428187197033
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.2289994023187338e-05
+            }
+          ],
+          "margin": 0.9997837585602869
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 14,
+      "token": {
+        "rhythm": "note_16",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        151.80462646484375,
+        78.36027526855469
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_16",
+          "probability": 0.9119509401906342,
+          "alternatives": [
+            {
+              "value": "note_16",
+              "probability": 0.9119509401906342
+            },
+            {
+              "value": "rest_16",
+              "probability": 0.0006142961622731302
+            },
+            {
+              "value": "note_16.",
+              "probability": 0.0005980727549538735
+            }
+          ],
+          "margin": 0.911336644028361,
+          "unconstrained": {
+            "value": "note_16",
+            "probability": 0.8964578473765475,
+            "alternatives": [
+              {
+                "value": "note_16",
+                "probability": 0.8964578473765475
+              },
+              {
+                "value": "rest_16",
+                "probability": 0.0006038599128676026
+              },
+              {
+                "value": "note_16.",
+                "probability": 0.000587912124273302
+              }
+            ],
+            "margin": 0.89585398746368
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9998709774021961,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9998709774021961
+            },
+            {
+              "value": ".",
+              "probability": 6.773922052906178e-05
+            },
+            {
+              "value": "_",
+              "probability": 2.5055716356905432e-05
+            }
+          ],
+          "margin": 0.999803238181667
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999081536223524,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999081536223524
+            },
+            {
+              "value": ".",
+              "probability": 5.6262303949501084e-05
+            },
+            {
+              "value": "b",
+              "probability": 3.2394872404548384e-05
+            }
+          ],
+          "margin": 0.9998518913184029
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.999940044863623,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.999940044863623
+            },
+            {
+              "value": ".",
+              "probability": 5.7335506257489075e-05
+            },
+            {
+              "value": "lower",
+              "probability": 2.6196301194016257e-06
+            }
+          ],
+          "margin": 0.9998827093573655
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999114940261398,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999114940261398
+            },
+            {
+              "value": ".",
+              "probability": 6.66654451951174e-05
+            },
+            {
+              "value": "staccato",
+              "probability": 9.279830435318657e-06
+            }
+          ],
+          "margin": 0.9998448285809447
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999074049753165,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999074049753165
+            },
+            {
+              "value": ".",
+              "probability": 6.151568684138289e-05
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.458142397939255e-05
+            }
+          ],
+          "margin": 0.9998458892884751
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 15,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "F5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        183.94839477539062,
+        55.782344818115234
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9196878979313818,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9196878979313818
+            },
+            {
+              "value": "note_4..",
+              "probability": 0.0006833485680795871
+            },
+            {
+              "value": "clef_C3",
+              "probability": 0.000519667512316626
+            }
+          ],
+          "margin": 0.9190045493633022,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9057207321131647,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9057207321131647
+              },
+              {
+                "value": "note_4..",
+                "probability": 0.0006729706531548864
+              },
+              {
+                "value": "clef_C3",
+                "probability": 0.0005117753976860078
+              }
+            ],
+            "margin": 0.9050477614600099
+          }
+        },
+        "pitch": {
+          "value": "F5",
+          "probability": 0.9996767989009653,
+          "alternatives": [
+            {
+              "value": "F5",
+              "probability": 0.9996767989009653
+            },
+            {
+              "value": "G5",
+              "probability": 0.00015131766572063445
+            },
+            {
+              "value": "F4",
+              "probability": 3.385255472078091e-05
+            }
+          ],
+          "margin": 0.9995254812352447
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999402998454912,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999402998454912
+            },
+            {
+              "value": "b",
+              "probability": 2.605955534745351e-05
+            },
+            {
+              "value": ".",
+              "probability": 2.0138588741824707e-05
+            }
+          ],
+          "margin": 0.9999142402901438
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999309923929034,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999309923929034
+            },
+            {
+              "value": "lower",
+              "probability": 5.097315640426821e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.803445069229335e-05
+            }
+          ],
+          "margin": 0.9998800192364992
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9997511258183276,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997511258183276
+            },
+            {
+              "value": "accent",
+              "probability": 0.00015897487014742594
+            },
+            {
+              "value": "fermata",
+              "probability": 2.7495578613543018e-05
+            }
+          ],
+          "margin": 0.9995921509481802
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.999887355033325,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999887355033325
+            },
+            {
+              "value": "slurStop",
+              "probability": 7.671409314704518e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.8979058312435907e-05
+            }
+          ],
+          "margin": 0.999810640940178
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 17,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "A4",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        183.9483642578125,
+        88.04622650146484
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9148252276215999,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9148252276215999
+            },
+            {
+              "value": "rest_1",
+              "probability": 0.00059735471265826
+            },
+            {
+              "value": "note_28",
+              "probability": 0.0005772301768453895
+            }
+          ],
+          "margin": 0.9142278729089417,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9000032300179268,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9000032300179268
+              },
+              {
+                "value": "rest_1",
+                "probability": 0.0005876763720832165
+              },
+              {
+                "value": "note_28",
+                "probability": 0.000567877893983434
+              }
+            ],
+            "margin": 0.8994155536458436
+          }
+        },
+        "pitch": {
+          "value": "A4",
+          "probability": 0.9999510356191307,
+          "alternatives": [
+            {
+              "value": "A4",
+              "probability": 0.9999510356191307
+            },
+            {
+              "value": "B4",
+              "probability": 8.80674157138802e-06
+            },
+            {
+              "value": "B3",
+              "probability": 7.371644421241048e-06
+            }
+          ],
+          "margin": 0.9999422288775592
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9999862123764879,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9999862123764879
+            },
+            {
+              "value": "_",
+              "probability": 1.2314061216725681e-05
+            },
+            {
+              "value": "#",
+              "probability": 1.186619857880786e-06
+            }
+          ],
+          "margin": 0.9999738983152712
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999711465344765,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999711465344765
+            },
+            {
+              "value": "lower",
+              "probability": 2.7267995675190603e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.5854698483799805e-06
+            }
+          ],
+          "margin": 0.9999438785388013
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999321000395508,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999321000395508
+            },
+            {
+              "value": "accent",
+              "probability": 3.9046092286923646e-05
+            },
+            {
+              "value": "breathMark",
+              "probability": 1.5624894749648818e-05
+            }
+          ],
+          "margin": 0.9998930539472639
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.999992023067112,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999992023067112
+            },
+            {
+              "value": "slurStop",
+              "probability": 3.8088704026663855e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.6389187698809317e-06
+            }
+          ],
+          "margin": 0.9999882141967094
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 19,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "C4",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        183.9263458251953,
+        167.63832092285156
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.917762488329815,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.917762488329815
+            },
+            {
+              "value": "timeSignature/16",
+              "probability": 0.0005129743637551625
+            },
+            {
+              "value": "note_40",
+              "probability": 0.0004968515313477137
+            }
+          ],
+          "margin": 0.9172495139660598,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9031546393356724,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9031546393356724
+              },
+              {
+                "value": "timeSignature/16",
+                "probability": 0.000504809449478443
+              },
+              {
+                "value": "note_40",
+                "probability": 0.0004889432410931793
+              }
+            ],
+            "margin": 0.902649829886194
+          }
+        },
+        "pitch": {
+          "value": "C4",
+          "probability": 0.9993913242195931,
+          "alternatives": [
+            {
+              "value": "C4",
+              "probability": 0.9993913242195931
+            },
+            {
+              "value": "E4",
+              "probability": 0.0002537453093481122
+            },
+            {
+              "value": "F4",
+              "probability": 0.00011611954046618979
+            }
+          ],
+          "margin": 0.999137578910245
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9998157497278795,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998157497278795
+            },
+            {
+              "value": "b",
+              "probability": 0.00017727765335545802
+            },
+            {
+              "value": "#",
+              "probability": 5.11833294494408e-06
+            }
+          ],
+          "margin": 0.9996384720745239
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999565613316184,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999565613316184
+            },
+            {
+              "value": "upper",
+              "probability": 4.254714667008163e-05
+            },
+            {
+              "value": ".",
+              "probability": 8.915217115679472e-07
+            }
+          ],
+          "margin": 0.9999140141849483
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9998086233569303,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998086233569303
+            },
+            {
+              "value": "staccato",
+              "probability": 9.197667584345473e-05
+            },
+            {
+              "value": "accent",
+              "probability": 6.199351353017585e-05
+            }
+          ],
+          "margin": 0.9997166466810868
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9988915001864491,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9988915001864491
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0006044358233854238
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.0004697195361211571
+            }
+          ],
+          "margin": 0.9982870643630637
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 21,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "A3",
+        "lift": "b",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        183.96292114257812,
+        194.9807891845703
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.907934541753662,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.907934541753662
+            },
+            {
+              "value": "chord",
+              "probability": 0.0015391728883737894
+            },
+            {
+              "value": "note_8",
+              "probability": 0.000988272692481355
+            }
+          ],
+          "margin": 0.9063953688652882,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8923814243563298,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8923814243563298
+              },
+              {
+                "value": "chord",
+                "probability": 0.0015128065199553893
+              },
+              {
+                "value": "note_8",
+                "probability": 0.000971343364980441
+              }
+            ],
+            "margin": 0.8908686178363745
+          }
+        },
+        "pitch": {
+          "value": "A3",
+          "probability": 0.976565343689904,
+          "alternatives": [
+            {
+              "value": "A3",
+              "probability": 0.976565343689904
+            },
+            {
+              "value": "C4",
+              "probability": 0.01946088503355304
+            },
+            {
+              "value": "B3",
+              "probability": 0.0016718956356064343
+            }
+          ],
+          "margin": 0.957104458656351
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9593803109945129,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9593803109945129
+            },
+            {
+              "value": "_",
+              "probability": 0.03994893052514543
+            },
+            {
+              "value": ".",
+              "probability": 0.0006654733908359891
+            }
+          ],
+          "margin": 0.9194313804693675
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.998354649042912,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.998354649042912
+            },
+            {
+              "value": "upper",
+              "probability": 0.0011226945805598648
+            },
+            {
+              "value": ".",
+              "probability": 0.0005226563765280948
+            }
+          ],
+          "margin": 0.9972319544623521
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9993003553944573,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9993003553944573
+            },
+            {
+              "value": ".",
+              "probability": 0.0005314658655097153
+            },
+            {
+              "value": "staccato",
+              "probability": 6.064512626318925e-05
+            }
+          ],
+          "margin": 0.9987688895289476
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9992976909202261,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9992976909202261
+            },
+            {
+              "value": ".",
+              "probability": 0.00047759309233311637
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.00014541409784870273
+            }
+          ],
+          "margin": 0.998820097827893
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 22,
+      "token": {
+        "rhythm": "note_8.",
+        "pitch": "E5",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        215.98318481445312,
+        55.679786682128906
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8.",
+          "probability": 0.9081998586152358,
+          "alternatives": [
+            {
+              "value": "note_8.",
+              "probability": 0.9081998586152358
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0009487548673388405
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0006137704074067791
+            }
+          ],
+          "margin": 0.907251103747897,
+          "unconstrained": {
+            "value": "note_8.",
+            "probability": 0.8924419145018064,
+            "alternatives": [
+              {
+                "value": "note_8.",
+                "probability": 0.8924419145018064
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0009322932636124702
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0006031210336079992
+              }
+            ],
+            "margin": 0.891509621238194
+          }
+        },
+        "pitch": {
+          "value": "E5",
+          "probability": 0.9997783050132304,
+          "alternatives": [
+            {
+              "value": "E5",
+              "probability": 0.9997783050132304
+            },
+            {
+              "value": "G5",
+              "probability": 7.475994412224449e-05
+            },
+            {
+              "value": ".",
+              "probability": 5.535928013662594e-05
+            }
+          ],
+          "margin": 0.9997035450691082
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9997553094486118,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9997553094486118
+            },
+            {
+              "value": "_",
+              "probability": 0.00023244867931565392
+            },
+            {
+              "value": ".",
+              "probability": 1.1786745441561965e-05
+            }
+          ],
+          "margin": 0.9995228607692962
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999193124070265,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999193124070265
+            },
+            {
+              "value": ".",
+              "probability": 5.771026853324702e-05
+            },
+            {
+              "value": "lower",
+              "probability": 2.297732444023559e-05
+            }
+          ],
+          "margin": 0.9998616021384932
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999018628612558,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999018628612558
+            },
+            {
+              "value": ".",
+              "probability": 6.214628892762566e-05
+            },
+            {
+              "value": "accent",
+              "probability": 2.405405782073827e-05
+            }
+          ],
+          "margin": 0.9998397165723282
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9991455699083217,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9991455699083217
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.0007425264759700089
+            },
+            {
+              "value": ".",
+              "probability": 7.417491573345253e-05
+            }
+          ],
+          "margin": 0.9984030434323516
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 24,
+      "token": {
+        "rhythm": "note_8.",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        215.8527069091797,
+        88.11522674560547
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8.",
+          "probability": 0.9166243685356932,
+          "alternatives": [
+            {
+              "value": "note_8.",
+              "probability": 0.9166243685356932
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0011651270122206101
+            },
+            {
+              "value": "note_0",
+              "probability": 0.0005590367113997535
+            }
+          ],
+          "margin": 0.9154592415234726,
+          "unconstrained": {
+            "value": "note_8.",
+            "probability": 0.9021316409467601,
+            "alternatives": [
+              {
+                "value": "note_8.",
+                "probability": 0.9021316409467601
+              },
+              {
+                "value": "note_4",
+                "probability": 0.001146705214836371
+              },
+              {
+                "value": "note_0",
+                "probability": 0.0005501977943377158
+              }
+            ],
+            "margin": 0.9009849357319237
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9999653502760575,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9999653502760575
+            },
+            {
+              "value": "E5",
+              "probability": 1.4774271756083282e-05
+            },
+            {
+              "value": "B4",
+              "probability": 3.8115749048080407e-06
+            }
+          ],
+          "margin": 0.9999505760043014
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9998690719767613,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998690719767613
+            },
+            {
+              "value": "b",
+              "probability": 0.00011990954683874262
+            },
+            {
+              "value": "#",
+              "probability": 9.472461211164155e-06
+            }
+          ],
+          "margin": 0.9997491624299226
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999740292768573,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999740292768573
+            },
+            {
+              "value": "lower",
+              "probability": 2.4929168127080374e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.041555015737836e-06
+            }
+          ],
+          "margin": 0.9999491001087302
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999961119873776,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999961119873776
+            },
+            {
+              "value": ".",
+              "probability": 1.2245483480692131e-06
+            },
+            {
+              "value": "accent",
+              "probability": 9.214458961432609e-07
+            }
+          ],
+          "margin": 0.9999948874390295
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999942023835643,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999942023835643
+            },
+            {
+              "value": "slurStop",
+              "probability": 2.371715037741776e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.2895712698915123e-06
+            }
+          ],
+          "margin": 0.9999918306685266
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 26,
+      "token": {
+        "rhythm": "note_8.",
+        "pitch": "G3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        215.98167419433594,
+        168.14303588867188
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8.",
+          "probability": 0.9192067889142843,
+          "alternatives": [
+            {
+              "value": "note_8.",
+              "probability": 0.9192067889142843
+            },
+            {
+              "value": "note_8",
+              "probability": 0.006583416910266474
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0018714448152924272
+            }
+          ],
+          "margin": 0.9126233720040179,
+          "unconstrained": {
+            "value": "note_8.",
+            "probability": 0.9065296422138177,
+            "alternatives": [
+              {
+                "value": "note_8.",
+                "probability": 0.9065296422138177
+              },
+              {
+                "value": "note_8",
+                "probability": 0.006492622387240423
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0018456349749481106
+              }
+            ],
+            "margin": 0.9000370198265772
+          }
+        },
+        "pitch": {
+          "value": "G3",
+          "probability": 0.9995394741315494,
+          "alternatives": [
+            {
+              "value": "G3",
+              "probability": 0.9995394741315494
+            },
+            {
+              "value": "A3",
+              "probability": 0.00014792513284923604
+            },
+            {
+              "value": "F3",
+              "probability": 5.666295351282473e-05
+            }
+          ],
+          "margin": 0.9993915489987002
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9989570959120001,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9989570959120001
+            },
+            {
+              "value": "b",
+              "probability": 0.001029934205051583
+            },
+            {
+              "value": "#",
+              "probability": 7.723066838552266e-06
+            }
+          ],
+          "margin": 0.9979271617069485
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9998078409710819,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9998078409710819
+            },
+            {
+              "value": "upper",
+              "probability": 0.00018712168100401118
+            },
+            {
+              "value": ".",
+              "probability": 5.0373479140677245e-06
+            }
+          ],
+          "margin": 0.9996207192900779
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999818927544545,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999818927544545
+            },
+            {
+              "value": ".",
+              "probability": 6.517634734244463e-06
+            },
+            {
+              "value": "accent",
+              "probability": 4.664361275986269e-06
+            }
+          ],
+          "margin": 0.9999753751197202
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9997008513058376,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997008513058376
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.000256037927061258
+            },
+            {
+              "value": "slurStop",
+              "probability": 3.455218403703734e-05
+            }
+          ],
+          "margin": 0.9994448133787763
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 27,
+      "token": {
+        "rhythm": "note_16",
+        "pitch": "E5",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        247.9931182861328,
+        55.87651824951172
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_16",
+          "probability": 0.7101758625113076,
+          "alternatives": [
+            {
+              "value": "note_16",
+              "probability": 0.7101758625113076
+            },
+            {
+              "value": "note_48",
+              "probability": 0.0036181087379896916
+            },
+            {
+              "value": "note_16.",
+              "probability": 0.002569186483974731
+            }
+          ],
+          "margin": 0.7065577537733179,
+          "unconstrained": {
+            "value": "note_32",
+            "probability": 0.7177186952372416,
+            "alternatives": [
+              {
+                "value": "note_32",
+                "probability": 0.7177186952372416
+              },
+              {
+                "value": "note_16",
+                "probability": 0.1897395686265327
+              },
+              {
+                "value": "note_48",
+                "probability": 0.0009666597070230927
+              }
+            ],
+            "margin": 0.5279791266107089
+          }
+        },
+        "pitch": {
+          "value": "E5",
+          "probability": 0.999783724405947,
+          "alternatives": [
+            {
+              "value": "E5",
+              "probability": 0.999783724405947
+            },
+            {
+              "value": "D5",
+              "probability": 0.00010060545941750987
+            },
+            {
+              "value": ".",
+              "probability": 5.1164610739491674e-05
+            }
+          ],
+          "margin": 0.9996831189465295
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9999344392457775,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9999344392457775
+            },
+            {
+              "value": "_",
+              "probability": 5.79141636137247e-05
+            },
+            {
+              "value": ".",
+              "probability": 6.576807864173875e-06
+            }
+          ],
+          "margin": 0.9998765250821638
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999547820423544,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999547820423544
+            },
+            {
+              "value": ".",
+              "probability": 3.977025160591522e-05
+            },
+            {
+              "value": "lower",
+              "probability": 5.447706039691835e-06
+            }
+          ],
+          "margin": 0.9999150117907485
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999532422428811,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999532422428811
+            },
+            {
+              "value": ".",
+              "probability": 4.025193759560614e-05
+            },
+            {
+              "value": "accent",
+              "probability": 2.3727456423549326e-06
+            }
+          ],
+          "margin": 0.9999129903052855
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999429525272282,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999429525272282
+            },
+            {
+              "value": ".",
+              "probability": 3.863722805355425e-05
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.5306063430447837e-05
+            }
+          ],
+          "margin": 0.9999043152991747
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 29,
+      "token": {
+        "rhythm": "note_16",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        247.99461364746094,
+        88.09857177734375
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_16",
+          "probability": 0.913621476961306,
+          "alternatives": [
+            {
+              "value": "note_16",
+              "probability": 0.913621476961306
+            },
+            {
+              "value": "note_4",
+              "probability": 0.000567914354255418
+            },
+            {
+              "value": "note_3",
+              "probability": 0.0005295787040378802
+            }
+          ],
+          "margin": 0.9130535626070506,
+          "unconstrained": {
+            "value": "note_16",
+            "probability": 0.898043879611135,
+            "alternatives": [
+              {
+                "value": "note_16",
+                "probability": 0.898043879611135
+              },
+              {
+                "value": "note_32",
+                "probability": 0.0006328178544361521
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0005582311962265618
+              }
+            ],
+            "margin": 0.8974110617566988
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9999026555714311,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9999026555714311
+            },
+            {
+              "value": "E5",
+              "probability": 2.8154058483240567e-05
+            },
+            {
+              "value": "C4",
+              "probability": 2.0828149221282657e-05
+            }
+          ],
+          "margin": 0.9998745015129479
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.999502444694631,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999502444694631
+            },
+            {
+              "value": "b",
+              "probability": 0.00047700872169615527
+            },
+            {
+              "value": "#",
+              "probability": 1.6101454833561484e-05
+            }
+          ],
+          "margin": 0.9990254359729348
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999490204940193,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999490204940193
+            },
+            {
+              "value": "lower",
+              "probability": 4.778411899147906e-05
+            },
+            {
+              "value": ".",
+              "probability": 3.195386989177131e-06
+            }
+          ],
+          "margin": 0.9999012363750278
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999955439194599,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999955439194599
+            },
+            {
+              "value": ".",
+              "probability": 3.2056265922709834e-06
+            },
+            {
+              "value": "accent",
+              "probability": 6.645250508438014e-07
+            }
+          ],
+          "margin": 0.9999923382928676
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999954096508439,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999954096508439
+            },
+            {
+              "value": ".",
+              "probability": 2.967885782508232e-06
+            },
+            {
+              "value": "slurStop",
+              "probability": 9.621644075914209e-07
+            }
+          ],
+          "margin": 0.9999924417650614
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 31,
+      "token": {
+        "rhythm": "note_16",
+        "pitch": "G3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        247.99459838867188,
+        169.25604248046875
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_16",
+          "probability": 0.816195322909242,
+          "alternatives": [
+            {
+              "value": "note_16",
+              "probability": 0.816195322909242
+            },
+            {
+              "value": "note_48",
+              "probability": 0.002005506241903632
+            },
+            {
+              "value": "note_1",
+              "probability": 0.001882364117549393
+            }
+          ],
+          "margin": 0.8141898166673384,
+          "unconstrained": {
+            "value": "note_16",
+            "probability": 0.5620774631273647,
+            "alternatives": [
+              {
+                "value": "note_16",
+                "probability": 0.5620774631273647
+              },
+              {
+                "value": "note_32",
+                "probability": 0.2857377707842144
+              },
+              {
+                "value": "note_48",
+                "probability": 0.0013811030633174
+              }
+            ],
+            "margin": 0.2763396923431503
+          }
+        },
+        "pitch": {
+          "value": "G3",
+          "probability": 0.9990876295582686,
+          "alternatives": [
+            {
+              "value": "G3",
+              "probability": 0.9990876295582686
+            },
+            {
+              "value": "A3",
+              "probability": 0.0005276550707678211
+            },
+            {
+              "value": "G4",
+              "probability": 9.006087432226551e-05
+            }
+          ],
+          "margin": 0.9985599744875008
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.995078348055935,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.995078348055935
+            },
+            {
+              "value": "b",
+              "probability": 0.004909102869811461
+            },
+            {
+              "value": ".",
+              "probability": 7.792627928960067e-06
+            }
+          ],
+          "margin": 0.9901692451861235
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9997628059892624,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9997628059892624
+            },
+            {
+              "value": "upper",
+              "probability": 0.00023182591166633716
+            },
+            {
+              "value": ".",
+              "probability": 5.3680990711707254e-06
+            }
+          ],
+          "margin": 0.999530980077596
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999871465479109,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999871465479109
+            },
+            {
+              "value": ".",
+              "probability": 7.503098564500382e-06
+            },
+            {
+              "value": "accent",
+              "probability": 2.2490621916420713e-06
+            }
+          ],
+          "margin": 0.9999796434493464
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.999975608729264,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999975608729264
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.1158117773135297e-05
+            },
+            {
+              "value": ".",
+              "probability": 7.723291913486939e-06
+            }
+          ],
+          "margin": 0.999964450611491
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 32,
+      "token": {
+        "rhythm": "barline",
+        "pitch": ".",
+        "lift": ".",
+        "position": ".",
+        "articulation": ".",
+        "slur": "."
+      },
+      "attention": [
+        272.2327880859375,
+        104.8094711303711
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "barline",
+          "probability": 0.9165777851760278,
+          "alternatives": [
+            {
+              "value": "barline",
+              "probability": 0.9165777851760278
+            },
+            {
+              "value": "chord",
+              "probability": 0.0019388034096215023
+            },
+            {
+              "value": "doublebarline",
+              "probability": 0.0005433758931798654
+            }
+          ],
+          "margin": 0.9146389817664063,
+          "unconstrained": {
+            "value": "barline",
+            "probability": 0.9022028358075991,
+            "alternatives": [
+              {
+                "value": "barline",
+                "probability": 0.9022028358075991
+              },
+              {
+                "value": "chord",
+                "probability": 0.0019083966058571129
+              },
+              {
+                "value": "doublebarline",
+                "probability": 0.0005348539749326483
+              }
+            ],
+            "margin": 0.900294439201742
+          }
+        },
+        "pitch": {
+          "value": ".",
+          "probability": 0.9999928580087404,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999928580087404
+            },
+            {
+              "value": "_",
+              "probability": 1.6139107694536976e-06
+            },
+            {
+              "value": "D5",
+              "probability": 4.811667524646492e-07
+            }
+          ],
+          "margin": 0.9999912440979709
+        },
+        "lift": {
+          "value": ".",
+          "probability": 0.9999927495331119,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999927495331119
+            },
+            {
+              "value": "_",
+              "probability": 4.751764269168211e-06
+            },
+            {
+              "value": "b",
+              "probability": 1.6489350385283866e-06
+            }
+          ],
+          "margin": 0.9999879977688427
+        },
+        "position": {
+          "value": ".",
+          "probability": 0.9999923572033453,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999923572033453
+            },
+            {
+              "value": "upper",
+              "probability": 5.546224323652755e-06
+            },
+            {
+              "value": "lower",
+              "probability": 2.096572331152804e-06
+            }
+          ],
+          "margin": 0.9999868109790216
+        },
+        "articulation": {
+          "value": ".",
+          "probability": 0.9999921835694038,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999921835694038
+            },
+            {
+              "value": "_",
+              "probability": 6.622249054017604e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 3.0356477333598335e-07
+            }
+          ],
+          "margin": 0.9999855613203498
+        },
+        "slur": {
+          "value": ".",
+          "probability": 0.9999924560896446,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999924560896446
+            },
+            {
+              "value": "_",
+              "probability": 5.372309318579786e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 1.167044111941711e-06
+            }
+          ],
+          "margin": 0.999987083780326
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 33,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "D5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        295.97906494140625,
+        55.99382781982422
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9022370387310694,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9022370387310694
+            },
+            {
+              "value": "note_4",
+              "probability": 0.005058750398291443
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0017895598664241705
+            }
+          ],
+          "margin": 0.897178288332778,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.8872722541920278,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.8872722541920278
+              },
+              {
+                "value": "note_4",
+                "probability": 0.004974844388565115
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0017598776690956077
+              }
+            ],
+            "margin": 0.8822974098034627
+          }
+        },
+        "pitch": {
+          "value": "D5",
+          "probability": 0.9970026016854665,
+          "alternatives": [
+            {
+              "value": "D5",
+              "probability": 0.9970026016854665
+            },
+            {
+              "value": "_",
+              "probability": 0.0005708230308817382
+            },
+            {
+              "value": "F3",
+              "probability": 0.00047204841769191234
+            }
+          ],
+          "margin": 0.9964317786545848
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9942865215328007,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9942865215328007
+            },
+            {
+              "value": "b",
+              "probability": 0.005404741620526808
+            },
+            {
+              "value": ".",
+              "probability": 0.00026906857442479925
+            }
+          ],
+          "margin": 0.9888817799122739
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9963753971049979,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9963753971049979
+            },
+            {
+              "value": "lower",
+              "probability": 0.0034191358028906353
+            },
+            {
+              "value": ".",
+              "probability": 0.0002054670921112145
+            }
+          ],
+          "margin": 0.9929562613021072
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9986490810602474,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9986490810602474
+            },
+            {
+              "value": "staccato",
+              "probability": 0.0006284757440103678
+            },
+            {
+              "value": "accent",
+              "probability": 0.000314508224608125
+            }
+          ],
+          "margin": 0.998020605316237
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9748673247899831,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9748673247899831
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.02213366286663145
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0026209332988870633
+            }
+          ],
+          "margin": 0.9527336619233516
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 35,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "B4",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        294.9146728515625,
+        87.56195068359375
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.8896936881932007,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.8896936881932007
+            },
+            {
+              "value": "note_4",
+              "probability": 0.025404609765799075
+            },
+            {
+              "value": "note_2",
+              "probability": 0.004173904183285351
+            }
+          ],
+          "margin": 0.8642890784274017,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.8761470703787827,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.8761470703787827
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0250177951308424
+              },
+              {
+                "value": "note_2",
+                "probability": 0.004110351653335641
+              }
+            ],
+            "margin": 0.8511292752479404
+          }
+        },
+        "pitch": {
+          "value": "B4",
+          "probability": 0.9997778341776785,
+          "alternatives": [
+            {
+              "value": "B4",
+              "probability": 0.9997778341776785
+            },
+            {
+              "value": "C5",
+              "probability": 8.530408707485746e-05
+            },
+            {
+              "value": "D5",
+              "probability": 3.207182961723228e-05
+            }
+          ],
+          "margin": 0.9996925300906037
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.999643073210561,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999643073210561
+            },
+            {
+              "value": "b",
+              "probability": 0.00026027079412999207
+            },
+            {
+              "value": "#",
+              "probability": 8.76011829154137e-05
+            }
+          ],
+          "margin": 0.999382802416431
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9997458144242154,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9997458144242154
+            },
+            {
+              "value": "lower",
+              "probability": 0.00024601741090605475
+            },
+            {
+              "value": ".",
+              "probability": 8.168164878450665e-06
+            }
+          ],
+          "margin": 0.9994997970133094
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.999979302491568,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999979302491568
+            },
+            {
+              "value": ".",
+              "probability": 7.779921032398467e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 6.880464974933388e-06
+            }
+          ],
+          "margin": 0.9999715225705356
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999671140249728,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999671140249728
+            },
+            {
+              "value": "slurStart",
+              "probability": 1.5175673566498236e-05
+            },
+            {
+              "value": "slurStop",
+              "probability": 9.12211356168234e-06
+            }
+          ],
+          "margin": 0.9999519383514064
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 37,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "A3",
+        "lift": "b",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        295.9450378417969,
+        167.94378662109375
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9080030490539442,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9080030490539442
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0019006817915995964
+            },
+            {
+              "value": "note_8",
+              "probability": 0.0007801743351145969
+            }
+          ],
+          "margin": 0.9061023672623446,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8922409659098625,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8922409659098625
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0018676877345192272
+              },
+              {
+                "value": "note_8",
+                "probability": 0.0007666312388113769
+              }
+            ],
+            "margin": 0.8903732781753433
+          }
+        },
+        "pitch": {
+          "value": "A3",
+          "probability": 0.9949512453905067,
+          "alternatives": [
+            {
+              "value": "A3",
+              "probability": 0.9949512453905067
+            },
+            {
+              "value": "G3",
+              "probability": 0.0013486604370657885
+            },
+            {
+              "value": "B3",
+              "probability": 0.001307989539965004
+            }
+          ],
+          "margin": 0.9936025849534409
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9943288538991893,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9943288538991893
+            },
+            {
+              "value": "_",
+              "probability": 0.00565817397385567
+            },
+            {
+              "value": "#",
+              "probability": 1.0228343533294782e-05
+            }
+          ],
+          "margin": 0.9886706799253336
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.999285759152388,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.999285759152388
+            },
+            {
+              "value": "upper",
+              "probability": 0.0007104117814918399
+            },
+            {
+              "value": ".",
+              "probability": 3.829066120212389e-06
+            }
+          ],
+          "margin": 0.9985753473708961
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9998468943984592,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998468943984592
+            },
+            {
+              "value": "accent",
+              "probability": 8.394941365382729e-05
+            },
+            {
+              "value": "arpeggiate",
+              "probability": 3.221201068618516e-05
+            }
+          ],
+          "margin": 0.9997629449848053
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9997606558783625,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997606558783625
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.00021341278497399085
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.0876295300216542e-05
+            }
+          ],
+          "margin": 0.9995472430933885
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 39,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "F3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        295.9505615234375,
+        199.99522399902344
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9137561136081882,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9137561136081882
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0008140058961588676
+            },
+            {
+              "value": "note_8",
+              "probability": 0.0007932041721573335
+            }
+          ],
+          "margin": 0.9129421077120293,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8986959540019327,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8986959540019327
+              },
+              {
+                "value": "note_2",
+                "probability": 0.000800589779392023
+              },
+              {
+                "value": "note_8",
+                "probability": 0.0007801309010129507
+              }
+            ],
+            "margin": 0.8978953642225407
+          }
+        },
+        "pitch": {
+          "value": "F3",
+          "probability": 0.9983712393213413,
+          "alternatives": [
+            {
+              "value": "F3",
+              "probability": 0.9983712393213413
+            },
+            {
+              "value": "A3",
+              "probability": 0.000817793021762276
+            },
+            {
+              "value": "C4",
+              "probability": 0.0004182598113114796
+            }
+          ],
+          "margin": 0.997553446299579
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9997777981192121,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997777981192121
+            },
+            {
+              "value": "b",
+              "probability": 0.00020481767963396037
+            },
+            {
+              "value": "#",
+              "probability": 1.1392351146314698e-05
+            }
+          ],
+          "margin": 0.9995729804395781
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9998689251932561,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9998689251932561
+            },
+            {
+              "value": "upper",
+              "probability": 0.00012798902017349524
+            },
+            {
+              "value": ".",
+              "probability": 3.0857865704231314e-06
+            }
+          ],
+          "margin": 0.9997409361730826
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999789701356094,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999789701356094
+            },
+            {
+              "value": ".",
+              "probability": 6.0138620232406905e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 5.009250980672678e-06
+            }
+          ],
+          "margin": 0.9999729562735862
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999776575041828,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999776575041828
+            },
+            {
+              "value": "slurStop",
+              "probability": 9.41427311590291e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 8.479549137937614e-06
+            }
+          ],
+          "margin": 0.9999682432310669
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 40,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "D5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        311.7109375,
+        72.54883575439453
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.8989481986904873,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.8989481986904873
+            },
+            {
+              "value": "note_16",
+              "probability": 0.009207493464635364
+            },
+            {
+              "value": "note_8.",
+              "probability": 0.0015517623488910748
+            }
+          ],
+          "margin": 0.8897407052258519,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.8834796343544887,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.8834796343544887
+              },
+              {
+                "value": "note_16",
+                "probability": 0.009049056409821222
+              },
+              {
+                "value": "note_8.",
+                "probability": 0.001525060548094357
+              }
+            ],
+            "margin": 0.8744305779446675
+          }
+        },
+        "pitch": {
+          "value": "D5",
+          "probability": 0.9965027453686709,
+          "alternatives": [
+            {
+              "value": "D5",
+              "probability": 0.9965027453686709
+            },
+            {
+              "value": "C5",
+              "probability": 0.0027398258455024354
+            },
+            {
+              "value": "B4",
+              "probability": 0.0005608062555190973
+            }
+          ],
+          "margin": 0.9937629195231684
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9976150072540062,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9976150072540062
+            },
+            {
+              "value": "b",
+              "probability": 0.001997859562280652
+            },
+            {
+              "value": "#",
+              "probability": 0.0002986746501232438
+            }
+          ],
+          "margin": 0.9956171476917256
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999183860625404,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999183860625404
+            },
+            {
+              "value": ".",
+              "probability": 7.543824667831218e-05
+            },
+            {
+              "value": "lower",
+              "probability": 6.175690781302343e-06
+            }
+          ],
+          "margin": 0.999842947815862
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9996293061142341,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9996293061142341
+            },
+            {
+              "value": "staccato",
+              "probability": 0.00019388054423968395
+            },
+            {
+              "value": ".",
+              "probability": 7.794366963185438e-05
+            }
+          ],
+          "margin": 0.9994354255699944
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9604302393749962,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9604302393749962
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.03795115446019583
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.0012297377723313656
+            }
+          ],
+          "margin": 0.9224790849148004
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 42,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "B4",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        327.8201904296875,
+        87.05984497070312
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9119166170709166,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9119166170709166
+            },
+            {
+              "value": "note_4",
+              "probability": 0.001541932434220091
+            },
+            {
+              "value": "note_4G",
+              "probability": 0.0011430592740539656
+            }
+          ],
+          "margin": 0.9103746846366966,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.897162529204839,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.897162529204839
+              },
+              {
+                "value": "note_4",
+                "probability": 0.001516985189930245
+              },
+              {
+                "value": "note_4G",
+                "probability": 0.0011245654812555657
+              }
+            ],
+            "margin": 0.8956455440149087
+          }
+        },
+        "pitch": {
+          "value": "B4",
+          "probability": 0.9999573337577797,
+          "alternatives": [
+            {
+              "value": "B4",
+              "probability": 0.9999573337577797
+            },
+            {
+              "value": "D5",
+              "probability": 2.5748697806509483e-05
+            },
+            {
+              "value": "_",
+              "probability": 3.722987270907441e-06
+            }
+          ],
+          "margin": 0.9999315850599733
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999301009472313,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999301009472313
+            },
+            {
+              "value": "#",
+              "probability": 3.6150950074461524e-05
+            },
+            {
+              "value": "b",
+              "probability": 2.8143160404746826e-05
+            }
+          ],
+          "margin": 0.9998939499971569
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999876340398107,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999876340398107
+            },
+            {
+              "value": ".",
+              "probability": 6.867961414915185e-06
+            },
+            {
+              "value": "lower",
+              "probability": 5.497998774323327e-06
+            }
+          ],
+          "margin": 0.9999807660783958
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999853386610029,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999853386610029
+            },
+            {
+              "value": ".",
+              "probability": 7.917079166690604e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 4.994378661651845e-06
+            }
+          ],
+          "margin": 0.9999774215818362
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999325550494489,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999325550494489
+            },
+            {
+              "value": "slurStop",
+              "probability": 5.947513743853933e-05
+            },
+            {
+              "value": ".",
+              "probability": 6.71329894562661e-06
+            }
+          ],
+          "margin": 0.9998730799120104
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 43,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        344.49822998046875,
+        69.33446502685547
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.913487529345804,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.913487529345804
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0011719354451010383
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0009083134914020106
+            }
+          ],
+          "margin": 0.9123155939007029,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.8985897163384345,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.8985897163384345
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0011528226772121028
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0008935000603345181
+              }
+            ],
+            "margin": 0.8974368936612225
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9998311372882849,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9998311372882849
+            },
+            {
+              "value": ".",
+              "probability": 4.5987454624445103e-05
+            },
+            {
+              "value": "B4",
+              "probability": 4.491821517653519e-05
+            }
+          ],
+          "margin": 0.9997851498336604
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9998631514303556,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998631514303556
+            },
+            {
+              "value": ".",
+              "probability": 6.986990417380089e-05
+            },
+            {
+              "value": "b",
+              "probability": 5.4866613267659684e-05
+            }
+          ],
+          "margin": 0.9997932815261819
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999112047819266,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999112047819266
+            },
+            {
+              "value": ".",
+              "probability": 6.705533572181654e-05
+            },
+            {
+              "value": "lower",
+              "probability": 2.1739882351782188e-05
+            }
+          ],
+          "margin": 0.9998441494462048
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9997258850155742,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997258850155742
+            },
+            {
+              "value": "staccato",
+              "probability": 0.00011570944417833136
+            },
+            {
+              "value": ".",
+              "probability": 7.51604181331652e-05
+            }
+          ],
+          "margin": 0.9996101755713959
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9996800216338442,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9996800216338442
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0001427242358918533
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.00010745201398350623
+            }
+          ],
+          "margin": 0.9995372973979523
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 45,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "G3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        351.6543884277344,
+        174.1607208251953
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9129736515559846,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9129736515559846
+            },
+            {
+              "value": "note_4",
+              "probability": 0.0014886737110375655
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0010947490960108884
+            }
+          ],
+          "margin": 0.9114849778449471,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.8981894640203478,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.8981894640203478
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0014645669569315273
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0010770213380276107
+              }
+            ],
+            "margin": 0.8967248970634163
+          }
+        },
+        "pitch": {
+          "value": "G3",
+          "probability": 0.9995650189178714,
+          "alternatives": [
+            {
+              "value": "G3",
+              "probability": 0.9995650189178714
+            },
+            {
+              "value": "_",
+              "probability": 0.00010952170306135101
+            },
+            {
+              "value": "A3",
+              "probability": 7.088944821929826e-05
+            }
+          ],
+          "margin": 0.9994554972148101
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9997090065721509,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997090065721509
+            },
+            {
+              "value": "b",
+              "probability": 0.00026007695781901457
+            },
+            {
+              "value": "#",
+              "probability": 2.3938393319410712e-05
+            }
+          ],
+          "margin": 0.9994489296143318
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9998291882254411,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9998291882254411
+            },
+            {
+              "value": "upper",
+              "probability": 0.00016533892607699347
+            },
+            {
+              "value": ".",
+              "probability": 5.4728484819959375e-06
+            }
+          ],
+          "margin": 0.9996638492993641
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9991014361457992,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9991014361457992
+            },
+            {
+              "value": "accent",
+              "probability": 0.0005894993219913502
+            },
+            {
+              "value": "staccato",
+              "probability": 0.0001076015190926943
+            }
+          ],
+          "margin": 0.9985119368238078
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9984491104038439,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9984491104038439
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0014947661052497744
+            },
+            {
+              "value": "slurStart",
+              "probability": 4.696399604081475e-05
+            }
+          ],
+          "margin": 0.9969543442985941
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 47,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "E3",
+        "lift": "b",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        353.7142333984375,
+        201.06741333007812
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9215628534317589,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9215628534317589
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0006647373198555381
+            },
+            {
+              "value": "note_4",
+              "probability": 0.000491717248638683
+            }
+          ],
+          "margin": 0.9208981161119034,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.9077772202219228,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.9077772202219228
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0006547935326919244
+              },
+              {
+                "value": "note_4",
+                "probability": 0.0004843616639301196
+              }
+            ],
+            "margin": 0.9071224266892308
+          }
+        },
+        "pitch": {
+          "value": "E3",
+          "probability": 0.9999033324588286,
+          "alternatives": [
+            {
+              "value": "E3",
+              "probability": 0.9999033324588286
+            },
+            {
+              "value": "C3",
+              "probability": 2.723064946401679e-05
+            },
+            {
+              "value": "D3",
+              "probability": 1.3920913362294922e-05
+            }
+          ],
+          "margin": 0.9998761018093646
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9999049375143633,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9999049375143633
+            },
+            {
+              "value": "_",
+              "probability": 9.484696327253963e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.2878542325802746e-07
+            }
+          ],
+          "margin": 0.9998100905510907
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999926552578474,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999926552578474
+            },
+            {
+              "value": "upper",
+              "probability": 6.969236264635763e-06
+            },
+            {
+              "value": ".",
+              "probability": 3.7550588800082985e-07
+            }
+          ],
+          "margin": 0.9999856860215828
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999893631947916,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999893631947916
+            },
+            {
+              "value": "staccato",
+              "probability": 5.003748995820487e-06
+            },
+            {
+              "value": "accent",
+              "probability": 3.013971813528296e-06
+            }
+          ],
+          "margin": 0.9999843594457958
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999950443905066,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999950443905066
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.5880068312109565e-06
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.5743789191669673e-06
+            }
+          ],
+          "margin": 0.9999924563836754
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 48,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "E5",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        391.46783447265625,
+        55.44586181640625
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9154344287106791,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9154344287106791
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0005989104917189171
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0005433208277476423
+            }
+          ],
+          "margin": 0.9148355182189603,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.9005060082419555,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.9005060082419555
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0005891437761977383
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0005344606390638329
+              }
+            ],
+            "margin": 0.8999168644657577
+          }
+        },
+        "pitch": {
+          "value": "E5",
+          "probability": 0.9995592315411388,
+          "alternatives": [
+            {
+              "value": "E5",
+              "probability": 0.9995592315411388
+            },
+            {
+              "value": "C5",
+              "probability": 0.0003093831677269606
+            },
+            {
+              "value": ".",
+              "probability": 4.027343535501151e-05
+            }
+          ],
+          "margin": 0.9992498483734118
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9996298423505551,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9996298423505551
+            },
+            {
+              "value": "_",
+              "probability": 0.0003561489491500187
+            },
+            {
+              "value": ".",
+              "probability": 1.2902065778747815e-05
+            }
+          ],
+          "margin": 0.999273693401405
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999648748387008,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999648748387008
+            },
+            {
+              "value": ".",
+              "probability": 3.082101847822482e-05
+            },
+            {
+              "value": "lower",
+              "probability": 4.304142820802329e-06
+            }
+          ],
+          "margin": 0.9999340538202226
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.999931921244023,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999931921244023
+            },
+            {
+              "value": ".",
+              "probability": 3.270844761885962e-05
+            },
+            {
+              "value": "accent",
+              "probability": 1.3617551484655328e-05
+            }
+          ],
+          "margin": 0.9998992127964041
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999171803788913,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999171803788913
+            },
+            {
+              "value": "slurStop",
+              "probability": 4.162023178719378e-05
+            },
+            {
+              "value": ".",
+              "probability": 3.094555820521393e-05
+            }
+          ],
+          "margin": 0.9998755601471041
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 50,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "C5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        391.5577392578125,
+        87.99519348144531
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9151094733825078,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9151094733825078
+            },
+            {
+              "value": "clef_G2",
+              "probability": 0.0005262419594474706
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0005055734421103477
+            }
+          ],
+          "margin": 0.9145832314230603,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.9000754544040814,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.9000754544040814
+              },
+              {
+                "value": "clef_G2",
+                "probability": 0.0005175965111861448
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0004972675498157563
+              }
+            ],
+            "margin": 0.8995578578928953
+          }
+        },
+        "pitch": {
+          "value": "C5",
+          "probability": 0.9999146257878395,
+          "alternatives": [
+            {
+              "value": "C5",
+              "probability": 0.9999146257878395
+            },
+            {
+              "value": "C4",
+              "probability": 1.7289903402183363e-05
+            },
+            {
+              "value": "_",
+              "probability": 1.3987976788929721e-05
+            }
+          ],
+          "margin": 0.9998973358844373
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.999931142135165,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999931142135165
+            },
+            {
+              "value": "b",
+              "probability": 6.167048902992296e-05
+            },
+            {
+              "value": "#",
+              "probability": 6.221708228294742e-06
+            }
+          ],
+          "margin": 0.999869471646135
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999763947145205,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999763947145205
+            },
+            {
+              "value": "lower",
+              "probability": 2.2853154526580933e-05
+            },
+            {
+              "value": ".",
+              "probability": 7.521309527523161e-07
+            }
+          ],
+          "margin": 0.9999535415599939
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999878043118704,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999878043118704
+            },
+            {
+              "value": "staccato",
+              "probability": 6.968324363408712e-06
+            },
+            {
+              "value": "accent",
+              "probability": 2.059991870672428e-06
+            }
+          ],
+          "margin": 0.999980835987507
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999982251807921,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999982251807921
+            },
+            {
+              "value": "slurStop",
+              "probability": 7.928376670306453e-07
+            },
+            {
+              "value": ".",
+              "probability": 6.684450423877815e-07
+            }
+          ],
+          "margin": 0.999997432343125
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 52,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "C4",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        391.906494140625,
+        168.02134704589844
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9138365620176322,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9138365620176322
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0008166566595434341
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0006290954866759459
+            }
+          ],
+          "margin": 0.9130199053580887,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.898371296043418,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.898371296043418
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0008028360126417963
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0006184490216197213
+              }
+            ],
+            "margin": 0.8975684600307763
+          }
+        },
+        "pitch": {
+          "value": "C4",
+          "probability": 0.9998040908677646,
+          "alternatives": [
+            {
+              "value": "C4",
+              "probability": 0.9998040908677646
+            },
+            {
+              "value": "C5",
+              "probability": 2.725863711190341e-05
+            },
+            {
+              "value": "F4",
+              "probability": 2.6085828952352353e-05
+            }
+          ],
+          "margin": 0.9997768322306526
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999667964126667,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999667964126667
+            },
+            {
+              "value": "b",
+              "probability": 3.019690342336492e-05
+            },
+            {
+              "value": "#",
+              "probability": 2.467775055029826e-06
+            }
+          ],
+          "margin": 0.9999365995092434
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.999940293482104,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.999940293482104
+            },
+            {
+              "value": "upper",
+              "probability": 5.9326979642118946e-05
+            },
+            {
+              "value": ".",
+              "probability": 3.7953825384811623e-07
+            }
+          ],
+          "margin": 0.9998809665024618
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.998819451827135,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.998819451827135
+            },
+            {
+              "value": "accent",
+              "probability": 0.0009604651890149922
+            },
+            {
+              "value": "staccato",
+              "probability": 0.0001339748792719861
+            }
+          ],
+          "margin": 0.99785898663812
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9997407089706685,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997407089706685
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.00022660477128433072
+            },
+            {
+              "value": "slurStop",
+              "probability": 2.964502346880209e-05
+            }
+          ],
+          "margin": 0.9995141041993841
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 54,
+      "token": {
+        "rhythm": "note_8",
+        "pitch": "C3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        391.6411437988281,
+        200.62841796875
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_8",
+          "probability": 0.9154881012498587,
+          "alternatives": [
+            {
+              "value": "note_8",
+              "probability": 0.9154881012498587
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0007274431203883116
+            },
+            {
+              "value": "note_12",
+              "probability": 0.0006438243374564559
+            }
+          ],
+          "margin": 0.9147606581294704,
+          "unconstrained": {
+            "value": "note_8",
+            "probability": 0.900249534984716,
+            "alternatives": [
+              {
+                "value": "note_8",
+                "probability": 0.900249534984716
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0007153346176354899
+              },
+              {
+                "value": "note_12",
+                "probability": 0.0006331076937163052
+              }
+            ],
+            "margin": 0.8995342003670805
+          }
+        },
+        "pitch": {
+          "value": "C3",
+          "probability": 0.9997825967590208,
+          "alternatives": [
+            {
+              "value": "C3",
+              "probability": 0.9997825967590208
+            },
+            {
+              "value": "C4",
+              "probability": 0.0001632111740674527
+            },
+            {
+              "value": "A2",
+              "probability": 1.8775782833139623e-05
+            }
+          ],
+          "margin": 0.9996193855849533
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999798716138539,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999798716138539
+            },
+            {
+              "value": "b",
+              "probability": 1.3234973046456546e-05
+            },
+            {
+              "value": "#",
+              "probability": 5.963228633675095e-06
+            }
+          ],
+          "margin": 0.9999666366408074
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999939668246284,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999939668246284
+            },
+            {
+              "value": "upper",
+              "probability": 5.550314124424981e-06
+            },
+            {
+              "value": ".",
+              "probability": 4.828612472369427e-07
+            }
+          ],
+          "margin": 0.999988416510504
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.9999848093338419,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999848093338419
+            },
+            {
+              "value": "accent",
+              "probability": 7.0234137018219235e-06
+            },
+            {
+              "value": "staccato",
+              "probability": 4.5365664136428564e-06
+            }
+          ],
+          "margin": 0.9999777859201401
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999968566849972,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999968566849972
+            },
+            {
+              "value": "slurStart",
+              "probability": 1.2575634099797558e-06
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.0107745496765532e-06
+            }
+          ],
+          "margin": 0.9999955991215872
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 55,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "A5",
+        "lift": "b",
+        "position": "upper",
+        "articulation": "accent",
+        "slur": "_"
+      },
+      "attention": [
+        422.72943115234375,
+        46.21293258666992
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9150694300928277,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9150694300928277
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0006769431787616206
+            },
+            {
+              "value": "note_40",
+              "probability": 0.0005998802786315381
+            }
+          ],
+          "margin": 0.914392486914066,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9003701996287361,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9003701996287361
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0006660690926338583
+              },
+              {
+                "value": "note_40",
+                "probability": 0.0005902440934673435
+              }
+            ],
+            "margin": 0.8997041305361022
+          }
+        },
+        "pitch": {
+          "value": "A5",
+          "probability": 0.999249118402143,
+          "alternatives": [
+            {
+              "value": "A5",
+              "probability": 0.999249118402143
+            },
+            {
+              "value": "A4",
+              "probability": 0.0004228924324807599
+            },
+            {
+              "value": "B5",
+              "probability": 9.453966449642048e-05
+            }
+          ],
+          "margin": 0.9988262259696623
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9999648254457353,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9999648254457353
+            },
+            {
+              "value": "_",
+              "probability": 2.4998646487848515e-05
+            },
+            {
+              "value": ".",
+              "probability": 8.39904055988542e-06
+            }
+          ],
+          "margin": 0.9999398267992474
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999269742423301,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999269742423301
+            },
+            {
+              "value": ".",
+              "probability": 6.230887641463643e-05
+            },
+            {
+              "value": "lower",
+              "probability": 1.0716881255297377e-05
+            }
+          ],
+          "margin": 0.9998646653659155
+        },
+        "articulation": {
+          "value": "accent",
+          "probability": 0.9989144750009394,
+          "alternatives": [
+            {
+              "value": "accent",
+              "probability": 0.9989144750009394
+            },
+            {
+              "value": "_",
+              "probability": 0.0008696153233830106
+            },
+            {
+              "value": "accent_arpeggiate",
+              "probability": 6.67588933836866e-05
+            }
+          ],
+          "margin": 0.9980448596775564
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9998960565908499,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998960565908499
+            },
+            {
+              "value": ".",
+              "probability": 6.882551843287284e-05
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.557975734942348e-05
+            }
+          ],
+          "margin": 0.999827231072417
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 57,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "F4",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        423.8677673339844,
+        90.33155059814453
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9162098108176656,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9162098108176656
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0006204756054413061
+            },
+            {
+              "value": "note_2",
+              "probability": 0.000555168919344905
+            }
+          ],
+          "margin": 0.9155893352122243,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9012145574232203,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9012145574232203
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0006103205199807381
+              },
+              {
+                "value": "note_32.",
+                "probability": 0.0005685748662527014
+              }
+            ],
+            "margin": 0.9006042369032395
+          }
+        },
+        "pitch": {
+          "value": "F4",
+          "probability": 0.9994674391913488,
+          "alternatives": [
+            {
+              "value": "F4",
+              "probability": 0.9994674391913488
+            },
+            {
+              "value": "E4",
+              "probability": 0.0003579871844665524
+            },
+            {
+              "value": "D4",
+              "probability": 4.883860887188233e-05
+            }
+          ],
+          "margin": 0.9991094520068823
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9998031985450313,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9998031985450313
+            },
+            {
+              "value": "b",
+              "probability": 0.00014326421837525575
+            },
+            {
+              "value": "#",
+              "probability": 5.21911935997044e-05
+            }
+          ],
+          "margin": 0.999659934326656
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999638502183834,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999638502183834
+            },
+            {
+              "value": "lower",
+              "probability": 3.531026079431549e-05
+            },
+            {
+              "value": ".",
+              "probability": 8.395208223862629e-07
+            }
+          ],
+          "margin": 0.9999285399575891
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.999942312342329,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999942312342329
+            },
+            {
+              "value": "accent",
+              "probability": 3.762132041768177e-05
+            },
+            {
+              "value": "breathMark",
+              "probability": 1.406885698242724e-05
+            }
+          ],
+          "margin": 0.9999046910219113
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999986087881866,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999986087881866
+            },
+            {
+              "value": ".",
+              "probability": 7.10862454573065e-07
+            },
+            {
+              "value": "slurStop",
+              "probability": 3.426337334091953e-07
+            }
+          ],
+          "margin": 0.999997897925732
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 59,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "C4",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "accent",
+        "slur": "_"
+      },
+      "attention": [
+        423.87896728515625,
+        168.03134155273438
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9192697628897376,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9192697628897376
+            },
+            {
+              "value": "note_20",
+              "probability": 0.0005792010716523663
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0005481244012049653
+            }
+          ],
+          "margin": 0.9186905618180853,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9047856109049912,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9047856109049912
+              },
+              {
+                "value": "note_20",
+                "probability": 0.0005700750928698497
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0005394880710937213
+              }
+            ],
+            "margin": 0.9042155358121213
+          }
+        },
+        "pitch": {
+          "value": "C4",
+          "probability": 0.9958286897265283,
+          "alternatives": [
+            {
+              "value": "C4",
+              "probability": 0.9958286897265283
+            },
+            {
+              "value": "D4",
+              "probability": 0.0027982597951781924
+            },
+            {
+              "value": "F4",
+              "probability": 0.00033007753405994787
+            }
+          ],
+          "margin": 0.99303042993135
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9977525305770392,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9977525305770392
+            },
+            {
+              "value": "b",
+              "probability": 0.0022407659528300788
+            },
+            {
+              "value": "#",
+              "probability": 3.3128891623199006e-06
+            }
+          ],
+          "margin": 0.9955117646242091
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999560082077718,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999560082077718
+            },
+            {
+              "value": "upper",
+              "probability": 4.223584411494184e-05
+            },
+            {
+              "value": ".",
+              "probability": 1.7559481132108974e-06
+            }
+          ],
+          "margin": 0.9999137723636569
+        },
+        "articulation": {
+          "value": "accent",
+          "probability": 0.9970252585877563,
+          "alternatives": [
+            {
+              "value": "accent",
+              "probability": 0.9970252585877563
+            },
+            {
+              "value": "_",
+              "probability": 0.0026155569277732803
+            },
+            {
+              "value": "fermata",
+              "probability": 8.580534956917995e-05
+            }
+          ],
+          "margin": 0.994409701659983
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9976980414587524,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9976980414587524
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.002254818512667746
+            },
+            {
+              "value": "slurStart_slurStop",
+              "probability": 2.88812141580997e-05
+            }
+          ],
+          "margin": 0.9954432229460847
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 61,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "F3",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        423.916748046875,
+        198.54409790039062
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9211155755270575,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9211155755270575
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0007557491242432715
+            },
+            {
+              "value": "note_6",
+              "probability": 0.0005686908338960235
+            }
+          ],
+          "margin": 0.9203598264028142,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9068905531523695,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9068905531523695
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0007440778980826889
+              },
+              {
+                "value": "note_6",
+                "probability": 0.0005599083965435533
+              }
+            ],
+            "margin": 0.9061464752542868
+          }
+        },
+        "pitch": {
+          "value": "F3",
+          "probability": 0.9983615570765445,
+          "alternatives": [
+            {
+              "value": "F3",
+              "probability": 0.9983615570765445
+            },
+            {
+              "value": "C4",
+              "probability": 0.0009321224564320032
+            },
+            {
+              "value": "A3",
+              "probability": 0.0004265488381414975
+            }
+          ],
+          "margin": 0.9974294346201125
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9997999307554195,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9997999307554195
+            },
+            {
+              "value": "b",
+              "probability": 0.00018043473165566426
+            },
+            {
+              "value": "#",
+              "probability": 1.4986456204183915e-05
+            }
+          ],
+          "margin": 0.9996194960237639
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.999955991123924,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.999955991123924
+            },
+            {
+              "value": "upper",
+              "probability": 4.165271555378783e-05
+            },
+            {
+              "value": ".",
+              "probability": 2.3561605223052352e-06
+            }
+          ],
+          "margin": 0.9999143384083702
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.998921198034642,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.998921198034642
+            },
+            {
+              "value": "accent",
+              "probability": 0.0009459541058728348
+            },
+            {
+              "value": "breathMark",
+              "probability": 5.188487298599953e-05
+            }
+          ],
+          "margin": 0.9979752439287691
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999961255384728,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999961255384728
+            },
+            {
+              "value": ".",
+              "probability": 2.892690915733676e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 6.253936705656858e-07
+            }
+          ],
+          "margin": 0.9999932328475571
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 62,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "G5",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "accent",
+        "slur": "_"
+      },
+      "attention": [
+        455.9594421386719,
+        53.38801574707031
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9229269601697767,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9229269601697767
+            },
+            {
+              "value": "keySignature_-1",
+              "probability": 0.00048330980777516096
+            },
+            {
+              "value": "rest_6m",
+              "probability": 0.00047880401523884485
+            }
+          ],
+          "margin": 0.9224436503620016,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.9094928823754475,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.9094928823754475
+              },
+              {
+                "value": "keySignature_-1",
+                "probability": 0.0004762747748455568
+              },
+              {
+                "value": "rest_6m",
+                "probability": 0.0004718345683957571
+              }
+            ],
+            "margin": 0.9090166076006019
+          }
+        },
+        "pitch": {
+          "value": "G5",
+          "probability": 0.9995529437183582,
+          "alternatives": [
+            {
+              "value": "G5",
+              "probability": 0.9995529437183582
+            },
+            {
+              "value": "B5",
+              "probability": 0.0001145312818468229
+            },
+            {
+              "value": "A5",
+              "probability": 0.00010455816110073767
+            }
+          ],
+          "margin": 0.9994384124365114
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9995553067271833,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9995553067271833
+            },
+            {
+              "value": "b",
+              "probability": 0.0003476932994662568
+            },
+            {
+              "value": ".",
+              "probability": 5.4991713109921905e-05
+            }
+          ],
+          "margin": 0.999207613427717
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.9999462519435895,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.9999462519435895
+            },
+            {
+              "value": ".",
+              "probability": 4.179519377508973e-05
+            },
+            {
+              "value": "lower",
+              "probability": 1.1952862635444422e-05
+            }
+          ],
+          "margin": 0.9999044567498144
+        },
+        "articulation": {
+          "value": "accent",
+          "probability": 0.9993551146269921,
+          "alternatives": [
+            {
+              "value": "accent",
+              "probability": 0.9993551146269921
+            },
+            {
+              "value": "_",
+              "probability": 0.00020530046675901266
+            },
+            {
+              "value": "accent_fermata",
+              "probability": 0.00019309840318911128
+            }
+          ],
+          "margin": 0.9991498141602331
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9978442229425023,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9978442229425023
+            },
+            {
+              "value": "slurStart",
+              "probability": 0.001845873293552378
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.00025436738117684
+            }
+          ],
+          "margin": 0.99599834964895
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 64,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "G4",
+        "lift": "_",
+        "position": "upper",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        455.94561767578125,
+        88.31301879882812
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9149053290720758,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9149053290720758
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0004999212966522774
+            },
+            {
+              "value": "note_8G",
+              "probability": 0.0004898316877494009
+            }
+          ],
+          "margin": 0.9144054077754235,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.8999581801995751,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.8999581801995751
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0004917538963670763
+              },
+              {
+                "value": "note_8G",
+                "probability": 0.0004818291251600187
+              }
+            ],
+            "margin": 0.8994664263032079
+          }
+        },
+        "pitch": {
+          "value": "G4",
+          "probability": 0.9996733125349121,
+          "alternatives": [
+            {
+              "value": "G4",
+              "probability": 0.9996733125349121
+            },
+            {
+              "value": "F4",
+              "probability": 0.00012385869100610725
+            },
+            {
+              "value": "A4",
+              "probability": 6.563624018245955e-05
+            }
+          ],
+          "margin": 0.999549453843906
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9999072035707921,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999072035707921
+            },
+            {
+              "value": "b",
+              "probability": 8.095596718724986e-05
+            },
+            {
+              "value": "#",
+              "probability": 1.0012914155621303e-05
+            }
+          ],
+          "margin": 0.9998262476036048
+        },
+        "position": {
+          "value": "upper",
+          "probability": 0.999966298353205,
+          "alternatives": [
+            {
+              "value": "upper",
+              "probability": 0.999966298353205
+            },
+            {
+              "value": "lower",
+              "probability": 3.1560095735264506e-05
+            },
+            {
+              "value": ".",
+              "probability": 2.1415510595796924e-06
+            }
+          ],
+          "margin": 0.9999347382574698
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.999728253253428,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.999728253253428
+            },
+            {
+              "value": "accent",
+              "probability": 0.00022472174123703228
+            },
+            {
+              "value": "breathMark",
+              "probability": 2.782401293877192e-05
+            }
+          ],
+          "margin": 0.999503531512191
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999937059955111,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999937059955111
+            },
+            {
+              "value": "slurStop",
+              "probability": 2.260853067779385e-06
+            },
+            {
+              "value": "slurStart",
+              "probability": 2.084527233148894e-06
+            }
+          ],
+          "margin": 0.9999914451424433
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 66,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "C4",
+        "lift": "_",
+        "position": "lower",
+        "articulation": "accent",
+        "slur": "_"
+      },
+      "attention": [
+        455.93218994140625,
+        169.59298706054688
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9256084573441044,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9256084573441044
+            },
+            {
+              "value": "note_20",
+              "probability": 0.0004977818832570148
+            },
+            {
+              "value": "note_16",
+              "probability": 0.0004801888487218722
+            }
+          ],
+          "margin": 0.9251106754608474,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.912305786815143,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.912305786815143
+              },
+              {
+                "value": "note_20",
+                "probability": 0.0004906278557244074
+              },
+              {
+                "value": "note_16",
+                "probability": 0.0004732876649702056
+              }
+            ],
+            "margin": 0.9118151589594186
+          }
+        },
+        "pitch": {
+          "value": "C4",
+          "probability": 0.999367007469616,
+          "alternatives": [
+            {
+              "value": "C4",
+              "probability": 0.999367007469616
+            },
+            {
+              "value": "D4",
+              "probability": 0.00016640614796055095
+            },
+            {
+              "value": "E4",
+              "probability": 0.00011129910745612297
+            }
+          ],
+          "margin": 0.9992006013216554
+        },
+        "lift": {
+          "value": "_",
+          "probability": 0.9992920561918255,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9992920561918255
+            },
+            {
+              "value": "b",
+              "probability": 0.0006702734713869568
+            },
+            {
+              "value": "#",
+              "probability": 2.9192353426993053e-05
+            }
+          ],
+          "margin": 0.9986217827204386
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999050294536583,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999050294536583
+            },
+            {
+              "value": "upper",
+              "probability": 8.908528092808812e-05
+            },
+            {
+              "value": ".",
+              "probability": 5.885265413516715e-06
+            }
+          ],
+          "margin": 0.9998159441727302
+        },
+        "articulation": {
+          "value": "accent",
+          "probability": 0.9988971374548444,
+          "alternatives": [
+            {
+              "value": "accent",
+              "probability": 0.9988971374548444
+            },
+            {
+              "value": "_",
+              "probability": 0.0009012230241580374
+            },
+            {
+              "value": "accent_fermata",
+              "probability": 9.086831505803985e-05
+            }
+          ],
+          "margin": 0.9979959144306864
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9987596494170663,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9987596494170663
+            },
+            {
+              "value": "slurStop",
+              "probability": 0.0012070655022500439
+            },
+            {
+              "value": "slurStart",
+              "probability": 1.753785447833171e-05
+            }
+          ],
+          "margin": 0.9975525839148163
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 68,
+      "token": {
+        "rhythm": "note_4",
+        "pitch": "E3",
+        "lift": "b",
+        "position": "lower",
+        "articulation": "_",
+        "slur": "_"
+      },
+      "attention": [
+        455.9786071777344,
+        200.00994873046875
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "note_4",
+          "probability": 0.9207807545349462,
+          "alternatives": [
+            {
+              "value": "note_4",
+              "probability": 0.9207807545349462
+            },
+            {
+              "value": "note_2",
+              "probability": 0.0006207423279712066
+            },
+            {
+              "value": "note_8..",
+              "probability": 0.000471363294359743
+            }
+          ],
+          "margin": 0.9201600122069751,
+          "unconstrained": {
+            "value": "note_4",
+            "probability": 0.906533654195378,
+            "alternatives": [
+              {
+                "value": "note_4",
+                "probability": 0.906533654195378
+              },
+              {
+                "value": "note_2",
+                "probability": 0.0006111376764968286
+              },
+              {
+                "value": "note_8..",
+                "probability": 0.00046406996191544737
+              }
+            ],
+            "margin": 0.9059225165188812
+          }
+        },
+        "pitch": {
+          "value": "E3",
+          "probability": 0.9997796774755701,
+          "alternatives": [
+            {
+              "value": "E3",
+              "probability": 0.9997796774755701
+            },
+            {
+              "value": "E4",
+              "probability": 6.266516423093545e-05
+            },
+            {
+              "value": "B3",
+              "probability": 3.285141623973899e-05
+            }
+          ],
+          "margin": 0.9997170123113391
+        },
+        "lift": {
+          "value": "b",
+          "probability": 0.9995830492824932,
+          "alternatives": [
+            {
+              "value": "b",
+              "probability": 0.9995830492824932
+            },
+            {
+              "value": "_",
+              "probability": 0.00041575070137100397
+            },
+            {
+              "value": "#",
+              "probability": 8.076069494616652e-07
+            }
+          ],
+          "margin": 0.9991672985811222
+        },
+        "position": {
+          "value": "lower",
+          "probability": 0.9999925949076981,
+          "alternatives": [
+            {
+              "value": "lower",
+              "probability": 0.9999925949076981
+            },
+            {
+              "value": "upper",
+              "probability": 7.1399917868529265e-06
+            },
+            {
+              "value": ".",
+              "probability": 2.6510051498805067e-07
+            }
+          ],
+          "margin": 0.9999854549159113
+        },
+        "articulation": {
+          "value": "_",
+          "probability": 0.996414401535371,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.996414401535371
+            },
+            {
+              "value": "accent",
+              "probability": 0.0034472739245926757
+            },
+            {
+              "value": "fermata",
+              "probability": 7.390945244998095e-05
+            }
+          ],
+          "margin": 0.9929671276107783
+        },
+        "slur": {
+          "value": "_",
+          "probability": 0.9999972857193519,
+          "alternatives": [
+            {
+              "value": "_",
+              "probability": 0.9999972857193519
+            },
+            {
+              "value": "slurStop",
+              "probability": 1.5399324778648793e-06
+            },
+            {
+              "value": ".",
+              "probability": 6.945477470878371e-07
+            }
+          ],
+          "margin": 0.999995745786874
+        }
+      }
+    },
+    {
+      "staff": 0,
+      "symbol": 69,
+      "token": {
+        "rhythm": "barline",
+        "pitch": ".",
+        "lift": ".",
+        "position": ".",
+        "articulation": ".",
+        "slur": "."
+      },
+      "attention": [
+        471.97369384765625,
+        198.69277954101562
+      ],
+      "confidence": {
+        "rhythm": {
+          "value": "barline",
+          "probability": 0.9100046093029235,
+          "alternatives": [
+            {
+              "value": "barline",
+              "probability": 0.9100046093029235
+            },
+            {
+              "value": "bolddoublebarline",
+              "probability": 0.004342000278223092
+            },
+            {
+              "value": "doublebarline",
+              "probability": 0.003440674235865694
+            }
+          ],
+          "margin": 0.9056626090247004,
+          "unconstrained": {
+            "value": "barline",
+            "probability": 0.8955446559157657,
+            "alternatives": [
+              {
+                "value": "barline",
+                "probability": 0.8955446559157657
+              },
+              {
+                "value": "bolddoublebarline",
+                "probability": 0.004273005988536772
+              },
+              {
+                "value": "doublebarline",
+                "probability": 0.003386001997327119
+              }
+            ],
+            "margin": 0.891271649927229
+          }
+        },
+        "pitch": {
+          "value": ".",
+          "probability": 0.9999328995351303,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999328995351303
+            },
+            {
+              "value": "_",
+              "probability": 2.4526178678384722e-05
+            },
+            {
+              "value": "A4",
+              "probability": 4.5077362639663324e-06
+            }
+          ],
+          "margin": 0.9999083733564519
+        },
+        "lift": {
+          "value": ".",
+          "probability": 0.999930718000086,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.999930718000086
+            },
+            {
+              "value": "_",
+              "probability": 5.367734665527103e-05
+            },
+            {
+              "value": "b",
+              "probability": 1.1962051995922535e-05
+            }
+          ],
+          "margin": 0.9998770406534307
+        },
+        "position": {
+          "value": ".",
+          "probability": 0.9999292790852875,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999292790852875
+            },
+            {
+              "value": "upper",
+              "probability": 5.067925923575357e-05
+            },
+            {
+              "value": "lower",
+              "probability": 2.0041655476723955e-05
+            }
+          ],
+          "margin": 0.9998785998260518
+        },
+        "articulation": {
+          "value": ".",
+          "probability": 0.999928816877245,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.999928816877245
+            },
+            {
+              "value": "_",
+              "probability": 5.89274044190126e-05
+            },
+            {
+              "value": "accent",
+              "probability": 4.316095749037435e-06
+            }
+          ],
+          "margin": 0.999869889472826
+        },
+        "slur": {
+          "value": ".",
+          "probability": 0.9999280553086194,
+          "alternatives": [
+            {
+              "value": ".",
+              "probability": 0.9999280553086194
+            },
+            {
+              "value": "_",
+              "probability": 6.293613380198426e-05
+            },
+            {
+              "value": "slurStop",
+              "probability": 4.740626847003228e-06
+            }
+          ],
+          "margin": 0.9998651191748174
+        }
+      }
+    }
+  ]
+}

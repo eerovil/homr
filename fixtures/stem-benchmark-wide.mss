@@ -1,0 +1,10 @@
+<Style>
+  <pageWidth>1000</pageWidth>
+  <pageHeight>100</pageHeight>
+  <pageEvenLeftMargin>5</pageEvenLeftMargin>
+  <pageOddLeftMargin>5</pageOddLeftMargin>
+  <pageEvenTopMargin>5</pageEvenTopMargin>
+  <pageOddTopMargin>5</pageOddTopMargin>
+  <pageEvenBottomMargin>5</pageEvenBottomMargin>
+  <pageOddBottomMargin>5</pageOddBottomMargin>
+</Style>

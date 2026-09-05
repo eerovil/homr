@@ -99,7 +99,7 @@ def main() -> None:
         if parsed is None:
             print(f"  {case.name}: homr could not read it")
             continue
-        result = compare_output(case.reference, parsed)
+        result = compare_output(case.reference, parsed, case.name)
         before = previous.get(case.name)
         page = report.case_page(case, parsed, result, before)
         entries.append({"name": case.name, "page": page, "score": result.score,
@@ -108,12 +108,15 @@ def main() -> None:
                         "timing": result.timing, "structure": result.structure,
                         "staves_page": result.staves_page,
                         "staves_homr": result.staves_homr,
+                        "staves_printed": result.staves_printed,
+                        "at_fault": result.at_fault,
                         "unison": result.unison, "before": before})
         moved = ""
         if before:
             change = (result.voice + result.pitch) - (before["voice"] + before["pitch"])
             moved = "  (no change)" if change == 0 else f"  ({change:+d} faults)"
         staves = (f", staves {result.staves_page} vs {result.staves_homr}"
+                  + (f" ({result.at_fault} is wrong)" if result.at_fault else "")
                   if result.structure else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
