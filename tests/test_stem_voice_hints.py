@@ -7,7 +7,12 @@ from homr.music_xml_generator import (
     generate_xml,
     rebalance_measure_voices,
 )
-from homr.stem_voice_hints import SHARED, add_stem_voice_hints, pair_unison_stems
+from homr.stem_voice_hints import (
+    SHARED,
+    add_stem_voice_hints,
+    pair_unison_by_attention,
+    pair_unison_stems,
+)
 from homr.transformer.vocabulary import EncodedSymbol, _remove_duplicated_piches
 
 
@@ -389,3 +394,120 @@ def test_the_two_notes_of_the_unison_reach_the_file_as_two_voices() -> None:
     assert [note.findtext("stem") for note in notes] == ["up", "down"]
     assert [note.findtext("type") for note in notes] == ["eighth", "half"]
     assert len({note.findtext("voice") for note in notes}) == 2
+
+
+def _straddled(
+    rhythms: tuple[str, str] = ("note_1", "note_1"),
+    ys: tuple[float, float] = (50.0, 74.0),
+    stems: tuple[str | None, str | None] = (None, None),
+) -> list[EncodedSymbol]:
+    """One moment of a treble staff holding a pitch the decoder emitted twice.
+
+    The two attention points sit either side of where the head is drawn, which
+    is what an up stem and a down stem look like to the decoder.
+    """
+    return [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        EncodedSymbol(
+            rhythms[0], pitch="B4", position="upper",
+            coordinates=(166.0, ys[0]), stem_direction=stems[0],
+        ),
+        EncodedSymbol(
+            rhythms[1], pitch="B4", position="upper",
+            coordinates=(170.0, ys[1]), stem_direction=stems[1],
+        ),
+    ]
+
+
+def test_a_stemless_unison_is_read_off_the_attention() -> None:
+    """`sammon-ryosto`'s bar 2: two breve heads side by side, no stem on either.
+
+    `_pair` wants one stem each and there are none to have, so until this the
+    pair was read as one note written twice and the lower part lost its note.
+    """
+    heads = [
+        _head(164.0, 62.0, 5, []),
+        _head(172.0, 62.0, 5, []),
+    ]
+    symbols = _straddled()
+
+    assert pair_unison_by_attention(symbols, heads) == 1
+    assert [symbol.stem_direction for symbol in symbols[1:]] == ["up", "down"]
+
+
+def test_a_shared_head_missing_one_of_its_stems_is_still_a_unison() -> None:
+    """`system4`'s last sixteenth: one head, and only the up stem hung on it.
+
+    The bar's previous note is the same printed shape and the segmentation gives
+    it both stems, so it is written into both voices; this one is not.
+    """
+    heads = [_head(168.0, 62.0, 5, [StemDirection.UP])]
+    symbols = _straddled(rhythms=("note_16", "note_16"))
+
+    assert pair_unison_by_attention(symbols, heads) == 1
+    assert [symbol.stem_direction for symbol in symbols[1:]] == ["up", "down"]
+
+
+def test_a_lone_stemless_head_is_the_decoder_repeating_itself() -> None:
+    """`kolme-kakea`'s first bar, and the reason the shapes are named separately.
+
+    A whole note has no stems for the segmentation to have missed, so one
+    stemless head cannot be a head drawn with two of them -- and there is no
+    second head to say the unison was printed as a pair.
+    """
+    heads = [_head(168.0, 62.0, 5, [])]
+    symbols = _straddled()
+
+    assert pair_unison_by_attention(symbols, heads) == 0
+    assert [symbol.stem_direction for symbol in symbols[1:]] == [None, None]
+
+
+def test_two_attention_points_on_one_side_are_not_two_stems() -> None:
+    """A head read twice is read twice from the same place; a pair straddles it."""
+    heads = [
+        _head(164.0, 62.0, 5, []),
+        _head(172.0, 62.0, 5, []),
+    ]
+
+    assert pair_unison_by_attention(_straddled(ys=(48.0, 52.0)), heads) == 0
+    assert pair_unison_by_attention(_straddled(ys=(72.0, 76.0)), heads) == 0
+
+
+def test_the_two_notes_of_a_unison_agree_on_their_duration() -> None:
+    """One head serves both parts, so the engraver drew one duration for both."""
+    heads = [
+        _head(164.0, 62.0, 5, []),
+        _head(172.0, 62.0, 5, []),
+    ]
+
+    assert pair_unison_by_attention(_straddled(rhythms=("note_1", "note_2")), heads) == 0
+
+
+def test_a_head_carrying_both_stems_is_left_to_the_shared_mark() -> None:
+    heads = [_head(168.0, 62.0, 5, [StemDirection.UP, StemDirection.DOWN])]
+
+    assert pair_unison_by_attention(_straddled(), heads) == 0
+
+
+def test_a_pair_already_told_apart_by_its_stems_is_left_alone() -> None:
+    """`pair_unison_stems` ran first and read the picture; this adds nothing."""
+    heads = [
+        _head(164.0, 62.0, 5, [StemDirection.DOWN]),
+        _head(172.0, 62.0, 5, [StemDirection.UP]),
+    ]
+    symbols = _straddled(stems=("down", "up"))
+
+    assert pair_unison_by_attention(symbols, heads) == 0
+    assert [symbol.stem_direction for symbol in symbols[1:]] == ["down", "up"]
+
+
+def test_the_attention_read_pair_survives_the_duplicate_remover() -> None:
+    """Which is the whole point: opposite stems are what keeps both notes."""
+    heads = [
+        _head(164.0, 62.0, 5, []),
+        _head(172.0, 62.0, 5, []),
+    ]
+    symbols = _straddled()
+    pair_unison_by_attention(symbols, heads)
+
+    assert len(_remove_duplicated_piches(symbols[1:])) == 2
