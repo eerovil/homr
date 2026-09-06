@@ -75,35 +75,42 @@ def bars_in(path: Path) -> list[str]:
     return seen
 
 
-def one_bar(source: Path, bar: str, into: Path) -> Path | None:
-    """A score holding only one bar, so MuseScore can draw just that bar.
+def some_bars(source: Path, bars: list[str], into: Path) -> Path | None:
+    """A score holding only these bars, so MuseScore can draw just them.
 
-    The kept bar carries the attributes of the first one — divisions, key, time
-    and clef — because a bar in the middle of a system declares none of them and
-    would otherwise be engraved in whatever MuseScore assumes. The point is to
-    look at the same music both sides wrote, so it has to be spelled the same.
+    The first kept bar carries the attributes of the score's own first one —
+    divisions, key, time and clef — because a bar in the middle of a system
+    declares none of them and would otherwise be engraved in whatever MuseScore
+    assumes. The point is to look at the same music both sides wrote, so it has
+    to be spelled the same.
     """
     tree = ET.parse(source)
     root = tree.getroot()
+    wanted = list(bars)
     kept_any = False
     for part in root.findall("part"):
         measures = part.findall("measure")
         first = measures[0] if measures else None
         opening = first.find("attributes") if first is not None else None
-        keep = [m for m in measures if m.get("number") == bar]
+        keep = [m for m in measures if m.get("number") in wanted]
         for measure in measures:
             if measure not in keep:
                 part.remove(measure)
-        for measure in keep:
+        for index, measure in enumerate(keep):
             kept_any = True
-            measure.set("number", bar)
-            if measure.find("attributes") is None and opening is not None:
+            if index == 0 and measure.find("attributes") is None \
+                    and opening is not None:
                 measure.insert(0, copy.deepcopy(opening))
     if not kept_any:
         return None
     into.parent.mkdir(parents=True, exist_ok=True)
     tree.write(into, encoding="utf-8", xml_declaration=True)
     return into
+
+
+def one_bar(source: Path, bar: str, into: Path) -> Path | None:
+    """One bar of a score, on its own."""
+    return some_bars(source, [bar], into)
 
 
 # --- where the bar is on the printed page --------------------------------
@@ -311,6 +318,37 @@ def bar_box(geo: dict, staff: int, index: int, expected_bars: int) -> dict | Non
     pad = 0.35 * (row["bottom"] - row["top"])
     l, t, r, b = _widen(left - 0.004, row["top"] - pad, right + 0.004,
                         row["bottom"] + pad)
+    return {"left": l, "right": r, "top": t, "bottom": b}
+
+
+def span_box(geo: dict, first: int, last: int, expected_bars: int) -> dict | None:
+    """The box around a run of bars, across **every** staff of the system.
+
+    What a pin is cut with, and it takes the whole system where `bar_box` takes
+    one staff: a fault detail is about the staff the fault is on and has the
+    tables above it to say which, while a pin is a case in its own right and
+    will be compared against a reference holding all of the system's staves. Cut
+    to one staff it would fail on the staves before a note was looked at.
+
+    It refuses on the same terms as `bar_box`: the detected lines have to imply
+    exactly as many bars as the reference says the system holds, or the
+    numbering is a guess and the crop would be confident music of the wrong
+    bars.
+    """
+    staves = geo.get("staves", [])
+    if not staves or not (1 <= first <= last <= expected_bars):
+        return None
+    lines = boundaries_for(geo, expected_bars)
+    if lines is None:
+        return None
+    top = min(row["top"] for row in staves)
+    bottom = max(row["bottom"] for row in staves)
+    # The lyrics of the lowest staff sit under it, and a singer reads them as
+    # part of the bar. A staff's own height is the only measure of "under it"
+    # this has, so the padding is taken from the tallest one.
+    pad = 0.35 * max(row["bottom"] - row["top"] for row in staves)
+    l, t, r, b = _widen(lines[first - 1] - 0.004, top - pad,
+                        lines[last] + 0.004, bottom + pad)
     return {"left": l, "right": r, "top": t, "bottom": b}
 
 

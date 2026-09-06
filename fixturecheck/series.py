@@ -256,8 +256,15 @@ def outcomes(cases: list[CaseRecord]) -> dict:
     return tally
 
 
-def append(record: dict, path: Path = SERIES) -> dict:
-    """Add one run. Nothing above it is rewritten, ever."""
+def append(record: dict, path: Path | None = None) -> dict:
+    """Add one run. Nothing above it is rewritten, ever.
+
+    `SERIES` is read at call time for the reason `runs` gives below, and this is
+    the half of that lesson that had not been applied. Bound as a default, a
+    test that pointed the module at another file still *wrote* to the host's
+    real series — which is worse than reading it, because it commits.
+    """
+    path = path or SERIES
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as writing:
         writing.write(json.dumps(record, sort_keys=True) + "\n")
@@ -287,7 +294,7 @@ def runs(path: Path | None = None) -> list[dict]:
     return found
 
 
-def latest(harness: str, path: Path = SERIES) -> dict | None:
+def latest(harness: str, path: Path | None = None) -> dict | None:
     """The last run of one harness, which is what "how good is it now" means."""
     for run in reversed(runs(path)):
         if run.get("harness") == harness:
@@ -295,7 +302,7 @@ def latest(harness: str, path: Path = SERIES) -> dict | None:
     return None
 
 
-def previous_cases(harness: str, path: Path = SERIES) -> dict:
+def previous_cases(harness: str, path: Path | None = None) -> dict:
     """Each case as it last stood, taken across runs rather than from one.
 
     What moved since the last run of *the same case* is the question, and a run
@@ -313,8 +320,9 @@ def previous_cases(harness: str, path: Path = SERIES) -> dict:
     return standing
 
 
-def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | None:
-    """The gate over **all** the committed fixtures, not over one run's worth.
+def published_gate(runs_of: list[dict], under: tuple | None = None,
+                   memory: dict | None = None) -> dict | None:
+    """The gate over **all** the committed cases, not over one run's worth.
 
     Reading it off the newest run that judged anything was still wrong, and the
     hole is bigger than the zero-fixture one it replaced: `fixturecheck one
@@ -331,7 +339,15 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
     looked" and "we looked and it was fine" are not the same claim.
 
     The roster comes out of the runs themselves (`committed`), so the summary
-    does not need the fixtures on disk and an old series stays readable.
+    does not need the fixtures on disk and an old series stays readable. It is
+    the committed set — the pins and the five — because that is the tier a clone
+    can reproduce; the corpus is judged by the same rule inside each run, where
+    the host that owns the songs is the one doing the judging.
+
+    **What "standing" means is now the memory, not a flag.** A case stands where
+    its own latest reading under this identity is not below what it was accepted
+    at. `perfect` was the old answer and it is gone: #152 measured it flipping on
+    two pixels of reframing, and #147 reserved the word for the operator.
 
     **And it is a claim about one homr.** Only results measured under the
     identity being reported count — `(homr, references)`, the newest run's
@@ -342,6 +358,8 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
     `unevaluated` and holds the gate open, exactly like one nobody has ever
     judged, because "it passed on the old homr" is not a claim about this one.
     """
+    from fixturecheck import references
+
     roster: list[str] = []
     for run in runs_of:
         if run.get("committed"):
@@ -350,24 +368,51 @@ def published_gate(runs_of: list[dict], under: tuple | None = None) -> dict | No
         return None
     if under is None:
         under = current_identity(runs_of)
+    if memory is None:
+        memory = references.accepted()
 
-    latest: dict[str, tuple[bool, str]] = {}
+    latest: dict[str, tuple[dict | None, str]] = {}
     for run in runs_of:
         if identity(run) != under:
             continue
         for name in roster:
             case = run.get("cases", {}).get(name)
-            if case and case.get("outcome", READ) == READ and "perfect" in case:
-                latest[name] = (bool(case["perfect"]), run.get("at", ""))
+            if not case:
+                continue
+            if case.get("outcome", READ) != READ:
+                # Read and got nothing is a measurement, and the worst one:
+                # `None` here, which the memory below turns into a failure for
+                # any case that has ever stood higher.
+                latest[name] = (None, run.get("at", ""))
+            else:
+                latest[name] = (references.marks(case), run.get("at", ""))
 
-    failing = sorted(n for n in roster if n in latest and not latest[n][0])
+    below: dict[str, list[str]] = {}
+    for name in roster:
+        reading = latest.get(name, (None, ""))[0] if name in latest else None
+        was = memory.get(name)
+        if name not in latest or was is None:
+            continue
+        if reading is None:
+            below[name] = ["homr could not read it at all"]
+            continue
+        said = references.worse(reading, was)
+        if said:
+            below[name] = said
+
+    # A case nobody has accepted a reading for is not a pass and not a failure:
+    # there is no claim about it either way, and it holds the gate open exactly
+    # like one never judged under this homr.
+    unremembered = sorted(n for n in roster if n not in memory)
     unevaluated = sorted(n for n in roster if n not in latest)
     return {
-        "fixtures": len(roster),
-        "perfect": sum(1 for n in roster if latest.get(n, (False,))[0]),
-        "failing": failing,
+        "cases": len(roster),
+        "standing": len(roster) - len(below) - len(unevaluated) - len(unremembered),
+        "below": {n: below[n] for n in sorted(below)},
+        "failing": sorted(below),
         "unevaluated": unevaluated,
-        "passed": not failing and not unevaluated,
+        "unremembered": unremembered,
+        "passed": not below and not unevaluated and not unremembered,
         "as_of": max((when for _, when in latest.values()), default=""),
         "homr": under[0],
         "references": under[1],
@@ -529,7 +574,7 @@ def standing(harness: str, path: Path | None = None,
     return held
 
 
-def last_rows(name: str, harness: str = "fixturecheck", path: Path = SERIES) -> tuple:
+def last_rows(name: str, harness: str = "fixturecheck", path: Path | None = None) -> tuple:
     """The last recorded note-by-note table for a case, and the run it came from.
 
     Follows a `rows_same_as` back to the run that actually holds the table, so a
@@ -556,7 +601,7 @@ def last_rows(name: str, harness: str = "fixturecheck", path: Path = SERIES) -> 
 def record_run(harness: str, tier: str, cases: list[CaseRecord],
                references: str, gate: dict | None = None,
                extra: dict | None = None, homr: str | None = None,
-               path: Path = SERIES) -> dict:
+               path: Path | None = None) -> dict:
     """Write one run of one harness into the series.
 
     `homr` is the revision that actually read the music, and a caller that can

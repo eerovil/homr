@@ -238,7 +238,6 @@ def record_benchmark(pages: dict, tree: Optional[str], in_pod: bool) -> None:
                 "judged": len(checks),
                 "staves_page": system["expected_staves"],
                 "staves_homr": system["staves"],
-                "perfect": all(checks),
             }))
 
     where = "pod" if in_pod else (os.path.basename(tree) if tree else "installed")

@@ -6,8 +6,10 @@ every printed system of every song on this host are the same object, so anything
 that can judge a fixture can judge the whole repertoire.
 
     python -m fixturecheck one laulun-aika-s2     ~20s, or 2s cached
-    python -m fixturecheck ten                    ~90s
-    python -m fixturecheck all                    ~35 min
+    python -m fixturecheck pins                   tier 1 — the pinned failures
+    python -m fixturecheck fixtures               tier 2 — the five
+    python -m fixturecheck corpus                 tier 3 — everything, ~35 min
+    python -m fixturecheck ten                    the written-down sample, ~90s
 
 **Every run writes `check-report/index.html`.** There is no mode that reports
 only numbers: a count can say a system agrees on staves, bars and noteheads and
@@ -56,10 +58,11 @@ A **missing** signature is the same error as a wrong one — whether homr wrote
 7/4 or wrote nothing and carried 7/4 forward, the bar is in the wrong meter and
 the singer meets the same problem.
 
-It is counted like `structure` rather than like a note: its own count, its own
-rows, and it stops a fixture being `perfect`, so it **fails the gate**. It stays
-out of the note percentage, which counts note events and has meant that since it
-was defined.
+It is counted like `structure` rather than like a note: its own count and its
+own rows. It stays out of the note percentage, which counts note events and has
+meant that since it was defined — so it is **remembered beside the score** and
+may not rise (see The gate), which is how it fails a run despite not being in
+the percentage.
 
 ## When the two disagree about the staves
 
@@ -327,51 +330,146 @@ exactly like a case nobody ran.
 
 ## The gate
 
-**The five committed fixtures are expected to be perfect**, and a run in which
-any of them is below 100% exits non-zero.
+**This pull request proposes rebuilding it** (#182, on the design #155 settled
+with the operator). What follows describes the gate as this change makes it, not
+as the fork's `main` has it today.
 
-**The published gate speaks for all five, whatever a run touched — and for one
-homr.** It is built from each fixture's *own latest standing result* **under the
-identity being reported**, `(homr, references)`, so a run can only ever move the
-fixtures it actually ran, and only for the engine that ran them.
+**The rule is one sentence: nothing gets worse, per case.** Each case remembers
+the notes-right score it was last accepted at; a run exits non-zero if any case
+reads below its own memory, and a case that improves has its memory raised there
+and then. **Not a total** — a win on one page must not pay for a loss on
+another, which is why the memory is per case rather than one figure for the run.
+
+**Three tiers, one rule.** Nothing in the judging knows which tier a case
+belongs to, which is the property that makes the third tier worth having:
+
+1. **The pinned failures.** When an error is chased, the bars it was found on are
+   cut out and committed as a case of their own, so the fix is proven against the
+   thing that was wrong and cannot come back unnoticed. `python -m fixturecheck
+   pin <name> <case> 3-5 <why>` does the cutting — both sides the same way, the
+   reference trimmed to those bars and the picture cut at the barlines homr's own
+   detection found. It **refuses rather than guesses**: if those barlines do not
+   imply the bars the reference says the system holds, which bars a crop held
+   would be a guess, and a confident picture of the wrong music is the mistake
+   this harness exists to catch one level up.
+2. **The five committed fixtures**, runnable on any clone.
+3. **The corpus** — every printed system of every song on the host that owns the
+   songs, so a change that helps the fixtures while hurting real music trips the
+   alarm rather than reading as a win.
+
+        python -m fixturecheck pins
+        python -m fixturecheck fixtures
+        python -m fixturecheck corpus
+
+**The `perfect` flag is gone, and no machine here declares a parse right.** The
+old gate asked whether each of the five was perfect — every note right, no
+argument about the staves or the meter. Two findings killed it. #152 shaved
+**two pixels** off the top of a band and watched that verdict go from **7/10 to
+3/10** while the notes-right figure moved 98.4% to 97.3%: a two-pixel reframe
+moves about one note in ninety, and a zero-fault boolean amplified that one note
+into a flipped verdict on five cases. The measurement under it was never the
+brittle part, so what is remembered is the score, which moves by about as much
+as the reading really moved. And #147 reserved the word "perfect" for the
+operator, judging by eye against the page. **The images are untouched** — the
+five fixtures' pictures are committed files nothing re-cuts, and there is no
+crop-family or tolerance machinery here.
+
+What the operator reads instead is on each case page: the score, and **what is
+still wrong here** — every fault this check can name, one line each. That is the
+stage-1 error list, and the judgement it invites is "are these real, and are
+they on the page" rather than "is the light green".
+
+**A case is remembered by three numbers, not one.** The score may not fall; the
+`structure` and `meter` counts may not rise. Both of those are counted as cases
+rather than as notes and so are deliberately outside the notes-right percentage
+— a memory made only of that percentage would have dropped the meter gate on the
+floor. Getting worse is getting worse whichever way it happens.
+
+**The ratchet turns one way on its own.** An improvement is written into
+`references.json`, a committed file, so the next run has to hold on to it. A
+*fall* is never written by a run: accepting one is a judgement somebody makes
+with the report open, and `python -m fixturecheck accept <case>` is where that
+is expressed. It re-reads the named cases and writes what they read now,
+whichever way that moves them.
+
+**That escape hatch has to exist**, and it takes the cases by name. A
+regression is not always a mistake — an intentional trade-off in the model
+reads worse on some page — and a gate with no way to say "yes, I meant that"
+fails forever and gets routed around, which on this manifest means somebody
+editing the JSON by hand. Equally, an `accept` that took no arguments and
+swallowed the whole run would be a button for making the alarm stop. So the
+cases are named, one at a time, and the manifest change is committed with the
+reason.
+
+`freeze` is **not** that path, and was documented as if it were. It is about
+the *files*: it drops a memory whose fingerprint moved and keeps one whose
+fingerprint did not, and it never reads a case, so it has no measurement to
+write. A case nobody has accepted yet is recorded as it stands — that is not
+the gate passing it, there was nothing to pass, and it is what makes adding a
+case cost one run rather than a hand-edited file. A case whose **reference has
+moved** is held out of the gate entirely: its memory is a number about music that
+has since been edited, and failing a run for that would blame homr for somebody
+correcting a score.
+
+The song systems are gated the same way, and it is worth saying why that is safe
+having been refused before. Their references are derived from cleaned scores that
+are themselves sometimes wrong, so *absolute* judgement of them would be judging
+our own transcription. Judging each against its own last reading is not that.
+
+**The published gate speaks for all the committed cases, whatever a run touched
+— and for one homr.** It is built from each case's *own latest standing result*
+**under the identity being reported**, `(homr, references)`, so a run can only
+ever move the cases it actually ran, and only for the engine that ran them.
 
 That second half is not a refinement. Aggregating across identities let a 5/5
 pass under homr A stay a published pass after a single fixture was re-run under
 homr B, with the other four never tested on B at all — a number that does not say
 what it describes, arriving inside the fix for a number that did not say what it
-described. A fixture not yet judged under the current identity is therefore
+described. A case not yet judged under the current identity is therefore
 `unevaluated` and holds the gate open, exactly like one nobody has ever judged:
 "it passed on the old homr" is not a claim about this one. A moved reference key
 does the same thing, for the same reason. Reading it off the newest run that
 judged anything was wrong twice over: a song-only run published `0/0 passed`,
-and — less obviously — `fixturecheck one system4` published `1/1 perfect`, so a
-standing `FAIL — 3/5` went green because somebody re-ran a fixture that was
-never the problem. A fixture nobody has judged is not a pass either; it is
-counted as unevaluated and holds the gate open, because "we have never looked"
-and "we looked and it was fine" are different claims.
+and — less obviously — `fixturecheck one system4` published a pass over the one
+case it looked at, so a standing `FAIL — 3/5` went green because somebody re-ran
+a fixture that was never the problem. A case nobody has judged is not a pass
+either; it is counted as unevaluated and holds the gate open, because "we have
+never looked" and "we looked and it was fine" are different claims. A case
+nobody has *accepted a reading for* holds it open too, and says so separately —
+there is no claim about it in either direction.
 
 The command's own exit status stays scoped to what it ran, which is what you
 want when re-running one case; the summary is the thing that has to speak for
-the whole set. They are small single systems this
-repository owns outright; if they are wrong, nothing measured on top of them
-means much.
-
-They are not all passing today — `hanget-soi` and `sammon-ryosto` are not — and
-the gate is hard anyway rather than set to whatever they currently score.
-
-The eighty-eight song systems are **not** gated. Their references are derived
-from cleaned scores that are themselves sometimes wrong, and gating on those
-would be gating on our own transcription.
+the whole set.
 
 ## What is committed
 
-The references are frozen as a **fingerprint per case** (`references.json`), not
-as files. A reference is a song's cleaned score imploded back to the shape of
-the print, and those scores get edited — so a series built against them partly
-measures them, and a number can improve because somebody fixed a score. A hash
-makes a reference changing a line in a diff that somebody had to commit.
+The manifest (`references.json`) holds two things per case and holds them
+together on purpose: a **fingerprint** of the case's two files, and the
+**memory** of what it was last accepted at. A memory is a claim about a
+particular picture and a particular reference, so it is worth nothing once
+either of them moves — one file, written by one command, is what stops a number
+outliving the music it was about. Freezing a case whose files have moved
+therefore forgets its score, and says so.
+
+The references are frozen as a fingerprint rather than as files. A reference is
+a song's cleaned score imploded back to the shape of the print, and those scores
+get edited — so a series built against them partly measures them, and a number
+can improve because somebody fixed a score. A hash makes a reference changing a
+line in a diff that somebody had to commit.
 
     python -m fixturecheck freeze      # fingerprint what is on this host now
+
+The memories are deliberately **not** in the manifest's digest. The digest says
+which music was measured, and a case reading better than it used to is not
+different music; were the scores hashed into it, every improvement would start a
+fresh identity, every case would go back to `unevaluated` under it, and the
+ratchet would erase the record it exists to keep.
+
+A **pin** is the one thing whose picture and reference are committed outright
+rather than fingerprinted, and it can be: it is a handful of bars cut out of a
+case, not a publishable edition. They live in `fixtures/pins/` with
+`fixturecheck/pins.json` as the register.
 
 Committing the references themselves would be better and is not available: this
 repository is public and the ninety-three systems are Fazer, Sulasol, Breitkopf
