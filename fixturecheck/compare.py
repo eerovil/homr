@@ -125,6 +125,15 @@ def collapse_unisons(found: dict) -> dict:
     and a reference with one staff per part has to write it twice. Counting those
     two against homr's one reported a lost note on ten moments of Sammon ryosto,
     every one of them a unison and not one of them wrong.
+
+    **Run on both sides**, because homr can now write the head into both voices
+    too -- one printed head, two stems, which is what the page draws. Collapsing
+    only the reference made that fix read as a fault: two heads written against
+    the reference's collapsed one is "a different number of notes here", so
+    recovering six unisons on Sammon ryosto cost six `size` faults and took the
+    run from 97.5% to 94.3%. What is kept is the `unison` flag on each side, so
+    the comparison can still tell a head serving both parts from a head serving
+    one -- collapsing is about counting them once, not about forgetting.
     """
     merged: dict = {}
     for key, group in found.items():
@@ -374,7 +383,7 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     number worth chasing.
     """
     want = collapse_unisons(read_score(reference))
-    got = read_score(parsed)
+    got = collapse_unisons(read_score(parsed))
     here, there = _voice_rank(want), _voice_rank(got)
     # A voice is only wrong where the page gave it a choice. Where a staff prints
     # one line through a bar, homr numbering its notes voice 5 and then voice 6
@@ -449,10 +458,21 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
                      f"a different note, {gap} position(s) "
                      f"{'higher' if b['position'] > a['position'] else 'lower'}", "pitch")
                 continue
+            if a.get("unison") and b.get("unison"):
+                result.agree += 1
+                emit(f"{a['name']} · both voices", f"{b['name']} · both voices",
+                     "a unison, written into both voices as the page prints it", "agree")
+                continue
             if a.get("unison"):
                 result.unison += 1
                 emit(f"{a['name']} · both voices", b["name"],
                      "a unison — one head, both parts", "unison")
+                continue
+            if b.get("unison"):
+                result.size += 1
+                emit(f"{a['name']} · one part", f"{b['name']} · both voices",
+                     "homr wrote this head into two voices where the page has "
+                     "one part singing it", "size")
                 continue
             mine_rank, their_rank = here[staff][a["voice"]], there[staff][b["voice"]]
             if lines.get((bar, staff), 1) < 2:

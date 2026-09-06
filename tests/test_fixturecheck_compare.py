@@ -165,3 +165,58 @@ def test_a_resting_staff_still_counts_as_printed(tmp_path: Path) -> None:
 @pytest.mark.parametrize("missing", [Path("/nowhere/printed.json")])
 def test_a_missing_record_file_is_not_an_error(missing: Path) -> None:
     assert staves_a_person_counted("anything", missing) == 0
+
+
+def staff_of_two_voices(path: Path, name: str, notes: list[tuple]) -> Path:
+    """One staff, one bar, the notes sounding together — each in its own voice."""
+    written = []
+    for index, (step, octave, voice) in enumerate(notes):
+        if index:
+            written.append("<backup><duration>1</duration></backup>")
+        written.append(
+            f"<note><pitch><step>{step}</step><octave>{octave}</octave></pitch>"
+            f"<duration>1</duration><voice>{voice}</voice></note>")
+    target = path / f"{name}.musicxml"
+    target.write_text(
+        '<?xml version="1.0"?><score-partwise><part-list>'
+        '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
+        '<part id="P1"><measure number="1"><attributes><divisions>1</divisions>'
+        '<clef><sign>G</sign><line>2</line></clef></attributes>'
+        f'{"".join(written)}</measure></part></score-partwise>')
+    return target
+
+
+UNISON = [("C", 4, "1"), ("C", 4, "2")]
+
+
+def test_a_unison_written_into_both_voices_is_agreement(tmp_path: Path) -> None:
+    """One printed head carrying two stems is what the page draws.
+
+    Both sides collapse to one head, and both know it serves two parts, so this
+    is the moment agreeing rather than a head too many.
+    """
+    reference = staff_of_two_voices(tmp_path, "ref", UNISON)
+    parsed = staff_of_two_voices(tmp_path, "homr", UNISON)
+
+    result = compare_output(reference, parsed, "case")
+
+    assert (result.agree, result.unison, result.size) == (1, 0, 0)
+
+
+def test_a_unison_the_parse_holds_as_one_voice_is_still_warned(tmp_path: Path) -> None:
+    reference = staff_of_two_voices(tmp_path, "ref", UNISON)
+    parsed = staff_of_two_voices(tmp_path, "homr", [("C", 4, "1")])
+
+    result = compare_output(reference, parsed, "case")
+
+    assert (result.agree, result.unison, result.size) == (0, 1, 0)
+
+
+def test_a_head_doubled_where_one_part_sings_it_is_a_fault(tmp_path: Path) -> None:
+    """The mark can be read off a head that carries only one stem, and is."""
+    reference = staff_of_two_voices(tmp_path, "ref", [("C", 4, "1")])
+    parsed = staff_of_two_voices(tmp_path, "homr", UNISON)
+
+    result = compare_output(reference, parsed, "case")
+
+    assert (result.agree, result.unison, result.size) == (0, 0, 1)
