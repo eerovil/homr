@@ -596,11 +596,44 @@ def _get_duration_of_measure(measure: list[list[EncodedSymbol]]) -> Fraction:
     return total_duration
 
 
-def _get_typical_duration_of_measures(measures: list[list[list[EncodedSymbol]]]) -> Fraction:
-    durations = [_get_duration_of_measure(m) for m in measures]
-    if len(durations) == 0:
-        return Fraction(0)
-    return sorted(durations)[len(durations) // 2]
+MIN_MEASURES_FOR_A_TYPICAL_LENGTH = 3
+
+
+def _spans_between_time_signatures(
+    measures: list[list[list[EncodedSymbol]]],
+) -> list[list[int]]:
+    """The measure indices under each signature in force, split where one changes."""
+    spans: list[list[int]] = []
+    current: list[int] = []
+    for i, measure in enumerate(measures):
+        changes = any(
+            symbol.rhythm.startswith("timeSignature") for chord in measure for symbol in chord
+        )
+        if changes and current:
+            spans.append(current)
+            current = []
+        current.append(i)
+    if current:
+        spans.append(current)
+    return spans
+
+
+def _get_typical_duration_of_measures(durations: list[Fraction]) -> Fraction | None:
+    """The median measure of a span, or None when the span cannot support one.
+
+    Fewer than `MIN_MEASURES_FOR_A_TYPICAL_LENGTH` measures is not a sample. Over
+    two, a median is whichever of them is longer; over one it is that measure
+    itself, which then reports every measure as typical. Both are arithmetic
+    dressed as evidence, and a threshold taken off them costs a measure its
+    tuplets on no grounds at all.
+
+    Empty measures do not vote -- the fragment after a crop's last barline is one,
+    and it is not a bar of music.
+    """
+    lengths = sorted(d for d in durations if d > Fraction(0))
+    if len(lengths) < MIN_MEASURES_FOR_A_TYPICAL_LENGTH:
+        return None
+    return lengths[len(lengths) // 2]
 
 
 def _remove_tuplets(measure: list[list[EncodedSymbol]]) -> list[list[EncodedSymbol]]:
@@ -608,19 +641,46 @@ def _remove_tuplets(measure: list[list[EncodedSymbol]]) -> list[list[EncodedSymb
 
 
 def _fix_over_eager_tuplets(chords: list[list[EncodedSymbol]]) -> list[list[EncodedSymbol]]:
-    """
-    The transformer tends to add too many tuplets, so we remove them
-    based on the length of a measurement.
+    """Remove tuplets from a measure that is short of the length its neighbours keep.
+
+    The transformer tends to add too many tuplets, and a spurious one makes its
+    measure come out **short** -- three eighths where the page prints two -- so a
+    measure below the length the music around it holds is the evidence that it
+    happened. What counts as "the length around it" is the whole of this pass.
+
+    It used to be the median measure of everything handed in, which is a fair
+    stand-in on a page of one meter and is wrong on a crop of several. Two things
+    replace it, each for a case the other does not cover:
+
+    - **Per span between time signatures.** A measure that carries a signature is
+      not judged against the measures before it. On Virta venhettä vie m8-m10 --
+      one printed system, cropped -- the page changes to 2/4 at m10 and homr reads
+      that change, but the crop's measures are 4, 4 and 2 quarters, so the median
+      was a whole and the one bar that was right about its own meter was the one
+      stripped. It prints a triplet of eighths there; the parse came out as five
+      plain eighths.
+    - **A span too short to have a typical measure is left alone.** Splitting on
+      its own is not enough, and the same crop shows why: it leaves a span of two
+      whose median is simply the longer of them, so m9 -- which prints a triplet
+      too -- would have lost it instead. See `_get_typical_duration_of_measures`.
+
+    Nothing to compare against means nothing removed. That is the safe direction:
+    over-keeping a tuplet leaves a measure the meter check can see, while
+    over-removing one throws away music no later pass recovers -- `clean_score`'s
+    `fix_missing_tuplets` needs a voice that kept the bracket, and here every voice
+    loses it in the same bar.
     """
     measures = _group_into_measures(chords)
-    mean = _get_typical_duration_of_measures(measures)
-    result = []
-    for i, measure in enumerate(measures):
-        if _get_duration_of_measure(measure) < mean:
-            eprint("Removing tuplets from measure #", i + 1)
-            result.append(_remove_tuplets(measure))
-        else:
-            result.append(measure)
+    durations = [_get_duration_of_measure(measure) for measure in measures]
+    result = list(measures)
+    for span in _spans_between_time_signatures(measures):
+        typical = _get_typical_duration_of_measures([durations[i] for i in span])
+        if typical is None:
+            continue
+        for i in span:
+            if Fraction(0) < durations[i] < typical:
+                eprint("Removing tuplets from measure #", i + 1)
+                result[i] = _remove_tuplets(measures[i])
     return _flatten_measures(result)
 
 
