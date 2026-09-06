@@ -30,6 +30,12 @@ _MARGIN = 16.0
 #: because this is only ever used to look at a pair that is already known to be
 #: one moment on one staff.
 _COLUMN_REACH = 60.0
+#: How far clear of a notehead a decoded note's attention point must sit before
+#: that displacement counts as a stem drawn in the direction it lies. Measured
+#: against the offsets `_MATCH_Y_TOLERANCE` records -- 13 to 17px above an
+#: up-stem head, 3 to 8px below a down-stem one -- so it is under the smallest
+#: of them and well over the jitter of a head read twice.
+_STRADDLE = 3.0
 #: Written on a notehead that carries an up stem and a down stem at once.
 SHARED = "both"
 _STEPS = "CDEFGAB"
@@ -297,6 +303,114 @@ def _pair(
     tokens = sorted((first, second), key=lambda s: _note_coordinates(s)[0])
     for token, head in zip(tokens, heads, strict=True):
         token.stem_direction = "up" if head.stem_directions[0] == StemDirection.UP else "down"
+    return 1
+
+
+def pair_unison_by_attention(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
+    """Tell a unison's two voices apart by where the decoder was looking.
+
+    ``pair_unison_stems`` and ``SHARED`` between them cover a unison whenever the
+    *segmentation* can say which stems are there: two heads carrying one stem
+    each, or one head carrying both. Two printed shapes reach here with neither
+    of those, and both were still writing one voice where the page prints two.
+
+    - **A stemless unison.** Whole notes and breves have no stems to be told
+      apart by, so an engraver draws the unison as two heads side by side and
+      nothing about them differs at all. On `sammon-ryosto`'s bar 2 the
+      segmentation finds both heads at one position with no stem on either, so
+      ``_pair`` -- which wants one stem each -- declines, and the two decoded
+      notes are read as one note written twice.
+    - **A shared head whose second stem was not attached to it.** On `system4`'s
+      last sixteenth the page prints one head with an up stem and a down stem,
+      the same shape the bar's previous note carries; there the segmentation
+      hangs both stems on the head and it is written into both voices, and here
+      it finds the head with only the up stem. Nothing is left to say the head
+      is two voices meeting.
+
+    What both still have is the **decoder**, which emitted the note twice -- and
+    a pitch written twice in one moment on one staff is never one line's music.
+    Where it was looking each time is the evidence: the attention point sits
+    along the stem rather than on the head, so the two straddle the head, one
+    clear above it and one clear below. That is a stem up and a stem down, read
+    off the decoder instead of off the picture, and it is exactly what
+    ``_remove_duplicated_piches`` already accepts as proof that two heads were
+    drawn.
+
+    Deliberately narrow, because a duplicate the decoder simply repeated must
+    still be removed: the two must agree on their duration as well as their
+    pitch, the heads found must be at the position the pitch names, and one
+    attention point must sit above every one of them and the other below every
+    one of them. A repetition puts both on the same side of the head and is left
+    alone.
+    """
+    clefs = _clefs_in_force(symbols)
+    paired = 0
+    for column in _columns(symbols, clefs):
+        same_pitch: dict[str, list[int]] = {}
+        for index in column:
+            same_pitch.setdefault(symbols[index].pitch, []).append(index)
+        for members in same_pitch.values():
+            if len(members) != 2:
+                continue
+            first, second = (symbols[i] for i in members)
+            if {first.stem_direction, second.stem_direction} == {"up", "down"}:
+                continue
+            if first.rhythm != second.rhythm:
+                continue
+            clef = clefs[members[0]]
+            position = expected_position(first.pitch, clef)
+            if position is None:
+                continue
+            paired += _pair_by_attention(first, second, notes, position)
+    return paired
+
+
+def _shape_of_a_unison(here: list[Note]) -> bool:
+    """Whether the heads found could be the two shapes this reads, and no other.
+
+    Two heads, neither stemmed, is the stemless unison: nothing but their being
+    two says so, and two heads at one position in one moment cannot be one
+    line's music. One head carrying one stem is the shared head with a stem
+    missed off it -- the head is stemmed, so it is a note that *has* stems and
+    the page may have drawn it a second one.
+
+    One head carrying **no** stem is neither, and refusing it is what keeps this
+    off `kolme-kakea`: a whole note the decoder simply emitted twice. A whole
+    note has no stems for the segmentation to have missed, so a lone stemless
+    head can never be a head drawn with two of them, and there is no second head
+    to say a unison was printed as a pair. Everything else -- a head already
+    carrying both stems, three heads at one position -- belongs to `SHARED` or
+    to `_pair` or to nothing.
+    """
+    if len(here) == 2:
+        return not any(note.stem_directions for note in here)
+    return len(here) == 1 and len(here[0].stem_directions) == 1
+
+
+def _pair_by_attention(
+    first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], position: int
+) -> int:
+    """Give the higher attention point the up stem and the lower the down one."""
+    above, below = sorted((first, second), key=lambda s: _note_coordinates(s)[1])
+    top = _note_coordinates(above)[1]
+    bottom = _note_coordinates(below)[1]
+    middle = (top + bottom) / 2
+    x = (_note_coordinates(first)[0] + _note_coordinates(second)[0]) / 2
+    here = [
+        note
+        for note in notes
+        if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
+        and note.position == position
+        and abs(note.center[1] - middle) <= _COLUMN_REACH
+    ]
+    if not _shape_of_a_unison(here):
+        return 0
+    if top > min(note.center[1] for note in here) - _STRADDLE:
+        return 0
+    if bottom < max(note.center[1] for note in here) + _STRADDLE:
+        return 0
+    above.stem_direction = "up"
+    below.stem_direction = "down"
     return 1
 
 

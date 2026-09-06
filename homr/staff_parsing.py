@@ -13,6 +13,7 @@ from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
 from homr.stem_voice_hints import (
     add_stem_voice_hints,
+    pair_unison_by_attention,
     pair_unison_stems,
     rescue_duplicate_pitches,
 )
@@ -349,6 +350,12 @@ def parse_staff_image(
         paired = pair_unison_stems(result, noteheads)
         if paired:
             eprint("Paired", paired, "unison(s) drawn as two noteheads")
+        # And where the picture has no stems to tell the two apart -- a stemless
+        # unison, or a shared head the segmentation hung only one stem on -- the
+        # decoder's own attention still straddles the head and says so.
+        read = pair_unison_by_attention(result, noteheads)
+        if read:
+            eprint("Read", read, "unison(s) off the decoder's attention")
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
