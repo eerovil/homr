@@ -204,6 +204,110 @@ def test_an_improvement_moves_the_memory_up_and_a_fall_never_does(tmp_path):
     assert json_memory(path)["a"]["score"] == 96.0
 
 
+def test_a_person_can_accept_a_fall_and_the_gate_then_passes(harness, capsys):
+    """The escape hatch, walked end to end in the order it is actually used.
+
+    Remember a higher score, read a lower one, watch the gate fail — then accept
+    that reading on purpose and watch the same reading pass. Without this the
+    gate has no way to be told "yes, I meant that": a regression that is an
+    intentional trade-off fails forever, and the next person edits
+    `references.json` by hand, which is the gate being routed around rather than
+    used.
+
+    It was documented as `freeze`, which cannot do it — `freeze` is about the
+    files and keeps a memory whose fingerprint has not moved. That is what this
+    test would have caught.
+    """
+    main, manifest_path, score_it = harness
+
+    score_it(agree=10, pitch=0)
+    assert main.run_cases(["c"], "fixtures") == 0
+    assert json_memory(manifest_path)["c"]["score"] == 100.0
+
+    # It gets worse on purpose, and the gate says so.
+    score_it(agree=7, pitch=3)
+    assert main.run_cases(["c"], "fixtures") == 1
+    assert json_memory(manifest_path)["c"]["score"] == 100.0
+
+    # A person accepts that reading, naming the case.
+    assert main.accept(["c"]) == 0
+    assert json_memory(manifest_path)["c"]["score"] == 70.0
+    assert "DOWN from 100.00% to 70.00%" in capsys.readouterr().out
+
+    # ...and the same reading now passes, rather than failing forever.
+    assert main.run_cases(["c"], "fixtures") == 0
+    assert json_memory(manifest_path)["c"]["score"] == 70.0
+
+
+def test_accepting_does_not_make_ordinary_runs_two_way(harness):
+    """The one-way rule has to survive the escape hatch existing.
+
+    Accepting once must not leave the ratchet willing to write falls by itself,
+    or every later regression would be swallowed silently — which is the alarm
+    turned off rather than answered.
+    """
+    main, manifest_path, score_it = harness
+
+    score_it(agree=10, pitch=0)
+    main.run_cases(["c"], "fixtures")
+    score_it(agree=7, pitch=3)
+    main.accept(["c"])
+    assert json_memory(manifest_path)["c"]["score"] == 70.0
+
+    # A *further* fall is refused by an ordinary run, exactly as before.
+    score_it(agree=5, pitch=5)
+    assert main.run_cases(["c"], "fixtures") == 1
+    assert json_memory(manifest_path)["c"]["score"] == 70.0
+
+
+def test_accepting_an_improvement_is_allowed_and_says_which_way(harness, capsys):
+    """`accept` writes what the case reads, and does not only mean "lower"."""
+    main, manifest_path, score_it = harness
+
+    score_it(agree=7, pitch=3)
+    main.run_cases(["c"], "fixtures")
+    capsys.readouterr()
+
+    score_it(agree=10, pitch=0)
+    assert main.accept(["c"]) == 0
+    assert json_memory(manifest_path)["c"]["score"] == 100.0
+    assert "up from 70.00% to 100.00%" in capsys.readouterr().out
+
+
+def test_accepting_nothing_is_refused_rather_than_meaning_everything(harness):
+    """An `accept` with no cases would be a button for making the alarm stop.
+
+    The whole value of this path is that somebody chose the case and meant it,
+    so the bare command prints how to use it and changes nothing.
+    """
+    main, manifest_path, score_it = harness
+    import sys
+
+    score_it(agree=10, pitch=0)
+    main.run_cases(["c"], "fixtures")
+    score_it(agree=7, pitch=3)
+
+    argv = sys.argv
+    try:
+        sys.argv = ["fixturecheck", "accept"]
+        assert main.main() == 2
+    finally:
+        sys.argv = argv
+    assert json_memory(manifest_path)["c"]["score"] == 100.0
+
+
+def test_a_case_homr_cannot_read_has_no_reading_to_accept(harness, monkeypatch):
+    """Writing a zero would retire the case: nothing can ever fall below it."""
+    main, manifest_path, score_it = harness
+
+    score_it(agree=10, pitch=0)
+    main.run_cases(["c"], "fixtures")
+    monkeypatch.setattr(main, "parse", lambda case, fp: None)
+
+    assert main.accept(["c"]) == 1
+    assert json_memory(manifest_path)["c"]["score"] == 100.0
+
+
 def test_a_first_sighting_is_recorded_so_adding_a_case_costs_one_run(tmp_path):
     path = manifest(tmp_path)
     assert references.remember({"fresh": reading(73.5)}, path=path) == ["fresh"]
@@ -456,11 +560,12 @@ def harness(tmp_path, monkeypatch):
 
     manifest_path = tmp_path / "references.json"
     manifest_path.write_text(json.dumps({"digest": "d", "cases": {}}))
+    # **Only the path is redirected.** `accepted` and `remember` are the code
+    # under test here, and stubbing them was a real mistake: the escape-hatch
+    # test passed against a reimplementation of `remember` living in this file,
+    # and a sabotage of the real one passed too. That is only possible because
+    # the module resolves `MANIFEST` at call time — see `references.load`.
     monkeypatch.setattr(references, "MANIFEST", manifest_path)
-    monkeypatch.setattr(references, "accepted",
-                        lambda *a, **k: json_memory(manifest_path))
-    monkeypatch.setattr(references, "remember",
-                        lambda readings, path=None: _remember(manifest_path, readings))
     monkeypatch.setattr(references, "drift", lambda *a, **k: {"changed": [],
                                                              "unfrozen": []})
     monkeypatch.setattr(references, "stamp", lambda *a, **k: "refX")
@@ -492,20 +597,6 @@ def harness(tmp_path, monkeypatch):
                             lambda *a, **k: scores["result"])
 
     return main, manifest_path, score_it
-
-
-def _remember(path, readings):
-    held = json.loads(path.read_text())
-    cases_held = held.setdefault("cases", {})
-    moved = []
-    for name, reading in readings.items():
-        entry = cases_held.setdefault(name, {})
-        if all(entry.get(f) == reading[f] for f in references.MEMORY):
-            continue
-        entry.update(reading)
-        moved.append(name)
-    path.write_text(json.dumps(held))
-    return sorted(moved)
 
 
 def test_a_run_records_a_first_sighting_then_gates_against_it(harness):

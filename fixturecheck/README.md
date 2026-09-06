@@ -388,8 +388,23 @@ floor. Getting worse is getting worse whichever way it happens.
 **The ratchet turns one way on its own.** An improvement is written into
 `references.json`, a committed file, so the next run has to hold on to it. A
 *fall* is never written by a run: accepting one is a judgement somebody makes
-with the report open, and `python -m fixturecheck freeze` is where that is
-expressed. A case nobody has accepted yet is recorded as it stands — that is not
+with the report open, and `python -m fixturecheck accept <case>` is where that
+is expressed. It re-reads the named cases and writes what they read now,
+whichever way that moves them.
+
+**That escape hatch has to exist**, and it takes the cases by name. A
+regression is not always a mistake — an intentional trade-off in the model
+reads worse on some page — and a gate with no way to say "yes, I meant that"
+fails forever and gets routed around, which on this manifest means somebody
+editing the JSON by hand. Equally, an `accept` that took no arguments and
+swallowed the whole run would be a button for making the alarm stop. So the
+cases are named, one at a time, and the manifest change is committed with the
+reason.
+
+`freeze` is **not** that path, and was documented as if it were. It is about
+the *files*: it drops a memory whose fingerprint moved and keeps one whose
+fingerprint did not, and it never reads a case, so it has no measurement to
+write. A case nobody has accepted yet is recorded as it stands — that is not
 the gate passing it, there was nothing to pass, and it is what makes adding a
 case cost one run rather than a hand-edited file. A case whose **reference has
 moved** is held out of the gate entirely: its memory is a number about music that

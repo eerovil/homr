@@ -36,6 +36,18 @@ reads below its own memory, and an improvement moves that memory up. Not a
 total across cases — a win on one page must not pay for a loss on another, which
 is the whole reason the memory is per case rather than one figure for the run.
 
+**A run only ever moves a memory up. A person can move one down**, by naming
+the case:
+
+    python -m fixturecheck accept sammon-ryosto    # yes, I meant that
+
+That is the escape hatch, and it has to exist. A regression is not always a
+mistake — an intentional trade-off in the model is a regression on some page —
+and a gate with no way to say "yes, I meant that" is one people route around.
+It is a command of its own rather than a flag on a run, and it takes the cases
+by name rather than accepting everything, because the whole value of the path
+is that somebody had to say which case and mean it.
+
 **A pass/fail per case is what this replaces**, and #155 settled why. The old
 gate asked whether each of the five committed fixtures was `perfect` — every
 note right, no argument about the staves or the meter. #152 shaved two pixels
@@ -164,20 +176,30 @@ def better(now: dict, was: dict) -> bool:
     return not worse(now, was) and any(now.get(f) != was.get(f) for f in MEMORY)
 
 
-def accepted(path: Path = MANIFEST) -> dict:
+def accepted(path: Path | None = None) -> dict:
     """Every case's memory, by name. Absent means nobody has accepted a reading."""
     held = load(path)["cases"]
     return {name: {f: entry[f] for f in MEMORY}
             for name, entry in held.items() if all(f in entry for f in MEMORY)}
 
 
-def remember(readings: dict, path: Path = MANIFEST) -> list[str]:
-    """Move the named cases' memories to what they read now.
+def remember(readings: dict, path: Path | None = None) -> list[str]:
+    """Move the named cases' memories to whatever is passed in, up or down.
 
-    Only ever called with readings that are not worse — the ratchet turns one
-    way on its own. Accepting a *fall* is a person running `freeze`, which is
-    the deliberate act this whole file exists to make deliberate.
+    **This writes in either direction and does not judge**, which is why the
+    one-way rule lives in its callers rather than here. An ordinary run offers
+    it only readings that are not worse (`__main__.ratchet`); `accept` offers it
+    whatever the case reads now, because that is a person saying so out loud.
+
+    Both paths were needed and only the first existed. The escape hatch was
+    documented as `freeze`, and `freeze` cannot do it: `write` is about the
+    *files*, and it deliberately keeps a memory whose fingerprint has not
+    moved. So a case that regressed on purpose — an intentional model
+    trade-off — could never be accepted, and the gate failed forever unless
+    somebody hand-edited this file. A gate with no way to say "yes, I meant
+    that" is one people route around.
     """
+    path = path or MANIFEST
     manifest = load(path)
     held = manifest.setdefault("cases", {})
     moved: list[str] = []
@@ -194,7 +216,17 @@ def remember(readings: dict, path: Path = MANIFEST) -> list[str]:
     return sorted(moved)
 
 
-def load(path: Path = MANIFEST) -> dict:
+def load(path: Path | None = None) -> dict:
+    """Read the manifest.
+
+    `MANIFEST` is resolved here rather than bound as a default, so pointing the
+    module at another file actually moves every reader *and every writer*. Bound
+    as a default it did not, and the tests around this file had to stub the
+    writer out — which meant the escape hatch was covered by a reimplementation
+    of itself and a sabotage of the real one passed. `series.runs` learned the
+    same lesson first and says so in its own docstring.
+    """
+    path = path or MANIFEST
     if not path.exists():
         return {"cases": {}}
     try:
@@ -210,7 +242,7 @@ _WHY = ("A fingerprint per case and the score it was last accepted at — not th
         "See fixturecheck/references.py.")
 
 
-def write(cases: list, path: Path = MANIFEST) -> tuple[dict, list[str]]:
+def write(cases: list, path: Path | None = None) -> tuple[dict, list[str]]:
     """Freeze what is on this host now, and say whose memory that cost.
 
     Merged rather than replaced: a run of ten cases must not drop the other
@@ -222,7 +254,13 @@ def write(cases: list, path: Path = MANIFEST) -> tuple[dict, list[str]]:
     would gate a new case against an old case's number — and it would do it
     silently, since freezing is exactly the moment nobody is looking at scores.
     The next run records what the new files read, as a first sighting.
+
+    **And a case whose files did not move keeps its memory**, which is right for
+    what this does and is why it is *not* the way to accept a regression. This
+    is about the files; it never reads a case and has no measurement to write.
+    `accept` is the path that does — see the module docstring.
     """
+    path = path or MANIFEST
     held = load(path)["cases"]
     forgotten: list[str] = []
     for case in cases:
@@ -238,7 +276,7 @@ def write(cases: list, path: Path = MANIFEST) -> tuple[dict, list[str]]:
     return manifest, sorted(forgotten)
 
 
-def drift(cases: list, path: Path = MANIFEST) -> dict:
+def drift(cases: list, path: Path | None = None) -> dict:
     """Which of these cases no longer match what was frozen.
 
     Three answers and they are not the same: `changed` is a reference that moved
@@ -260,7 +298,7 @@ def drift(cases: list, path: Path = MANIFEST) -> dict:
 
 
 def judge(readings: dict, unread: list[str], adrift: list[str] | None = None,
-          path: Path = MANIFEST) -> dict:
+          path: Path | None = None) -> dict:
     """Has anything in this run got worse than the reading it was accepted at?
 
     `readings` is `marks()` per case that homr read; `unread` is the cases homr
@@ -301,7 +339,7 @@ def judge(readings: dict, unread: list[str], adrift: list[str] | None = None,
     }
 
 
-def stamp(cases: list, path: Path = MANIFEST) -> str:
+def stamp(cases: list, path: Path | None = None) -> str:
     """What to key a run by: the frozen digest, marked when this run drifts from it.
 
     A run measured against references that have moved is not a run against the

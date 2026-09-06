@@ -7,6 +7,7 @@
     python -m fixturecheck ten                     the written-down sample, ~4 min
     python -m fixturecheck status                  instant -- the last run
     python -m fixturecheck pin <name> <case> 3-5 <why>    cut a tier-1 pin
+    python -m fixturecheck accept <case> ...       accept what it reads now
     python -m fixturecheck freeze                  fingerprint the references
 
 Every run **records**. `check-report/results.json` used to hold the last run and
@@ -133,7 +134,8 @@ def ratchet(records: list[series.CaseRecord], memory: dict,
     **The ratchet only turns one way on its own.** An improvement is recorded
     here, in a committed file, so the next run has to hold on to it; a *fall* is
     never written by a run, because accepting one is a judgement somebody makes
-    with the report open. `freeze` is where that judgement is expressed.
+    with the report open, and `accept` is where that judgement is expressed —
+    named case by named case.
 
     A case nobody has accepted yet is recorded as it stands. That is not the
     gate passing it — there was nothing to pass — it is the first sighting, and
@@ -277,6 +279,69 @@ def run_cases(names: list[str], tier: str) -> int:
     return 0
 
 
+def accept(names: list[str]) -> int:
+    """Record what the named cases read *now*, whichever way that moves them.
+
+    **The escape hatch, and the gate is not honest without it.** A run moves a
+    memory up and never down (`ratchet`), which is the right default and cannot
+    be the only door: a regression is not always a mistake. An intentional
+    trade-off in the model reads worse on some page, and with no way to say "yes,
+    I meant that" the gate fails forever and the next person edits
+    `references.json` by hand — which is the gate being routed around rather than
+    used.
+
+    This was documented as `freeze` and `freeze` cannot do it. That command is
+    about the *files*: it keeps a memory whose fingerprint has not moved, and it
+    never reads a case, so it has no measurement to write. The two are different
+    acts and they are different commands.
+
+    **Cases are named, and never all of them.** The value of this path is that
+    somebody chose the case and meant it; an `accept` that took no arguments and
+    swallowed the whole run would be a button for making the alarm stop, which is
+    the failure mode this project already has a name for.
+
+    It re-reads rather than trusting the last run, because what is being written
+    down is a measurement and the last run may have been of other code. The parse
+    cache makes that cheap when nothing has moved.
+    """
+    fingerprint = code_fingerprint()
+    memory = references.accepted()
+    readings: dict[str, dict] = {}
+    for name in names:
+        found = cases.resolve([name])
+        if not found:
+            print(f"{name}: could not be built")
+            return 1
+        case = found[0]
+        parsed = parse(case, fingerprint)
+        if parsed is None:
+            # Nothing to accept: there is no reading. Recording a zero here
+            # would quietly retire the case, since nothing can fall below it.
+            print(f"{case.name}: homr could not read it, so there is no reading "
+                  f"to accept")
+            return 1
+        result = compare_output(case.reference, parsed, case.name)
+        readings[case.name] = references.marks(
+            {k: getattr(result, k) for k in series.COUNTS})
+
+    moved = references.remember(readings)
+    for name in sorted(readings):
+        now, was = readings[name], memory.get(name)
+        if was is None:
+            print(f"  {name}: accepted at {now['score']:.2f}% "
+                  f"(nothing was remembered before)")
+        elif name in moved:
+            way = "DOWN" if references.worse(now, was) else "up"
+            print(f"  {name}: {way} from {was['score']:.2f}% to "
+                  f"{now['score']:.2f}%")
+        else:
+            print(f"  {name}: unchanged at {now['score']:.2f}%")
+    if moved:
+        print(f"{references.MANIFEST.name} has changed — commit it with the "
+              f"reason you accepted this")
+    return 0
+
+
 def make_pin(argv: list[str]) -> int:
     """`pin <name> <case> <first>-<last> <why>` — tier 1, in one command."""
     if len(argv) < 4:
@@ -315,6 +380,14 @@ def main() -> int:
         return 0
     if tier == "pin":
         return make_pin(sys.argv[2:])
+    if tier == "accept":
+        wanted = sys.argv[2:]
+        if not wanted:
+            # Deliberately no accept-all: see `accept`.
+            print("accept <case> [<case> ...]  — name the cases whose current "
+                  "reading you are accepting, including a fall")
+            return 2
+        return accept(wanted)
     if tier == "freeze":
         wanted = sys.argv[2:] or cases.every()
         manifest, forgotten = references.write(cases.resolve(wanted))
