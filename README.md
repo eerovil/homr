@@ -72,6 +72,15 @@ notehead is not clean, the existing voice assignment stands: on a staff carrying
 one voice the stems say how high the notes are, not which voice they are, and
 following them there would split that voice in half.
 
+That last shape is also written out rather than only counted. Older choral
+engraving prints a unison as one notehead carrying both stems -- two parts
+singing the same note -- so such a head is written into **both** voices, which
+renders as the one head with two stems the page draws. It is not doubled where
+the other voice is already sounding on that staff at that moment: there the
+second voice is in the bar under its own stem, and a third note would be
+invented. A unison the page draws as two adjacent heads instead is a different
+shape and is not affected.
+
 ## Example
 
 The example below provides an overview of the current performance of the implementation. While some errors are present
