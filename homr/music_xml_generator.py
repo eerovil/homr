@@ -1,5 +1,6 @@
 # flake8: noqa: S101
 
+import copy
 import math
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -505,6 +506,7 @@ def rebalance_measure_voices(
     for event in timed_events:
         by_staff[event.staff_num].append(event)
 
+    assignments: list[tuple[int, TimedNoteEvent, int]] = []
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
         two_voices = _staff_carries_two_voices(
@@ -534,13 +536,101 @@ def rebalance_measure_voices(
                     break
                 voice_no += 1
             active.append((event.end, voice_no))
+            assignments.append((staff_num, event, voice_no))
             xml_voice = str(get_xml_voice(staff_num, voice_no - 1))
             for note in event.notes:
                 voice_el = note.find("voice")
                 if voice_el is not None:
                     voice_el.text = xml_voice
+    double_shared_noteheads(measure, assignments)
     for note in measure.findall("note"):
         note.attrib.pop("stem-shared", None)
+
+
+def double_shared_noteheads(
+    measure: ET.Element, assignments: list[tuple[int, TimedNoteEvent, int]]
+) -> int:
+    """Write a head drawn with both stems into both voices.
+
+    An engraver prints a unison as **one notehead carrying an up stem and a
+    down stem**: the two parts sing the same note, so one head serves both and
+    the stems say how many voices are meeting on it. `stem_voice_hints` reads
+    that shape and `build_note_or_rest` carries it in as `stem-shared`, and
+    until now the mark was spent only on `_staff_carries_two_voices` -- proof
+    that the staff has a second voice at all -- and then thrown away. The note
+    stayed in one voice, so the other part was simply absent from the file, and
+    everything downstream reads its parts out of the file.
+
+    So the note is written again into the other voice, behind a `<backup>` of
+    its own duration, which is how MusicXML says two things sound at once. It
+    renders as the one head with two stems the page prints, and it is the same
+    note twice rather than a guess: the second voice's pitch, duration and
+    notations are the first's, because the engraver drew them once for both.
+
+    Two things it refuses to do. A head is not doubled when the other voice is
+    **already sounding** at that moment on that staff -- then the second voice
+    is in the bar under its own stem and the mark is describing something else,
+    so writing a third note there would be inventing music. And a head with no
+    duration (a grace note) is left alone, having no `<backup>` to write.
+
+    The stems are then written out explicitly, up for voice 1 and down for
+    voice 2, rather than left to a renderer's own convention for what a voice
+    is drawn like. Returns how many heads were doubled.
+    """
+    occupied: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    for staff_num, event, voice_no in assignments:
+        occupied[(staff_num, voice_no)].append((event.start, event.end))
+
+    positions = {id(child): index for index, child in enumerate(measure)}
+    insertions: list[tuple[int, list[ET.Element]]] = []
+    for staff_num, event, voice_no in assignments:
+        shared = [note for note in event.notes if _shares_a_notehead(note)]
+        duration = event.end - event.start
+        if not shared or duration <= 0:
+            continue
+        other_no = 2 if voice_no == 1 else 1
+        if any(
+            start < event.end and event.start < end
+            for start, end in occupied[(staff_num, other_no)]
+        ):
+            continue
+        xml_voice = str(get_xml_voice(staff_num, other_no - 1))
+        copies: list[ET.Element] = []
+        for rank, note in enumerate(shared):
+            _write_stem(note, "up" if voice_no == 1 else "down")
+            twin = copy.deepcopy(note)
+            twin.attrib.pop("stem-shared", None)
+            _write_stem(twin, "up" if other_no == 1 else "down")
+            marker = twin.find("chord")
+            if rank == 0 and marker is not None:
+                twin.remove(marker)
+            if rank > 0 and marker is None:
+                twin.insert(0, ET.Element("chord"))
+            voice_el = twin.find("voice")
+            if voice_el is not None:
+                voice_el.text = xml_voice
+            copies.append(twin)
+        backup = ET.Element("backup")
+        ET.SubElement(backup, "duration").text = str(duration)
+        after = max(positions[id(note)] for note in event.notes)
+        insertions.append((after, [backup, *copies]))
+
+    # Backwards, so an earlier insertion cannot move a later one's index.
+    for after, elements in sorted(insertions, reverse=True):
+        for offset, element in enumerate(elements, start=1):
+            measure.insert(after + offset, element)
+    return len(insertions)
+
+
+def _write_stem(note: ET.Element, direction: str) -> None:
+    """Say which way this note is stemmed, keeping homr's element order."""
+    stem = note.find("stem")
+    if stem is None:
+        stem = ET.Element("stem")
+        staff_el = note.find("staff")
+        index = list(note).index(staff_el) + 1 if staff_el is not None else len(note)
+        note.insert(index, stem)
+    stem.text = direction
 
 
 def _staff_carries_two_voices(
