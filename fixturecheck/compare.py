@@ -256,6 +256,28 @@ class Result:
         return said
 
     @property
+    def warnings(self) -> int:
+        """Unisons the page prints as one head and homr wrote into one voice.
+
+        **Not a fault, and not nothing.** Nothing here was misread: the page
+        draws one notehead, homr wrote one notehead, and there is no note to
+        point at and call wrong. So it stays out of `score`, out of `scored` and
+        out of `remaining` -- every figure quoted since 2026-09-05 has to keep
+        meaning what it meant.
+
+        But the part the page means is still absent from the file. A choir sings
+        the second voice; a practice track built from a parse that holds one is
+        silence where that singer's line should be, and a system full of them is
+        a system with a part missing. Counted here and said out loud, so the
+        operator's eye -- which is what judges a reading at stage 1, per #147 --
+        is looking at the right system rather than at a page that reads clean.
+
+        A warning cannot fail the gate on its own, deliberately: see
+        `references.MEMORY`.
+        """
+        return self.unison
+
+    @property
     def structure(self) -> int:
         """1 where the reference and homr disagree about how many staves there are.
 
@@ -282,6 +304,21 @@ class Result:
     @property
     def faults(self) -> int:
         return self.voice + self.pitch + self.size
+
+
+def unison_note(count: int) -> str:
+    """What a unison warning says, in the one place it is worded.
+
+    The case page and the index both say it, and a warning that read as two
+    different claims on two screens would be worth less than one that reads as
+    none. The run line has its own short clause, the way `meter` does -- a line
+    of terminal output cannot carry a sentence this long.
+    """
+    return (f"{count} unison(s) here: the page prints one notehead for both "
+            f"parts and homr wrote it into one voice. No note is misread, so "
+            f"none of this is counted against the score — but the second "
+            f"part is not in the file, and a practice track for that singer "
+            f"would be silence. Look at these against the page.")
 
 
 PRINTED = Path(__file__).resolve().parent / "printed.json"

@@ -126,6 +126,14 @@ def frozen(entry: dict) -> bool:
 #: What a case is remembered by. `score` may not fall; the other two may not
 #: rise. Named here rather than spelled out at each use, so adding a fourth way
 #: of getting worse is one line.
+#:
+#: `unison` is deliberately **not** here, and the omission is the decision
+#: rather than an oversight. A unison homr wrote into one voice is not a
+#: misreading -- see `compare.Result.warnings` -- and #191 asked for it to be
+#: surfaced to the operator's eye, not enforced. Adding it would be the one
+#: line above, and would mean a case may not come to hold more of them than it
+#: was accepted with; that is a separate claim about what a fixture owes, and
+#: it is a person's to make.
 MEMORY = ("score", "structure", "meter")
 
 #: How much a score may fall and still count as the same reading. Zero, and

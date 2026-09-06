@@ -39,6 +39,31 @@ voices** a note is in rather than the voice's number, which neither file agrees
 about. A **unison** — one printed head serving two voices, which older choral
 engraving does constantly — counts once.
 
+### A unison homr wrote into one voice is a warning
+
+**This pull request proposes saying it out loud** (#191). Counting a unison once
+is right, and it made a whole class of case invisible. When the reference holds
+the head in both voices and homr's parse holds it in one, nothing is misread —
+one head on the page, one head in the file — so it scored nothing, said nothing
+on the run line, and drew a **green** row. A case whose second part is simply
+absent from the file therefore read exactly like a case with nothing to look at,
+and a practice track built from it is silence where that singer's line should
+be.
+
+So it is now **counted, said and shown**: a clause on the run line beside the
+meter, an amber row and an amber sentence on the case page beside the faults,
+and its own column and tile on the index. It is deliberately **not** a fault —
+it stays out of the notes-right percentage, out of `Result.remaining`, and out
+of `references.MEMORY`, so it cannot fail the gate on its own and every figure
+quoted since 2026-09-05 keeps meaning what it meant. What judges it is the
+operator's eye against the page, which is what #147 reserved that judgement for.
+
+That leaves one line unwritten on purpose. Putting `unison` into
+`references.MEMORY` would make it a thing a case may not come to hold *more* of
+than it was accepted with — the shape #175 gave `meter`. That is a second and
+different claim about what a committed fixture owes, and it is a person's to
+make rather than this change's.
+
 ## When the two disagree about the meter
 
 The check read `<divisions>` to turn durations into beats and never looked at

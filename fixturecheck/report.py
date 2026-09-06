@@ -67,8 +67,9 @@ tr.size  td { background: #fff8e1; }
 tr.timing td { background: #eef4fb; }
 tr.meter td { background: #f0e6fb; font-weight: 600; }
 tr.structure td { background: #f3e8fb; font-weight: 600; }
-tr.unison td { background: #f4f4f7; }
+tr.unison td { background: #fdf6e3; }
 td.ok { color: #1c5c2c; } td.no { color: #8a1f1f; font-weight: 600; }
+td.warn { color: #8a5a00; font-weight: 600; }
 .sum { display: flex; gap: 22px; flex-wrap: wrap; margin: 8px 0 16px; }
 .sum b { font-size: 20px; display: block; }
 .up { color: #1c5c2c; font-weight: 600; } .down { color: #8a1f1f; font-weight: 600; }
@@ -80,6 +81,10 @@ p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
 p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
          padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+/* Amber and not red: a unison written as one voice is not a fault, and not
+   green either, which is what it used to be. */
+p.warned { background: #fdf6e3; border: 1px solid #e6d9a8; border-radius: 6px;
+           padding: 9px 12px; margin: 0 0 14px; color: #6b4a00; }
 #runbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
           margin: 0 0 12px; padding: 9px 11px; background: #fff;
           border: 1px solid #e2e2e2; border-radius: 6px; font-size: 13px; }
@@ -501,6 +506,20 @@ def _bar_detail_row(case, parsed: Path, row) -> str:
         f"</div>{pictures}</details></td></tr>")
 
 
+def _verdict_class(kind: str) -> str:
+    """Green for a row that agrees, amber for a warning, red for a fault.
+
+    A unison row was green, on the argument that nothing in it was misread --
+    which is true, and which made a case whose second part is missing from the
+    file read as a case with nothing to look at. Three verdicts and not two.
+    """
+    if kind == "agree":
+        return "ok"
+    if kind == "unison":
+        return "warn"
+    return "no"
+
+
 def _still_wrong(result: Result, memory: dict | None) -> str:
     """What is still wrong here, and how that stands against the accepted reading.
 
@@ -520,6 +539,14 @@ def _still_wrong(result: Result, memory: dict | None) -> str:
         body = ("<p>Nothing this check can name is wrong with it. That is not the "
                 "same as the parse being right &mdash; look at the three pictures "
                 "below and decide that yourself.</p>")
+
+    # Said beside the faults rather than among them. A unison homr wrote into
+    # one voice is not on the list above and must not be: no note is misread,
+    # and folding it in would make the list mean something looser than it does.
+    # But leaving it unsaid is how a case missing a whole part came to read as
+    # a case with nothing wrong with it.
+    warned = (f"<p class='warned'>{html.escape(compare.unison_note(result.warnings))}"
+              f"</p>" if result.warnings else "")
 
     stood = ""
     if memory:
@@ -544,7 +571,7 @@ def _still_wrong(result: Result, memory: dict | None) -> str:
             f"<p class='lead'>Every fault this check can name, at "
             f"<b>{result.score:.1f}%</b> of notes right. Nothing here declares a "
             f"parse correct: that is a judgement made by eye against the printed "
-            f"page.</p>{body}{stood}")
+            f"page.</p>{body}{warned}{stood}")
 
 
 def case_page(case, parsed: Path, result: Result, before: dict | None,
@@ -593,7 +620,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None,
         f"<tr class='{row.kind if row.kind != 'agree' else ''}'>"
         f"<td>{html.escape(row.where)}</td><td>{html.escape(row.page)}</td>"
         f"<td>{html.escape(row.homr)}</td>"
-        f"<td class='{'ok' if row.kind in ('agree', 'unison') else 'no'}'>"
+        f"<td class='{_verdict_class(row.kind)}'>"
         f"{html.escape(row.verdict)}</td></tr>"
         + _bar_detail_row(case, parsed, row)
         for row in result.rows)
@@ -615,7 +642,7 @@ def case_page(case, parsed: Path, result: Result, before: dict | None,
   <div><b>{result.size}</b>different number of notes {moved('size')}</div>
   <div><b>{result.timing}</b>beat shifted {moved('timing')}</div>
   <div><b>{result.meter}</b>bar(s) in the wrong meter</div>
-  <div><b>{result.unison}</b>unisons</div>
+  <div><b>{result.unison}</b>unison(s) written as one voice</div>
 </div>
 {structure}
 
@@ -759,6 +786,7 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
         f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
         f"<td>{cell(e, 'timing')}</td>"
         f"<td>{cell(e, 'meter')}</td>"
+        f"<td class='{'warn' if e.get('unison') else ''}'>{cell(e, 'unison')}</td>"
         f"<td>{_staves(e)}</td>"
         f"<td>{e['score']:.1f}%</td></tr>"
         # Worst first means worst by what went wrong, and a case can go wrong
@@ -793,8 +821,14 @@ case.</p>
   <div><b>{total['timing']}</b>beat shifted</div>
   <div><b>{total['structure']}</b>case(s) with the wrong staves</div>
   <div><b>{total['meter']}</b>bar(s) in the wrong meter</div>
+  <div><b>{total['unison']}</b>unison(s) written as one voice</div>
   <div><b>{100.0 * total['agree'] / judged if judged else 0:.1f}%</b>of everything judged is right</div>
 </div>
+<p class="lead">A <b>unison</b> is not counted in that percentage and never
+will be: the page prints one notehead, homr wrote one notehead, and there is no
+note to call wrong. It is here because the part the page means is still absent
+from the file &mdash; a practice track for that singer would be silence &mdash;
+and a column of zeroes is the only honest way to notice a case that is not.</p>
 <p class="lead">The percentage counts a note homr <b>lost</b> and a beat it
 <b>moved</b> against it, as well as a note it read wrongly. It did not before,
 and under the older definition a system missing half its notes could read 100%.
@@ -806,7 +840,7 @@ answer it is has to be settled against the printed page. Where somebody has look
 written the count into <code>fixturecheck/printed.json</code>, the staves column
 names the side at fault; where nobody has, it does not guess.</p>
 <table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
-<th>note count</th><th>beat shifted</th><th>meter</th>
+<th>note count</th><th>beat shifted</th><th>meter</th><th>unison</th>
 <th>staves (who is wrong)</th><th>score</th></tr>
 {rows}</table>
 {NOT_MEASURED}
