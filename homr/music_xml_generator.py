@@ -164,12 +164,14 @@ def build_measures(
         read_clefs(current_measure, clefs)
         rebalance_measure_voices(current_measure, clefs)
         measures.append(current_measure)
+        cursors.reset()
 
     measure_number = 1
     groups = infer_meter_changes(add_tuplet_start_stop(group_into_chords(voice)))
     division, nominator = find_division_and_time_signature_nominator(groups)
     state = ConversionState(division, nominator,
                             find_nominator_per_time_signature(groups, nominator))
+    cursors = MeasureCursors(state)
     measures: list[ET.Element] = []
     current_measure = ET.Element("measure", number=str(measure_number))
     first_attributes = build_or_get_attributes(current_measure, None)
@@ -192,13 +194,14 @@ def build_measures(
                 attributes = build_or_get_attributes(current_measure, last_attributes)
                 build_multi_measure_rest(symbol, attributes)
             else:
-                staff_positions = group.into_positions()
-                for pos_no, staff_pos in enumerate(staff_positions):
-                    chord_duration = (
-                        group.get_duration() if pos_no == len(staff_positions) - 1 else Fraction(0)
-                    )
-                    for note_xml in build_note_chord(staff_pos, state, chord_duration):
+                for staff_pos in group.into_positions():
+                    lane = lane_of(staff_pos)
+                    for seek_xml in cursors.seek(cursors.at(lane)):
+                        current_measure.append(seek_xml)
+                    duration = staff_pos.get_duration()
+                    for note_xml in build_note_chord(staff_pos, state, duration):
                         current_measure.append(note_xml)
+                    cursors.advance(lane, duration)
             continue
         if rhythm == "newline":
             is_last_measure = group_no == len(groups) - 1
@@ -1032,6 +1035,82 @@ def build_backup(duration: Fraction, state: ConversionState) -> ET.Element:
     backup = ET.Element("backup")
     ET.SubElement(backup, "duration").text = str(int(duration * state.division))
     return backup
+
+
+def build_forward(duration: Fraction, state: ConversionState) -> ET.Element:
+    assert duration > Fraction(0), "Forward duration must be positive"
+    forward = ET.Element("forward")
+    ET.SubElement(forward, "duration").text = str(int(duration * state.division))
+    return forward
+
+
+class MeasureCursors:
+    """Where each stream of this bar has got to, and where the document is.
+
+    The generator used to have one cursor for the whole part and advance it by
+    `SymbolChord.get_duration()` -- the **shortest** note in the moment -- backing
+    the longer ones out again. That is right whenever the shortest note is the
+    one that really ends first, and wrong in two ways when it is not:
+
+    - **One staff's misread duration moves the other staff's later notes.** A
+      moment holding a correctly-read treble eighth and a bass sixteenth the page
+      prints as an eighth advanced the shared cursor a sixteenth, so the treble's
+      next note landed a sixteenth early on a staff nothing had misread.
+    - **Some correct music cannot be expressed at all.** A moment whose only
+      symbol is a quarter can only advance a quarter, so a bar whose printed
+      moments fall at 0, 1.0 (a lone quarter), 1.5 and 1.75 has no arrangement of
+      its true tokens that places them.
+
+    So each stream keeps its own cursor and advances by *its own* shortest note.
+    MusicXML has one cursor, so a bar whose streams stand at different points is
+    written by seeking between them: `<backup>` and `<forward>` are exactly how
+    the format says "go back and write the other one". Cursors reset at the
+    barline, so a stream that drifts on a misread duration drifts within its bar
+    and no further.
+    """
+
+    def __init__(self, state: ConversionState) -> None:
+        self.state = state
+        self.lanes: dict[tuple[str, ...], Fraction] = {}
+        self.doc = Fraction(0)
+
+    def reset(self) -> None:
+        self.lanes.clear()
+        self.doc = Fraction(0)
+
+    def at(self, lane: tuple[str, ...]) -> Fraction:
+        return self.lanes.get(lane, Fraction(0))
+
+    def seek(self, target: Fraction) -> list[ET.Element]:
+        """Move the document cursor to `target`, saying so in the measure."""
+        step: list[ET.Element] = []
+        if target > self.doc:
+            step.append(build_forward(target - self.doc, self.state))
+        elif target < self.doc:
+            step.append(build_backup(self.doc - target, self.state))
+        self.doc = target
+        return step
+
+    def advance(self, lane: tuple[str, ...], duration: Fraction) -> None:
+        """This lane has just written `duration` of music, and so has the document.
+
+        `build_note_chord` is handed the same figure and comes out that much
+        further on, so the two stay in step without the caller measuring what it
+        wrote.
+        """
+        self.lanes[lane] = self.at(lane) + duration
+        self.doc += duration
+
+
+def lane_of(staff_position: SymbolChord) -> tuple[str, ...]:
+    """Which stream this staff's share of a moment belongs to.
+
+    The staff, which is what `into_positions` has just split on. A part homr
+    fused into a grand staff carries two of them, and they are two printed
+    staves of music that keep their own time.
+    """
+    position = staff_position.symbols[0].position if staff_position.symbols else "upper"
+    return (position,)
 
 
 def build_note_chord(

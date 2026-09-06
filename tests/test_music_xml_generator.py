@@ -41,6 +41,25 @@ def _staff(note: ET.Element) -> str:
     return note.findtext("staff", "")
 
 
+def _beats(measure: ET.Element) -> list[int]:
+    """The beat each note sounds on, walking the measure's own cursor."""
+    at = 0
+    last = 0
+    starts: list[int] = []
+    for child in measure:
+        if child.tag == "backup":
+            at -= int(child.findtext("duration", "0"))
+        elif child.tag == "forward":
+            at += int(child.findtext("duration", "0"))
+        elif child.tag == "note":
+            is_chord = child.find("chord") is not None
+            starts.append(last if is_chord else at)
+            if not is_chord:
+                last = at
+                at += int(child.findtext("duration", "0"))
+    return starts
+
+
 def _backups(measure: ET.Element) -> list[int]:
     return [int(c.findtext("duration", "0")) for c in measure if c.tag == "backup"]
 
@@ -103,6 +122,56 @@ barline . . . . ."""
         for note in notes:
             self.assertNotEqual(_voice(note), "")
             self.assertEqual(_staff(note), "1")
+
+    def test_one_staff_is_untouched_by_per_staff_cursors(self) -> None:
+        """A part with one staff has one stream, so nothing about it moves.
+
+        Most of this repertoire is one staff to a part, and the cursors are what
+        every note's beat is measured from -- so the change has to be provably
+        confined to the parts that carry two staves.
+        """
+        one_staff = """clef_G2 _ _ _ _ upper
+timeSignature/4 . . . . .
+note_2 C4 _ _ _ upper&note_4 E4 _ _ _ upper
+note_4 F4 _ _ _ upper
+note_4 G4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(one_staff.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        self.assertEqual(
+            [(_pitch(n), _duration(n)) for n in _notes(measure)],
+            [("E", 1), ("C", 2), ("F", 1), ("G", 1)],
+        )
+        self.assertEqual(_beats(measure), [0, 0, 1, 2])
+        self.assertNotIn("forward", [child.tag for child in measure])
+
+    def test_a_misread_duration_moves_only_its_own_staff(self) -> None:
+        """The upper staff is read exactly right, and stays where it was read.
+
+        Both staves play two eighths and then a note; the lower staff's second
+        note comes back a sixteenth, which the page prints as an eighth. Under
+        one shared cursor the moment advanced by the shortest note in it, so the
+        upper staff's third note landed a sixteenth early -- a wrong beat on a
+        staff nothing had misread. Each staff now advances by its own note, so
+        the lower staff carries its own error and nothing else does.
+        """
+        misread = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+timeSignature/4 . . . . .
+note_8 C5 _ _ _ upper&note_8 C3 _ _ _ lower
+note_8 D5 _ _ _ upper&note_16 D3 _ _ _ lower
+note_4 E5 _ _ _ upper&note_8 E3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(misread.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        divisions = int(measure.findtext("attributes/divisions", "1"))
+        upper = [
+            beat
+            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
+            if _staff(note) == "1"
+        ]
+        self.assertEqual(upper, [0, divisions // 2, divisions])
 
     def test_grand_staff_generation(self) -> None:
         grandstaff = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
