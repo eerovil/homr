@@ -7,8 +7,8 @@ from homr.music_xml_generator import (
     generate_xml,
     rebalance_measure_voices,
 )
-from homr.stem_voice_hints import SHARED, add_stem_voice_hints
-from homr.transformer.vocabulary import EncodedSymbol
+from homr.stem_voice_hints import SHARED, add_stem_voice_hints, pair_unison_stems
+from homr.transformer.vocabulary import EncodedSymbol, _remove_duplicated_piches
 
 
 def _note(x: float, y: float, directions: list[StemDirection]) -> SimpleNamespace:
@@ -204,3 +204,188 @@ def test_a_grace_note_has_no_duration_to_double_behind() -> None:
 
     assert len(measure.findall("note")) == 1
     assert not measure.findall("backup")
+
+
+def _head(x: float, y: float, position: int, directions: list[StemDirection]) -> SimpleNamespace:
+    return SimpleNamespace(center=(x, y), position=position, stem_directions=directions)
+
+
+def _unison(rhythms: tuple[str, str], xs: tuple[float, float]) -> list[EncodedSymbol]:
+    """A treble staff whose one moment holds two decoded notes of one pitch."""
+    return [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        EncodedSymbol(rhythms[0], pitch="B4", position="upper", coordinates=(xs[0], 55.0)),
+        EncodedSymbol(rhythms[1], pitch="B4", position="upper", coordinates=(xs[1], 58.0)),
+    ]
+
+
+def test_a_unison_drawn_as_two_heads_gives_each_note_its_own_stem() -> None:
+    """The shape `SHARED` does not carry: two heads side by side, not one.
+
+    Both decoded notes claim the same staff position and their attention points
+    are a few pixels apart, so `_at_position` hands both of them the same head
+    and the pair then reads as one note written twice.
+    """
+    heads = [
+        _head(164.0, 62.0, 5, [StemDirection.DOWN]),
+        _head(172.0, 62.0, 5, [StemDirection.UP]),
+    ]
+    symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
+
+    assert pair_unison_stems(symbols, heads) == 1
+    assert [symbol.stem_direction for symbol in symbols[1:]] == ["down", "up"]
+
+
+def test_the_note_on_the_left_takes_the_head_on_the_left() -> None:
+    """Matched one to one across the staff, which is the trustworthy axis.
+
+    On `hanget-soi`'s bar 3 the left head is the lower voice's open half and the
+    right one the upper voice's filled eighth; swapping them puts each duration
+    in the other singer's part.
+    """
+    heads = [
+        _head(264.4, 58.0, 5, [StemDirection.DOWN]),
+        _head(272.4, 58.0, 5, [StemDirection.UP]),
+    ]
+    symbols = _unison(("note_8", "note_2"), (275.8, 266.5))
+
+    assert pair_unison_stems(symbols, heads) == 1
+    by_rhythm = {symbol.rhythm: symbol.stem_direction for symbol in symbols[1:]}
+    assert by_rhythm == {"note_2": "down", "note_8": "up"}
+
+
+def test_one_head_is_not_a_unison() -> None:
+    heads = [_head(164.0, 62.0, 5, [StemDirection.DOWN])]
+    symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
+
+    assert pair_unison_stems(symbols, heads) == 0
+    assert [symbol.stem_direction for symbol in symbols[1:]] == [None, None]
+
+
+def test_two_heads_stemmed_the_same_way_are_not_two_voices() -> None:
+    """One line cannot hold the same pitch twice at once, so this stays a duplicate."""
+    heads = [
+        _head(164.0, 62.0, 5, [StemDirection.DOWN]),
+        _head(172.0, 62.0, 5, [StemDirection.DOWN]),
+    ]
+    symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
+
+    assert pair_unison_stems(symbols, heads) == 0
+
+
+def test_two_heads_at_two_positions_are_left_to_the_rescue() -> None:
+    """That is a misread pitch, and `rescue_duplicate_pitches` owns it."""
+    heads = [
+        _head(164.0, 62.0, 5, [StemDirection.DOWN]),
+        _head(172.0, 50.0, 8, [StemDirection.UP]),
+    ]
+    symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
+
+    assert pair_unison_stems(symbols, heads) == 0
+
+
+def test_the_rest_of_the_chord_does_not_hide_the_pair() -> None:
+    """The other notes of the moment share the column and say nothing about it."""
+    heads = [
+        _head(164.0, 62.0, 5, [StemDirection.DOWN]),
+        _head(172.0, 62.0, 5, [StemDirection.UP]),
+        _head(165.0, 78.0, 2, [StemDirection.DOWN]),
+    ]
+    symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
+    symbols.append(
+        EncodedSymbol("note_2", pitch="F4", position="upper", coordinates=(167.0, 76.0))
+    )
+
+    assert pair_unison_stems(symbols, heads) == 1
+
+
+def test_a_pitch_written_twice_with_opposite_stems_is_kept() -> None:
+    """Two stems means the segmentation found two heads, so it is two voices."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 2
+
+
+def test_a_pitch_written_twice_the_same_way_is_still_one_note() -> None:
+    same = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="down"),
+    ]
+    stemless = [
+        EncodedSymbol("note_2", pitch="B4", position="upper"),
+        EncodedSymbol("note_8", pitch="B4", position="upper"),
+    ]
+
+    assert len(_remove_duplicated_piches(same)) == 1
+    assert len(_remove_duplicated_piches(stemless)) == 1
+
+
+def test_one_stem_beside_none_is_not_two_heads() -> None:
+    """Both directions together are the evidence; one of them is not.
+
+    Read symbol by symbol this pair gets two different keys -- `B4 upper down`
+    and `B4 upper` -- and neither is dropped, so a second note is written where
+    nothing ever saw a second head.
+    """
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper"),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_a_stem_beside_a_shared_head_is_not_two_heads() -> None:
+    """`SHARED` is doubled in the XML layer; doubling it here as well invents one."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction=SHARED),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_a_third_note_of_the_same_pitch_collapses_the_whole_group() -> None:
+    """Two heads are two heads; three decoded notes on them are the decoder repeating."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_4", pitch="B4", position="upper"),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_the_pair_survives_beside_the_rest_of_its_chord() -> None:
+    """The other pitches of the moment are their own groups and are untouched."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_2", pitch="G4", position="upper", stem_direction="down"),
+    ]
+
+    kept = _remove_duplicated_piches(chord)
+
+    assert [symbol.pitch for symbol in kept] == ["B4", "B4", "G4"]
+
+
+def test_the_two_notes_of_the_unison_reach_the_file_as_two_voices() -> None:
+    """End to end: opposite stems are what the voice rebalancer splits on."""
+    voice = [
+        EncodedSymbol("clef_G2", position="upper"),
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("chord"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("barline"),
+    ]
+    xml = generate_xml(XmlGeneratorArguments(), [voice], "")
+    notes = xml.findall(".//measure/note")
+
+    assert [note.findtext("pitch/step") for note in notes] == ["B", "B"]
+    # The upper voice is written first, so the eighth leads.
+    assert [note.findtext("stem") for note in notes] == ["up", "down"]
+    assert [note.findtext("type") for note in notes] == ["eighth", "half"]
+    assert len({note.findtext("voice") for note in notes}) == 2

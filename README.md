@@ -78,8 +78,24 @@ singing the same note -- so such a head is written into **both** voices, which
 renders as the one head with two stems the page draws. It is not doubled where
 the other voice is already sounding on that staff at that moment: there the
 second voice is in the bar under its own stem, and a third note would be
-invented. A unison the page draws as two adjacent heads instead is a different
-shape and is not affected.
+invented.
+
+A unison the page draws as **two adjacent heads** is a different shape and is
+reached a different way. Both heads survive segmentation and the decoder emits
+both notes, at the right pitch and -- where the two parts hold the note for
+different lengths -- at the right two durations. What lost one of them was that
+both decoded notes claim the same staff position and their attention points sit
+a few pixels apart, so both matched the *same* head and took the same stem, and
+a pitch written twice with one stem is a duplicate: the second was deleted. So
+where a moment on one staff holds two decoded notes of one pitch and
+segmentation found exactly two heads at that position carrying opposite stems,
+the two are matched to the two heads **one to one, left to right** -- the axis
+the attention point is trustworthy on -- and a pitch written twice with opposite
+stems is no longer read as one note written twice. Nothing is invented: the two
+notes were already there.
+
+Whole notes are outside this. They carry no stem for the segmentation to find,
+so a unison of two whole heads still reads as one note.
 
 ## Example
 
