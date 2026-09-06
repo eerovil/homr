@@ -22,6 +22,28 @@ def case(name, **counts):
     return series.CaseRecord(name, counts=full)
 
 
+def _stands(name, ok):
+    """A case reading at 100%, or two notes below the 100% it was accepted at."""
+    counts = {k: 0 for k in series.COUNTS}
+    counts["agree"] = 10
+    if not ok:
+        counts.update({"agree": 8, "pitch": 2})
+    return series.CaseRecord(name, counts=counts)
+
+
+def _accepted(*names, score=100.0):
+    """What those cases were accepted at, in the shape the manifest holds."""
+    return {n: {"score": score, "structure": 0, "meter": 0} for n in names}
+
+
+@pytest.fixture
+def remembered(monkeypatch):
+    """Point the memory at a mapping the test states, not at this checkout's."""
+    def use(mapping):
+        monkeypatch.setattr(references, "accepted", lambda *a, **k: dict(mapping))
+    return use
+
+
 def test_a_small_run_does_not_destroy_a_large_one(tmp_path):
     """The whole reason this file exists."""
     big = tmp_path / "series.jsonl"
@@ -64,14 +86,20 @@ def test_losing_notes_and_shifting_beats_count_against_the_score():
     assert result.judged == 10          # notes matched one against one
     assert result.scored == 20          # ...plus what was lost
     assert result.score == 50.0
-    assert not result.perfect
 
 
-def test_a_case_with_nothing_in_it_is_not_perfect():
-    """Or an empty parse would sail through the gate."""
-    assert not Result().perfect
-    assert Result(agree=5).perfect
-    assert not Result(agree=5, staves_page=2, staves_homr=3).perfect
+def test_nothing_computes_perfection_any_more():
+    """#147 reserved the word for the operator; #152 measured what it was worth.
+
+    The flag is gone rather than renamed. What a case says instead is its score
+    and the list of what is still wrong with it — and a case with nothing in it
+    says so, rather than coming back with an empty list that reads as fine.
+    """
+    assert not hasattr(Result(agree=5), "perfect")
+    assert Result(agree=5).remaining == []
+    assert Result().remaining == ["nothing was judged — this case was not read"]
+    assert Result(agree=5, staves_page=2, staves_homr=3).remaining == [
+        "staves: the reference says 2 and homr wrote 3"]
 
 
 def test_a_case_that_could_not_be_read_is_recorded_not_skipped(tmp_path):
@@ -191,10 +219,12 @@ def test_freezing_a_few_does_not_drop_the_rest(tmp_path):
     assert len(held) == 5
 
 
-def test_the_summary_names_which_homr_and_says_what_it_cannot_measure(tmp_path):
+def test_the_summary_names_which_homr_and_says_what_it_cannot_measure(
+        tmp_path, remembered):
     path = tmp_path / "series.jsonl"
+    remembered(_accepted(*"abcde"))
     series.record_run("fixturecheck", "all",
-                      [case("a", agree=9, pitch=1)] + [_perfect(n, True) for n in "abcde"],
+                      [case("a", agree=9, pitch=1)] + [_stands(n, True) for n in "abcde"],
                       references="ref9", extra={"committed": list("abcde")},
                       path=path)
     written = quality.render(path)
@@ -206,12 +236,13 @@ def test_the_summary_names_which_homr_and_says_what_it_cannot_measure(tmp_path):
     assert "Detection" in written
 
 
-def test_the_summary_names_the_failing_fixtures(tmp_path):
+def test_the_summary_names_the_cases_that_fell(tmp_path, remembered):
     path = tmp_path / "series.jsonl"
     roster = ["hanget-soi", "kolme-kakea", "laulun-aika-s2", "sammon-ryosto", "system4"]
+    remembered(_accepted(*roster))
     series.record_run(
         "fixturecheck", "ten",
-        [_perfect(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
+        [_stands(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
         references="r", extra={"committed": roster}, path=path)
     written = quality.render(path)
 
@@ -234,18 +265,20 @@ def test_the_two_harnesses_are_reported_apart(tmp_path):
     assert "not** averaged" in written or "not averaged" in written
 
 
-def test_a_run_that_judged_no_fixtures_cannot_turn_a_failing_gate_green(tmp_path):
+def test_a_run_that_judged_no_fixtures_cannot_turn_a_failing_gate_green(
+        tmp_path, remembered):
     """The bug: a song-only run recorded `passed: true` over a standing FAIL.
 
     Most runs judge no committed fixture -- a song system, a retry of one case
     -- and reading "this run had nothing to say" as "the gate is fine" replaced
-    a real `FAIL - 3/5` with `all 0 committed fixtures are perfect`.
+    a real `FAIL - 3/5` with a pass over zero cases.
     """
     path = tmp_path / "series.jsonl"
     roster = ["hanget-soi", "kolme-kakea", "laulun-aika-s2", "sammon-ryosto", "system4"]
+    remembered(_accepted(*roster))
     series.record_run(
         "fixturecheck", "all",
-        [_perfect(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
+        [_stands(n, n not in ("hanget-soi", "sammon-ryosto")) for n in roster],
         references="r", extra={"committed": roster}, path=path)
     # ...then an ordinary run over song systems only, which judges no fixture.
     series.record_run("fixturecheck", "one", [case("song-s4", agree=20)],
@@ -255,19 +288,29 @@ def test_a_run_that_judged_no_fixtures_cannot_turn_a_failing_gate_green(tmp_path
     written = quality.render(path)
     assert "FAIL" in written
     assert "hanget-soi" in written and "sammon-ryosto" in written
-    assert "all 0 committed fixtures" not in written
+    assert "all 0 committed cases" not in written
     assert "3/5" in written                 # still speaking for all five
 
 
-def test_a_run_with_no_fixtures_in_it_records_no_gate():
-    """`gate_over`'s own rule: no fixtures judged is no opinion, not a pass."""
+def test_a_run_with_nothing_remembered_in_it_records_no_gate(monkeypatch):
+    """`gate_over`'s own rule: nothing to judge is no opinion, not a pass.
+
+    Judging *every* case in the run is the change here — the tiers are not
+    separate rules, so a song system is gated exactly like a committed fixture.
+    A case nobody has accepted a reading for is still no opinion.
+    """
     from fixturecheck.__main__ import gate_over
 
-    committed = {"system4", "hanget-soi"}
-    assert gate_over([case("song-s1", agree=5)], committed) is None
-    judged = gate_over([series.CaseRecord("system4", counts={"perfect": True})],
-                       committed)
-    assert judged == {"fixtures": 1, "perfect": 1, "failing": [], "passed": True}
+    monkeypatch.setattr(references, "accepted",
+                        lambda *a, **k: _accepted("song-s1", score=90.0))
+    assert gate_over([case("never-seen", agree=5)], []) is None
+    # A song system is judged, and by its own memory — not by being a fixture.
+    passing = gate_over([case("song-s1", agree=10, pitch=1)], [])
+    assert passing["judged"] == ["song-s1"] and passing["passed"]
+    failing = gate_over([case("song-s1", agree=8, pitch=2)], [])
+    assert not failing["passed"]
+    assert "80.00%" in failing["below"]["song-s1"][0]
+    assert "90.00%" in failing["below"]["song-s1"][0]
 
 
 def test_nothing_recorded_is_not_a_passing_gate(tmp_path):
@@ -286,54 +329,51 @@ def _fixture_run(path, cases_, at_committed=("a", "b", "c", "d", "e"), **kw):
                              path=path, **kw)
 
 
-def _perfect(name, ok):
-    counts = {k: 0 for k in series.COUNTS}
-    counts.update({"agree": 10, "perfect": ok})
-    if not ok:
-        counts["pitch"] = 2
-    return series.CaseRecord(name, counts=counts)
-
-
-def test_rerunning_one_passing_fixture_cannot_turn_a_failing_gate_green(tmp_path):
+def test_rerunning_one_passing_fixture_cannot_turn_a_failing_gate_green(
+        tmp_path, remembered):
     """The hole the zero-fixture fix left open.
 
     `fixturecheck one system4` judges one fixture, passes it, and used to
-    publish `1/1 perfect` — so a standing `FAIL - 3/5` went green because
-    somebody re-ran a fixture that was never the problem, while both failing
-    ones were still failing and nothing said so.
+    publish a pass over the one case it looked at — so a standing `FAIL - 3/5`
+    went green because somebody re-ran a fixture that was never the problem,
+    while both failing ones were still failing and nothing said so.
     """
     path = tmp_path / "series.jsonl"
-    # A full run: three perfect, two not.
-    _fixture_run(path, [_perfect("a", True), _perfect("b", True), _perfect("c", True),
-                        _perfect("d", False), _perfect("e", False)], tier="all")
+    remembered(_accepted(*"abcde"))
+    # A full run: three standing, two fallen.
+    _fixture_run(path, [_stands("a", True), _stands("b", True), _stands("c", True),
+                        _stands("d", False), _stands("e", False)], tier="all")
     assert "FAIL" in quality.render(path)
 
     # ...then one passing fixture on its own, which says nothing about d and e.
-    _fixture_run(path, [_perfect("a", True)])
+    _fixture_run(path, [_stands("a", True)])
 
     written = quality.render(path)
     assert "FAIL" in written
     assert "3/5" in written
     assert "`d`" in written and "`e`" in written
-    assert "all 1 committed fixtures" not in written
+    assert "all 1 committed cases" not in written
 
 
-def test_the_published_gate_is_each_fixtures_own_latest_result(tmp_path):
-    """A run moves the fixtures it ran, and only those."""
+def test_the_published_gate_is_each_cases_own_latest_result(tmp_path, remembered):
+    """A run moves the cases it ran, and only those."""
     path = tmp_path / "series.jsonl"
-    _fixture_run(path, [_perfect(n, n not in ("d", "e")) for n in "abcde"], tier="all")
+    remembered(_accepted(*"abcde"))
+    _fixture_run(path, [_stands(n, n not in ("d", "e")) for n in "abcde"], tier="all")
     gate = series.published_gate(series.runs(path))
-    assert (gate["perfect"], gate["fixtures"]) == (3, 5)
+    assert (gate["standing"], gate["cases"]) == (3, 5)
     assert gate["failing"] == ["d", "e"] and not gate["passed"]
+    # And it says what fell, rather than only that something did.
+    assert "80.00%" in gate["below"]["d"][0]
 
     # Fixing one of them, on its own, moves exactly one.
-    _fixture_run(path, [_perfect("d", True)])
+    _fixture_run(path, [_stands("d", True)])
     gate = series.published_gate(series.runs(path))
-    assert (gate["perfect"], gate["fixtures"]) == (4, 5)
+    assert (gate["standing"], gate["cases"]) == (4, 5)
     assert gate["failing"] == ["e"] and not gate["passed"]
 
-    # And fixing the last one passes it, because now all five stand perfect.
-    _fixture_run(path, [_perfect("e", True)])
+    # And fixing the last one passes it, because now all five stand.
+    _fixture_run(path, [_stands("e", True)])
     assert series.published_gate(series.runs(path))["passed"]
 
 
@@ -350,7 +390,7 @@ def test_a_one_case_run_still_reports_every_case(tmp_path, monkeypatch):
     monkeypatch.setattr(series, "SERIES", path)
     monkeypatch.setattr(report, "OUT", tmp_path / "report")
 
-    _fixture_run(path, [_perfect(n, n != "d") for n in "abcde"], tier="all")
+    _fixture_run(path, [_stands(n, n != "d") for n in "abcde"], tier="all")
 
     live = [{"name": "a", "page": "a.html", "score": 100.0, "agree": 10,
              "voice": 0, "pitch": 0, "size": 0, "timing": 0, "structure": 0,
@@ -376,39 +416,41 @@ def _under(path, cases_, homr, references="refA", tier="one",
                              path=path)
 
 
-def test_a_pass_under_one_homr_is_not_a_pass_under_the_next(tmp_path):
+def test_a_pass_under_one_homr_is_not_a_pass_under_the_next(tmp_path, remembered):
     """The measurement identity, and why an aggregate needs one.
 
-    Five out of five perfect under homr A, then a single passing fixture under
+    Five out of five standing under homr A, then a single passing fixture under
     homr B. The other four have never been run on B at all -- and the old
     aggregate, which walked every run regardless of what measured it, kept
     publishing A's pass under B's name.
     """
     path = tmp_path / "series.jsonl"
-    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
+    remembered(_accepted(*"abcde"))
+    _under(path, [_stands(n, True) for n in "abcde"], homr="A", tier="all")
     assert series.published_gate(series.runs(path))["passed"]
 
-    _under(path, [_perfect("a", True)], homr="B")
+    _under(path, [_stands("a", True)], homr="B")
 
     gate = series.published_gate(series.runs(path))
     assert gate["homr"] == "B"
     assert not gate["passed"]
-    assert gate["perfect"] == 1 and gate["fixtures"] == 5
+    assert gate["standing"] == 1 and gate["cases"] == 5
     assert gate["unevaluated"] == ["b", "c", "d", "e"]
     assert "FAIL" in quality.render(path)
     assert "1/5" in quality.render(path)
 
 
-def test_a_pass_does_not_survive_the_references_moving(tmp_path):
+def test_a_pass_does_not_survive_the_references_moving(tmp_path, remembered):
     """The same hole, through the other half of the identity."""
     path = tmp_path / "series.jsonl"
-    _under(path, [_perfect(n, True) for n in "abcde"], homr="A",
+    remembered(_accepted(*"abcde"))
+    _under(path, [_stands(n, True) for n in "abcde"], homr="A",
            references="refA", tier="all")
     assert series.published_gate(series.runs(path))["passed"]
 
     # Same homr, corrected references: the earlier results were measured
     # against something else.
-    _under(path, [_perfect("a", True)], homr="A", references="refB")
+    _under(path, [_stands("a", True)], homr="A", references="refB")
 
     gate = series.published_gate(series.runs(path))
     assert not gate["passed"]
@@ -418,8 +460,8 @@ def test_a_pass_does_not_survive_the_references_moving(tmp_path):
 
 def test_standing_results_are_kept_apart_by_what_measured_them(tmp_path):
     path = tmp_path / "series.jsonl"
-    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
-    _under(path, [_perfect("a", True)], homr="B")
+    _under(path, [_stands(n, True) for n in "abcde"], homr="A", tier="all")
+    _under(path, [_stands("a", True)], homr="B")
 
     everything = series.standing("fixturecheck", path)
     assert len(everything) == 5
@@ -438,8 +480,8 @@ def test_the_report_does_not_count_rows_from_another_homr(tmp_path, monkeypatch)
     monkeypatch.setattr(series, "SERIES", path)
     monkeypatch.setattr(report, "OUT", tmp_path / "report")
 
-    _under(path, [_perfect(n, True) for n in "abcde"], homr="A", tier="all")
-    _under(path, [_perfect("a", True)], homr="B")
+    _under(path, [_stands(n, True) for n in "abcde"], homr="A", tier="all")
+    _under(path, [_stands("a", True)], homr="B")
 
     live = [{"name": "a", "page": "a.html", "score": 100.0, "agree": 10,
              "voice": 0, "pitch": 0, "size": 0, "timing": 0, "structure": 0,
@@ -458,10 +500,11 @@ def test_the_report_does_not_count_rows_from_another_homr(tmp_path, monkeypatch)
     assert "4 row(s)" in note and "homr" in note
 
 
-def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path):
+def test_a_fixture_nobody_has_judged_holds_the_gate_open(tmp_path, remembered):
     """"We have never looked" is not "we looked and it was fine"."""
     path = tmp_path / "series.jsonl"
-    _fixture_run(path, [_perfect(n, True) for n in "abc"])
+    remembered(_accepted(*"abcde"))
+    _fixture_run(path, [_stands(n, True) for n in "abc"])
     gate = series.published_gate(series.runs(path))
     assert not gate["passed"]
     assert gate["unevaluated"] == ["d", "e"]
@@ -617,7 +660,7 @@ def test_the_page_says_which_series_it_was_rendered_from(tmp_path, monkeypatch):
     checkout.mkdir(parents=True)
     path = checkout / "series.jsonl"
     monkeypatch.setattr(series, "SERIES", path)
-    _under(path, [_perfect("a", True)], homr="A")
+    _under(path, [_stands("a", True)], homr="A")
 
     where = series.origin()
     assert where["checkout"] == "issue-142" and where["runs"] == 1
@@ -646,8 +689,8 @@ def test_two_checkouts_that_share_a_name_are_not_one_history(tmp_path, monkeypat
     second = tmp_path / "b" / "homr" / "fixturecheck"
     for where in (first, second):
         where.mkdir(parents=True)
-    _under(first / "series.jsonl", [_perfect("x", True)], homr="A")
-    _under(second / "series.jsonl", [_perfect("x", True)], homr="A")
+    _under(first / "series.jsonl", [_stands("x", True)], homr="A")
+    _under(second / "series.jsonl", [_stands("x", True)], homr="A")
 
     one = series.origin(first / "series.jsonl")
     two = series.origin(second / "series.jsonl")
@@ -677,12 +720,12 @@ def test_a_branch_switch_under_one_path_is_seen(tmp_path, monkeypatch):
     path = checkout / "series.jsonl"
     monkeypatch.setattr(series, "SERIES", path)
 
-    _under(path, [_perfect("x", True)], homr="A")
+    _under(path, [_stands("x", True)], homr="A")
     assert report._series_change(series.origin()) == ""
 
     # A different branch is checked out; the committed series is another one.
     path.unlink()
-    _under(path, [_perfect("y", True)], homr="B")
+    _under(path, [_stands("y", True)], homr="B")
     said = report._series_change(series.origin())
     assert "not a continuation" in said and "a different series" in said
 
@@ -703,14 +746,14 @@ def test_a_history_rewritten_after_the_last_render_is_seen(tmp_path, monkeypatch
     path = checkout / "series.jsonl"
     monkeypatch.setattr(series, "SERIES", path)
 
-    _under(path, [_perfect("x", True)], homr="A")
+    _under(path, [_stands("x", True)], homr="A")
     shared = path.read_text()
-    _under(path, [_perfect("y", True)], homr="A")
+    _under(path, [_stands("y", True)], homr="A")
     assert report._series_change(series.origin()) == ""      # two runs, seen
 
     # Same opening run, different second one: the tail was rewritten.
     path.write_text(shared)
-    _under(path, [_perfect("z", False)], homr="A")
+    _under(path, [_stands("z", False)], homr="A")
     now = series.origin()
     said = report._series_change(now)
     assert "rewritten after the point" in said
@@ -721,7 +764,7 @@ def _line(path, name, at):
     return series.append(
         {"at": at, "harness": "fixturecheck", "tier": "one", "homr": name,
          "references": "r", "committed": ["a"],
-         "cases": {"a": {"outcome": series.READ, "perfect": True}},
+         "cases": {"a": {"outcome": series.READ, "agree": 1}},
          "headline": {"right": 1, "judged": 1, "percent": 100.0}},
         path)
 
@@ -785,10 +828,10 @@ def test_an_ordinary_append_says_nothing(tmp_path, monkeypatch):
     path = checkout / "series.jsonl"
     monkeypatch.setattr(series, "SERIES", path)
 
-    _under(path, [_perfect("x", True)], homr="A")
+    _under(path, [_stands("x", True)], homr="A")
     assert report._series_change(series.origin()) == ""
     for _ in range(3):
-        _under(path, [_perfect("x", True)], homr="A")
+        _under(path, [_stands("x", True)], homr="A")
         assert report._series_change(series.origin()) == ""
 
 

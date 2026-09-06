@@ -19,7 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from fixturecheck import bars, cases, compare, series
+from fixturecheck import bars, cases, compare, references, series
 from fixturecheck.compare import Result
 
 #: Where the report is written, and **outside any checkout by default**.
@@ -197,33 +197,41 @@ def _provenance(run: dict | None) -> str:
 
 
 def _gate(run: dict | None) -> str:
-    """The gate over all five committed fixtures, not over this run's share.
+    """The gate over all the committed cases, not over this run's share.
 
     The same figure `QUALITY.md` publishes, and it has to be: the table below
-    now lists every case at its own latest measurement, so a banner reporting
-    only what this run happened to judge sat green above two failing rows. A run
-    of one fixture used to say "all 1 committed fixture(s) in this run are
-    perfect" there, which is true and reads as the opposite of what it means.
+    lists every case at its own latest measurement, so a banner reporting only
+    what this run happened to judge sat green above two failing rows.
+
+    What it says has changed with the rule under it. It used to count fixtures
+    that were `perfect`; it now counts cases standing at or above the reading
+    they were last accepted at, and names what fell where one did.
     """
     gate = series.published_gate(
         [r for r in series.runs() if r.get("harness") == "fixturecheck"])
     if not gate:
         return ""
     if gate["passed"]:
-        return (f"<p class='pass'>Gate <b>passed</b>: all {gate['fixtures']} committed "
-                f"fixtures stand perfect under homr "
-                f"<b>{html.escape(gate['homr'])}</b>, latest as of "
+        return (f"<p class='pass'>Gate <b>passed</b>: all {gate['cases']} committed "
+                f"cases stand at or above the reading they were accepted at, under "
+                f"homr <b>{html.escape(gate['homr'])}</b>, latest as of "
                 f"{html.escape(gate['as_of'])}.</p>")
-    failing = html.escape(", ".join(gate["failing"]))
-    below = f" Below 100%: <b>{failing}</b>." if failing else ""
+    fell = "".join(
+        f"<li><b>{html.escape(name)}</b> &mdash; {html.escape('; '.join(said))}</li>"
+        for name, said in gate["below"].items())
+    fell = f"<ul>{fell}</ul>" if fell else ""
     never = ""
     if gate["unevaluated"]:
         never = (f" Not judged under homr <b>{html.escape(gate['homr'])}</b>: "
                  f"<b>{html.escape(', '.join(gate['unevaluated']))}</b>.")
-    return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['perfect']}/{gate['fixtures']} "
-            f"committed fixtures perfect, each counted at its own latest result."
-            f"{below}{never} These are small systems this repository owns outright "
-            f"and are expected to be exactly right.</p>")
+    if gate["unremembered"]:
+        never += (f" No accepted reading yet: "
+                  f"<b>{html.escape(', '.join(gate['unremembered']))}</b> &mdash; "
+                  f"the next run over them records one.")
+    return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['standing']}/{gate['cases']} "
+            f"committed cases stand, each counted at its own latest result."
+            f"{never} Nothing may read below what it was accepted at; a case that "
+            f"improves takes its memory up with it.{fell}</p>")
 
 
 def _controls(names: list[str]) -> str:
@@ -493,7 +501,54 @@ def _bar_detail_row(case, parsed: Path, row) -> str:
         f"</div>{pictures}</details></td></tr>")
 
 
-def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
+def _still_wrong(result: Result, memory: dict | None) -> str:
+    """What is still wrong here, and how that stands against the accepted reading.
+
+    **The operator's stage-1 eye reads this**, and it is what replaces the
+    `perfect` flag the page used to carry. A flag said one bit about a whole
+    system; a list says which faults are left, so the judgement it invites is
+    "are these real, and are they on the page" rather than "is the light green".
+
+    The memory line beside it is the alarm in words. `worse` is the same call
+    the gate makes, so a case cannot read as fine here and fail the run.
+    """
+    faults = result.remaining
+    if faults:
+        rows = "".join(f"<li>{html.escape(said)}</li>" for said in faults)
+        body = f"<ul>{rows}</ul>"
+    else:
+        body = ("<p>Nothing this check can name is wrong with it. That is not the "
+                "same as the parse being right &mdash; look at the three pictures "
+                "below and decide that yourself.</p>")
+
+    stood = ""
+    if memory:
+        now = {"score": round(result.score, 2), "structure": result.structure,
+               "meter": result.meter}
+        fell = references.worse(now, memory)
+        if fell:
+            stood = (f"<p class='fail'>Below the reading this case was accepted "
+                     f"at: {html.escape('; '.join(fell))}.</p>")
+        elif references.better(now, memory):
+            stood = (f"<p class='pass'>Above the reading it was accepted at "
+                     f"({memory['score']:.2f}% of notes right) &mdash; this run "
+                     f"has moved its memory up to {now['score']:.2f}%.</p>")
+        else:
+            stood = (f"<p class='lead'>Standing exactly where it was accepted: "
+                     f"{memory['score']:.2f}% of notes right.</p>")
+    else:
+        stood = ("<p class='lead'>No accepted reading yet &mdash; this run records "
+                 "what it reads today, and nothing may fall below it afterwards.</p>")
+
+    return (f"<h2>What is still wrong here</h2>"
+            f"<p class='lead'>Every fault this check can name, at "
+            f"<b>{result.score:.1f}%</b> of notes right. Nothing here declares a "
+            f"parse correct: that is a judgement made by eye against the printed "
+            f"page.</p>{body}{stood}")
+
+
+def case_page(case, parsed: Path, result: Result, before: dict | None,
+              memory: dict | None = None) -> str:
     """Write one case's page and return its filename."""
     OUT.mkdir(parents=True, exist_ok=True)
     page = OUT / f"{case.name}-page.png"
@@ -550,7 +605,9 @@ def case_page(case, parsed: Path, result: Result, before: dict | None) -> str:
 <p><a href="index.html">&larr; every case</a></p>
 <h1>{html.escape(case.name)}</h1>
 <p class="lead">{html.escape(case.origin)}
-{'&mdash; committed fixture' if case.committed else ''}</p>
+{'&mdash; committed case, runnable on any clone' if case.committed else ''}
+{('<br>Pinned because: ' + html.escape(case.why)) if getattr(case, 'why', '') else ''}</p>
+{_still_wrong(result, memory)}
 <div class="sum">
   <div><b>{result.agree}</b>agree {moved('agree')}</div>
   <div><b>{result.voice}</b>wrong voice {moved('voice')}</div>

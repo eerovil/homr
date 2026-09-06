@@ -213,15 +213,38 @@ class Result:
         return 100.0 * self.agree / self.scored if self.scored else 0.0
 
     @property
-    def perfect(self) -> bool:
-        """Nothing wrong at all: every note right, and no argument about staves.
+    def remaining(self) -> list[str]:
+        """Everything still wrong here, said one fault at a time.
 
-        What the gate on the committed fixtures is written in terms of. A case
-        with nothing to judge is not perfect — it is unread, and saying
-        otherwise would let an empty parse pass the gate.
+        **What replaces `perfect`.** Nothing computes perfection any more: #147
+        reserved that word for the operator, judging by eye against the page, and
+        #152 measured what a machine's version of it was worth — two pixels off
+        the top of a band took the five fixtures from 7/10 to 3/10 while the
+        notes themselves moved by about one in ninety. So the report carries the
+        score and this list, which is what the operator's eye actually reads,
+        and no line anywhere says a parse is right.
+
+        An unread case says so rather than coming back empty, which would read
+        as nothing being wrong with it.
         """
-        return (bool(self.scored) and self.agree == self.scored
-                and not self.structure and not self.meter)
+        if not self.scored:
+            return ["nothing was judged — this case was not read"]
+        said: list[str] = []
+        if self.structure:
+            blame = {"reference": " (the page agrees with homr)",
+                     "homr": " (the page agrees with the reference)",
+                     "both": " (the page prints neither)"}.get(self.at_fault, "")
+            said.append(f"staves: the reference says {self.staves_page} and homr "
+                        f"wrote {self.staves_homr}{blame}")
+        if self.meter:
+            said.append(f"{self.meter} bar(s) in the wrong meter")
+        for count, what in ((self.voice, "in the wrong voice"),
+                            (self.pitch, "at the wrong pitch"),
+                            (self.size, "missing or invented"),
+                            (self.timing, "on the wrong beat")):
+            if count:
+                said.append(f"{count} note(s) {what}")
+        return said
 
     @property
     def structure(self) -> int:

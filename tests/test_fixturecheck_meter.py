@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from fixturecheck import compare
+from fixturecheck import compare, references, series
 
 
 def score(tmp_path, meters, name="s.musicxml"):
@@ -115,18 +115,30 @@ def test_a_signature_repeated_on_every_staff_is_one_change(tmp_path):
     assert changes == ["1"] and force["1"] == "3/4"
 
 
-def test_a_misread_meter_stops_a_fixture_being_perfect(tmp_path):
-    """Which is what makes it fail the gate.
+def test_a_misread_meter_is_still_a_fault_and_still_fails_the_gate(tmp_path):
+    """A parse that put the music in the wrong time signature is not correct,
+    however well its noteheads line up.
 
-    A parse that put the music in the wrong time signature is not a correct
-    reading of the page however well its noteheads line up.
+    This used to be carried by the `perfect` flag, which is gone. It is carried
+    now by the memory being three numbers rather than one: the meter count is
+    remembered beside the score and may not rise. A memory made only of the
+    notes-right percentage would have dropped this on the floor, because a
+    misread meter deliberately stays out of that percentage.
     """
     clean = compare.Result(agree=10)
-    assert clean.perfect
     wrong_meter = compare.Result(agree=10, meter=1)
-    assert not wrong_meter.perfect
+
+    assert clean.remaining == []
+    assert wrong_meter.remaining == ["1 bar(s) in the wrong meter"]
     # ...and it stays out of the note percentage, which counts note events.
     assert wrong_meter.score == 100.0
+
+    # So the score alone cannot see it, and the memory does.
+    counts = {k: getattr(wrong_meter, k) for k in series.COUNTS}
+    was = references.marks({k: getattr(clean, k) for k in series.COUNTS})
+    assert references.marks(counts)["score"] == was["score"]
+    assert references.worse(references.marks(counts), was) == [
+        "meter 1, against 0 accepted"]
 
 
 def test_the_real_fixture_is_reported(tmp_path):

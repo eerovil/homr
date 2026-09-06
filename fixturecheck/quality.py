@@ -59,25 +59,29 @@ def _trend(harness: str, path: Path) -> list[dict]:
 def _gate_line(runs_of: list[dict]) -> str:
     gate = series.published_gate(runs_of)
     if not gate:
-        return "_not evaluated_ — no recorded run has judged a committed fixture."
+        return "_not evaluated_ — no recorded run has judged a committed case."
     tail = ""
     if gate["unevaluated"]:
         names = ", ".join(f"`{n}`" for n in gate["unevaluated"])
-        tail = (f" Not judged under this homr, so the gate cannot pass: {names}. "
-                f"A pass under an earlier homr is not a claim about this one.")
+        tail += (f" Not judged under this homr, so the gate cannot pass: {names}. "
+                 f"A pass under an earlier homr is not a claim about this one.")
+    if gate["unremembered"]:
+        names = ", ".join(f"`{n}`" for n in gate["unremembered"])
+        tail += (f" No accepted reading to compare against yet: {names} — the "
+                 f"next run over them records one.")
     if gate["passed"]:
-        return (f"**pass** — all {gate['fixtures']} committed fixtures stand "
-                f"perfect under homr `{gate['homr']}`, latest as of "
-                f"{gate['as_of']}.")
-    failing = ", ".join(f"`{n}`" for n in gate["failing"])
-    below = f"; below 100%: {failing}" if failing else ""
-    return (f"**FAIL** — {gate['perfect']}/{gate['fixtures']} perfect under homr "
-            f"`{gate['homr']}`, latest as of {gate['as_of']}{below}.{tail} Each "
-            f"fixture counts by its own latest result under that homr, so "
-            f"re-running one cannot speak for the others.")
+        return (f"**pass** — all {gate['cases']} committed cases stand at or "
+                f"above the reading they were accepted at, under homr "
+                f"`{gate['homr']}`, latest as of {gate['as_of']}.")
+    fell = "".join(f"\n- `{name}` — {'; '.join(said)}"
+                   for name, said in gate["below"].items())
+    return (f"**FAIL** — {gate['standing']}/{gate['cases']} committed cases stand "
+            f"under homr `{gate['homr']}`, latest as of {gate['as_of']}.{tail}"
+            f"{fell}\n\nEach case counts by its own latest result under that "
+            f"homr, so re-running one cannot speak for the others.")
 
 
-def render(path: Path = series.SERIES) -> str:
+def render(path: Path | None = None) -> str:
     """The whole summary, from the series and nothing else."""
     fixture_runs = _trend("fixturecheck", path)
     bench_runs = _trend("choir-bench", path)
@@ -134,9 +138,17 @@ def render(path: Path = series.SERIES) -> str:
         "",
         _gate_line(fixture_runs),
         "",
-        "The five committed fixtures are small single systems this repository "
-        "owns outright, and they are expected to be **perfect**. Anything less "
-        "is a failure of the run, not a row in a table.",
+        "**Nothing gets worse, per case.** Each case remembers the notes-right "
+        "score it was last accepted at; a run fails if any case reads below its "
+        "own memory, and a case that improves has its memory raised. Not a "
+        "total — a win on one page must not pay for a loss on another. Three "
+        "tiers under one rule: the pinned failures, the five committed "
+        "fixtures, and every song system on the host that owns the songs.",
+        "",
+        "**No number here says a parse is right.** That word belongs to the "
+        "operator, reading the case pages against the printed music; what is "
+        "published is how far each case has moved and what is still wrong with "
+        "it.",
         "",
     ]
 
@@ -158,6 +170,14 @@ def render(path: Path = series.SERIES) -> str:
     return "\n".join(lines) + "\n" + NOT_MEASURED
 
 
-def write(path: Path = series.SERIES, into: Path = QUALITY) -> Path:
+def write(path: Path | None = None, into: Path | None = None) -> Path:
+    """Rewrite the summary. Both paths are read at call time, not bound here.
+
+    Bound as defaults they cannot be redirected, so a test that pointed the
+    harness at a scratch directory still rewrote the host's committed
+    `QUALITY.md` — silently, and with numbers it invented. `series.runs` learned
+    this first and says so in its own docstring.
+    """
+    into = into or QUALITY
     into.write_text(render(path))
     return into

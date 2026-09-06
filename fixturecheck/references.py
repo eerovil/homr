@@ -1,4 +1,11 @@
-"""What each case was made from, frozen as a fingerprint rather than as music.
+"""What each case was made from, and how well it last read.
+
+Two things are frozen here and they are frozen together on purpose: the
+**fingerprint** of a case's two files, and the **memory** of what homr scored on
+it when somebody last accepted that reading. A memory is a claim about a
+particular picture and a particular reference, so it is worth nothing once
+either of them moves — keeping both in one manifest, written by one command, is
+what stops a number outliving the music it was about.
 
 A reference here is a song's cleaned score imploded back to the shape of the
 print. Those scores are edited — nineteen of the ninety-three were wrong about
@@ -22,6 +29,28 @@ songs, and cannot rebuild the other eighty-eight to check any figure in the
 series against them.
 
     python -m fixturecheck freeze      # write the manifest from what is here now
+
+**The alarm rule is per case: nothing gets worse.** Each case remembers the
+notes-right score it was last accepted at; a run fails the gate if any case
+reads below its own memory, and an improvement moves that memory up. Not a
+total across cases — a win on one page must not pay for a loss on another, which
+is the whole reason the memory is per case rather than one figure for the run.
+
+**A pass/fail per case is what this replaces**, and #155 settled why. The old
+gate asked whether each of the five committed fixtures was `perfect` — every
+note right, no argument about the staves or the meter. #152 shaved two pixels
+off the top of a band and watched that verdict go from 7/10 to 3/10 while the
+notes-right figure moved 98.4% to 97.3%: a two-pixel reframe moves about one
+note in ninety, and a zero-fault boolean amplified that one note into a flipped
+verdict on five cases. The measurement under it was never the brittle part. So
+what is remembered is the score, which moves by about as much as the reading
+really moved.
+
+**Structure and meter are remembered too, and must not rise.** They are counted
+as cases rather than as notes — one wrong answer about the staves, one bar in
+the wrong meter — so neither is in the notes-right percentage and a memory made
+only of that percentage would have quietly dropped the meter gate #175 built.
+"Nothing gets worse" is the rule; these are two more ways of getting worse.
 """
 
 from __future__ import annotations
@@ -45,13 +74,105 @@ def fingerprint(case) -> dict:
 
 
 def digest(entries: dict) -> str:
-    """One stamp for the whole manifest, which is what a run is keyed by."""
+    """One stamp for the whole manifest, which is what a run is keyed by.
+
+    **The memories are deliberately not in it.** The digest says which music was
+    measured; a case reading better than it used to is not different music. Were
+    the scores hashed here, every improvement would start a fresh identity and
+    every case would go back to `unevaluated` under it — the ratchet would erase
+    the record it is meant to keep.
+    """
     sponge = hashlib.sha256()
     for name in sorted(entries):
         sponge.update(name.encode())
         sponge.update(entries[name].get("image", "").encode())
         sponge.update(entries[name].get("reference", "").encode())
     return sponge.hexdigest()[:16]
+
+
+# --- how well a case last read -------------------------------------------
+
+#: What a case is remembered by. `score` may not fall; the other two may not
+#: rise. Named here rather than spelled out at each use, so adding a fourth way
+#: of getting worse is one line.
+MEMORY = ("score", "structure", "meter")
+
+#: How much a score may fall and still count as the same reading. Zero, and
+#: that is the point of the card: a real regression shows up as notes, and
+#: giving the alarm a tolerance would be re-inventing by the back door the
+#: slack that a per-case pass/fail was criticised for not having. The rounding
+#: to two places is what absorbs float noise.
+SLACK = 0.0
+
+
+def marks(counts: dict) -> dict:
+    """The three numbers a case is remembered by, out of one run's counts.
+
+    Takes the counts as the series records them rather than a `Result`, because
+    the gate has to be able to judge a case out of the record as well as out of
+    a live run, and two spellings of the same score is how they come to
+    disagree. `test_fixturecheck_memory` pins this against `Result.score`.
+    """
+    right = counts.get("agree", 0)
+    judged = sum(counts.get(k, 0) for k in ("agree", "voice", "pitch", "size", "timing"))
+    return {
+        "score": round(100.0 * right / judged, 2) if judged else 0.0,
+        "structure": int(counts.get("staves_page", 0) != counts.get("staves_homr", 0)),
+        "meter": int(counts.get("meter", 0)),
+    }
+
+
+def worse(now: dict, was: dict) -> list[str]:
+    """Which of the remembered numbers got worse, said in words.
+
+    A list rather than a boolean, because the report has to name what moved:
+    "below its memory" with no number in it is the kind of alarm people learn to
+    click through.
+    """
+    said: list[str] = []
+    if now.get("score", 0.0) < was.get("score", 0.0) - SLACK:
+        said.append(f"{now.get('score', 0.0):.2f}% of notes right, "
+                    f"against {was.get('score', 0.0):.2f}% accepted")
+    for field in ("structure", "meter"):
+        if now.get(field, 0) > was.get(field, 0):
+            said.append(f"{field} {now.get(field, 0)}, against "
+                        f"{was.get(field, 0)} accepted")
+    return said
+
+
+def better(now: dict, was: dict) -> bool:
+    """Whether this reading is one the memory should move up to."""
+    return not worse(now, was) and any(now.get(f) != was.get(f) for f in MEMORY)
+
+
+def accepted(path: Path = MANIFEST) -> dict:
+    """Every case's memory, by name. Absent means nobody has accepted a reading."""
+    held = load(path)["cases"]
+    return {name: {f: entry[f] for f in MEMORY}
+            for name, entry in held.items() if all(f in entry for f in MEMORY)}
+
+
+def remember(readings: dict, path: Path = MANIFEST) -> list[str]:
+    """Move the named cases' memories to what they read now.
+
+    Only ever called with readings that are not worse — the ratchet turns one
+    way on its own. Accepting a *fall* is a person running `freeze`, which is
+    the deliberate act this whole file exists to make deliberate.
+    """
+    manifest = load(path)
+    held = manifest.setdefault("cases", {})
+    moved: list[str] = []
+    for name, reading in readings.items():
+        entry = held.setdefault(name, {})
+        if all(entry.get(f) == reading.get(f) for f in MEMORY):
+            continue
+        entry.update({f: reading[f] for f in MEMORY})
+        moved.append(name)
+    if moved:
+        manifest.setdefault("why", _WHY)
+        manifest["digest"] = digest(held)
+        path.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
+    return sorted(moved)
 
 
 def load(path: Path = MANIFEST) -> dict:
@@ -63,25 +184,39 @@ def load(path: Path = MANIFEST) -> dict:
         return {"cases": {}}
 
 
-def write(cases: list, path: Path = MANIFEST) -> dict:
-    """Freeze what is on this host now.
+_WHY = ("A fingerprint per case and the score it was last accepted at — not the "
+        "music: this repository is public and the songs are not ours. A "
+        "reference changing, or a case being accepted lower than it stood, is "
+        "then a deliberate commit rather than a silent drift under a number. "
+        "See fixturecheck/references.py.")
+
+
+def write(cases: list, path: Path = MANIFEST) -> tuple[dict, list[str]]:
+    """Freeze what is on this host now, and say whose memory that cost.
 
     Merged rather than replaced: a run of ten cases must not drop the other
     eighty-three out of the manifest, which would read in the diff as
     eighty-three references having been deleted.
+
+    **A case whose files moved loses its memory here.** The score was about the
+    picture and the reference that have just been replaced, so carrying it over
+    would gate a new case against an old case's number — and it would do it
+    silently, since freezing is exactly the moment nobody is looking at scores.
+    The next run records what the new files read, as a first sighting.
     """
     held = load(path)["cases"]
-    held.update({case.name: fingerprint(case) for case in cases})
-    manifest = {
-        "why": "A fingerprint per case, not the music: this repository is public "
-               "and the songs are not ours. A reference changing is then a "
-               "deliberate commit rather than a silent drift under a number. "
-               "See fixturecheck/references.py.",
-        "digest": digest(held),
-        "cases": held,
-    }
+    forgotten: list[str] = []
+    for case in cases:
+        now = fingerprint(case)
+        entry = held.get(case.name, {})
+        kept = {f: entry[f] for f in MEMORY if f in entry}
+        if kept and any(entry.get(k) != now[k] for k in ("image", "reference")):
+            forgotten.append(case.name)
+            kept = {}
+        held[case.name] = {**now, **kept}
+    manifest = {"why": _WHY, "digest": digest(held), "cases": held}
     path.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
-    return manifest
+    return manifest, sorted(forgotten)
 
 
 def drift(cases: list, path: Path = MANIFEST) -> dict:
@@ -90,6 +225,9 @@ def drift(cases: list, path: Path = MANIFEST) -> dict:
     Three answers and they are not the same: `changed` is a reference that moved
     under a recorded number, `unfrozen` is one nobody has frozen yet, and a case
     absent from this run is not mentioned at all — it was not looked at.
+
+    Only the two hashes are compared. A manifest entry also carries the case's
+    memory, and a case reading better than it did is not its picture moving.
     """
     held = load(path)["cases"]
     changed, unfrozen = [], []
@@ -97,9 +235,51 @@ def drift(cases: list, path: Path = MANIFEST) -> dict:
         was = held.get(case.name)
         if was is None:
             unfrozen.append(case.name)
-        elif was != fingerprint(case):
+        elif {k: was.get(k) for k in ("image", "reference")} != fingerprint(case):
             changed.append(case.name)
     return {"changed": sorted(changed), "unfrozen": sorted(unfrozen)}
+
+
+def judge(readings: dict, unread: list[str], adrift: list[str] | None = None,
+          path: Path = MANIFEST) -> dict:
+    """Has anything in this run got worse than the reading it was accepted at?
+
+    `readings` is `marks()` per case that homr read; `unread` is the cases homr
+    ran on and produced nothing usable for. The three tiers are judged by this
+    one function and nothing in it knows which tier a case belongs to — a pin, a
+    committed fixture and a song system are the same object with the same rule,
+    which is what stops a win on the fixtures paying for a loss on real songs.
+
+    **A case homr could no longer read at all is the loudest regression there
+    is**, so a remembered case that comes back unreadable fails. A case that
+    could not be *built* does not appear here: that is this host missing a song,
+    not homr misreading one.
+
+    **A case whose reference has moved is held rather than judged.** Its memory
+    is a number about music that has since been edited, and failing a run for
+    that would blame homr for somebody correcting a score. `freeze` is how such
+    a case rejoins the gate.
+    """
+    was = accepted(path)
+    adrift = set(adrift or [])
+    below: dict[str, list[str]] = {}
+    for name, reading in readings.items():
+        if name in adrift or name not in was:
+            continue
+        said = worse(reading, was[name])
+        if said:
+            below[name] = said
+    lost = sorted(n for n in unread if n in was and n not in adrift)
+    judged = sorted(n for n in readings if n in was and n not in adrift)
+    return {
+        "judged": judged,
+        "below": {n: below[n] for n in sorted(below)},
+        "unreadable": lost,
+        "unremembered": sorted(n for n in list(readings) + list(unread)
+                               if n not in was and n not in adrift),
+        "adrift": sorted(n for n in list(readings) + list(unread) if n in adrift),
+        "passed": not below and not lost,
+    }
 
 
 def stamp(cases: list, path: Path = MANIFEST) -> str:
@@ -113,12 +293,12 @@ def stamp(cases: list, path: Path = MANIFEST) -> str:
         return "unfrozen"
     base = manifest.get("digest") or "unfrozen"
     moved = drift(cases, path)
-    marks = ""
+    mark = ""
     if moved["changed"]:
-        marks += f"+drift{len(moved['changed'])}"
+        mark += f"+drift{len(moved['changed'])}"
     if moved["unfrozen"]:
         # Not the same as drift and must not be silent: these cases were
         # measured against a reference nobody has frozen, so the manifest's
         # digest does not describe what this run was compared with.
-        marks += f"+new{len(moved['unfrozen'])}"
-    return base + marks
+        mark += f"+new{len(moved['unfrozen'])}"
+    return base + mark
