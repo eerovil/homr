@@ -100,6 +100,10 @@ def test_nothing_computes_perfection_any_more():
     assert Result().remaining == ["nothing was judged — this case was not read"]
     assert Result(agree=5, staves_page=2, staves_homr=3).remaining == [
         "staves: the reference says 2 and homr wrote 3"]
+    # A unison is counted and is not a fault — one printed head serving two
+    # parts is what the page draws, not something homr got wrong. It was never
+    # in `perfect` either, and `system4` passed that gate carrying three.
+    assert Result(agree=5, unison=3).remaining == []
 
 
 def test_a_case_that_could_not_be_read_is_recorded_not_skipped(tmp_path):
