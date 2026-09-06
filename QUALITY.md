@@ -6,14 +6,16 @@ Regenerated from `fixturecheck/series.jsonl` on every run — do not edit by han
 
 | harness | measured | homr | references | of everything judged, right | cases |
 | --- | --- | --- | --- | --- | --- |
-| `fixturecheck` | 2026-09-06T07:14:58+00:00 (one) | `86d0f2a` | `ff33f48a1bcaac77` | **97.6%** | 5 read |
+| `fixturecheck` | 2026-09-06T09:13:53+00:00 (all) | `86d0f2a` | `87e0fbd0ec898895` | **92.5%** | 98 read |
 | `choir-bench` | _never_ | — | — | — | — |
+
+**[Look at the music](https://bazzite.taile8d16e.ts.net:8124/index.html)** — the printed band, homr's engraving and the reference, system by system. A count can say a system agrees on staves, bars and noteheads and still not say whether the parse is the music.
 
 The two are **not averaged**. `fixturecheck` scores notes across the printed systems of the repertoire; `choir-bench` scores staves and bars across the public-domain benchmark pages. They answer different questions and a single figure over both would mean nothing.
 
 ## The gate
 
-**FAIL** — 3/5 perfect under homr `86d0f2a`, latest as of 2026-09-06T07:14:58+00:00; below 100%: `hanget-soi`, `sammon-ryosto`. Each fixture counts by its own latest result under that homr, so re-running one cannot speak for the others.
+**FAIL** — 3/5 perfect under homr `86d0f2a`, latest as of 2026-09-06T09:13:53+00:00; below 100%: `hanget-soi`, `sammon-ryosto`. Each fixture counts by its own latest result under that homr, so re-running one cannot speak for the others.
 
 The five committed fixtures are small single systems this repository owns outright, and they are expected to be **perfect**. Anything less is a failure of the run, not a row in a table.
 
@@ -21,8 +23,6 @@ The five committed fixtures are small single systems this repository owns outrig
 
 | when | harness | tier | homr | references | right |
 | --- | --- | --- | --- | --- | --- |
-| 2026-09-05T05:41:08+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
-| 2026-09-05T05:47:47+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
 | 2026-09-05T05:49:24+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
 | 2026-09-05T06:06:01+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
 | 2026-09-05T06:06:03+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
@@ -33,6 +33,8 @@ The five committed fixtures are small single systems this repository owns outrig
 | 2026-09-05T14:33:10+00:00 | `fixturecheck` | one | `94b20bd` | `ff33f48a1bcaac77` | 97.5% |
 | 2026-09-05T17:09:23+00:00 | `fixturecheck` | all | `94b20bd` | `ff33f48a1bcaac77+new93` | 88.5% |
 | 2026-09-06T07:14:58+00:00 | `fixturecheck` | one | `86d0f2a` | `ff33f48a1bcaac77` | 97.6% |
+| 2026-09-06T07:51:47+00:00 | `fixturecheck` | all | `94b20bd` | `87e0fbd0ec898895` | 92.0% |
+| 2026-09-06T09:13:53+00:00 | `fixturecheck` | all | `86d0f2a` | `87e0fbd0ec898895` | 92.5% |
 
 A tier is not a sample of the one above it — a ten-case run and a full sweep are different populations, so read a percentage against runs of the same tier.
 
