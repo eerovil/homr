@@ -2,23 +2,38 @@
  "cases": {
   "hanget-soi": {
    "image": "068b31fc1ff37214",
-   "reference": "17062fdda97de069"
+   "meter": 0,
+   "reference": "17062fdda97de069",
+   "score": 85.29,
+   "structure": 0
   },
   "kolme-kakea": {
    "image": "b95e747c6ce251b8",
-   "reference": "fd08d7d9b346058d"
+   "meter": 0,
+   "reference": "fd08d7d9b346058d",
+   "score": 100.0,
+   "structure": 0
   },
   "laulun-aika-s2": {
    "image": "1cfe1678f1d0c16a",
-   "reference": "b863e0b8d93ea5aa"
+   "meter": 0,
+   "reference": "b863e0b8d93ea5aa",
+   "score": 100.0,
+   "structure": 0
   },
   "sammon-ryosto": {
    "image": "76fae301b00ef10e",
-   "reference": "713a7ff1394ffc44"
+   "meter": 0,
+   "reference": "713a7ff1394ffc44",
+   "score": 97.62,
+   "structure": 0
   },
   "system4": {
    "image": "8792777f6b4397b0",
-   "reference": "3eb7f8e201a2322a"
+   "meter": 0,
+   "reference": "3eb7f8e201a2322a",
+   "score": 100.0,
+   "structure": 0
   }
  },
  "digest": "ff33f48a1bcaac77",
