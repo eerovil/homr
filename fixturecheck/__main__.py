@@ -221,9 +221,15 @@ def run_cases(names: list[str], tier: str) -> int:
         # A misread meter is a wrong answer about the bars the notes are read
         # in, so it belongs on the line rather than only on the page.
         meter = f", {result.meter} bar(s) in the wrong meter" if result.meter else ""
+        # A unison homr wrote into one voice is not a misreading and is not
+        # scored, so the line said nothing at all about it -- and a case
+        # carrying two of them read exactly like a case carrying none. It is
+        # the part that is missing, not the note. See `Result.warnings`.
+        warned = (f", {result.warnings} unison(s) written as one voice"
+                  if result.warnings else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
-              f"{result.timing} beat{meter}{staves}{moved}")
+              f"{result.timing} beat{meter}{warned}{staves}{moved}")
 
     moved = references.drift(built)
     # Judged before anything is written back, and against the memory this run
