@@ -81,13 +81,32 @@ def digest(entries: dict) -> str:
     the scores hashed here, every improvement would start a fresh identity and
     every case would go back to `unevaluated` under it — the ratchet would erase
     the record it is meant to keep.
+
+    That has to hold for the *name* as well as the hashes, hence the skip: a run
+    can record a memory for a case nobody has frozen, and if that entry entered
+    the digest the first sighting of an unfrozen case would move the identity
+    just as surely as hashing its score would.
     """
     sponge = hashlib.sha256()
     for name in sorted(entries):
+        entry = entries[name]
+        if not frozen(entry):
+            continue
         sponge.update(name.encode())
-        sponge.update(entries[name].get("image", "").encode())
-        sponge.update(entries[name].get("reference", "").encode())
+        sponge.update(entry.get("image", "").encode())
+        sponge.update(entry.get("reference", "").encode())
     return sponge.hexdigest()[:16]
+
+
+def frozen(entry: dict) -> bool:
+    """Whether this entry says anything about the case's *files*.
+
+    An entry can hold a memory and no fingerprint — a case that has been read
+    but never frozen. Read as a fingerprint of nothing it looks like a reference
+    that has been emptied, so the case reports as drifted on every later run and
+    is held out of the gate for good.
+    """
+    return bool(entry.get("image") or entry.get("reference"))
 
 
 # --- how well a case last read -------------------------------------------
@@ -233,7 +252,7 @@ def drift(cases: list, path: Path = MANIFEST) -> dict:
     changed, unfrozen = [], []
     for case in cases:
         was = held.get(case.name)
-        if was is None:
+        if was is None or not frozen(was):
             unfrozen.append(case.name)
         elif {k: was.get(k) for k in ("image", "reference")} != fingerprint(case):
             changed.append(case.name)

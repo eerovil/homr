@@ -301,6 +301,29 @@ def test_a_memory_does_not_change_the_digest_a_run_is_keyed_by(tmp_path):
     assert references.drift([case], path) == {"changed": [], "unfrozen": []}
 
 
+def test_a_memory_for_a_case_nobody_froze_is_not_a_drifted_reference(tmp_path):
+    """An entry can hold a score and no fingerprint, and that is not a change.
+
+    Read as a fingerprint of nothing it looks like a reference that has been
+    emptied, so the case would report as drifted on every later run and be held
+    out of the gate for good — the ratchet quietly disarming itself for exactly
+    the cases it had just started watching. Its name must stay out of the digest
+    for the same reason: a first sighting would otherwise move the identity and
+    send every case back to `unevaluated`.
+    """
+    path = tmp_path / "references.json"
+    frozen_case, fresh = _case(tmp_path, "old"), _case(tmp_path, "new")
+    was = references.write([frozen_case], path)[0]["digest"]
+
+    references.remember({"new": reading(80.0)}, path=path)
+
+    assert references.drift([fresh], path)["changed"] == []
+    assert references.drift([fresh], path)["unfrozen"] == ["new"]
+    assert json.loads(path.read_text())["digest"] == was
+    # The memory is kept, though — it is the fingerprint that is missing.
+    assert json_memory(path)["new"]["score"] == 80.0
+
+
 # --- a pin ---------------------------------------------------------------
 
 
