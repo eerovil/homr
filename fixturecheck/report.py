@@ -779,23 +779,48 @@ def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
         stamp = f"<br><span class='when'>{mark}</span>" if when else ""
         return link + stamp
 
-    rows = "".join(
-        f"<tr class='{('other' if e.get('elsewhere') else 'stale') if e.get('measured') else ''}'>"
-        f"<td>{named(e)}</td>"
-        f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
-        f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
-        f"<td>{cell(e, 'timing')}</td>"
-        f"<td>{cell(e, 'meter')}</td>"
-        f"<td class='{'warn' if e.get('unison') else ''}'>{cell(e, 'unison')}</td>"
-        f"<td>{_staves(e)}</td>"
-        f"<td>{e['score']:.1f}%</td></tr>"
+    def row(e: dict) -> str:
+        return (
+            f"<tr class='{('other' if e.get('elsewhere') else 'stale') if e.get('measured') else ''}'>"
+            f"<td>{named(e)}</td>"
+            f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
+            f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
+            f"<td>{cell(e, 'timing')}</td>"
+            f"<td>{cell(e, 'meter')}</td>"
+            f"<td class='{'warn' if e.get('unison') else ''}'>{cell(e, 'unison')}</td>"
+            f"<td>{_staves(e)}</td>"
+            f"<td>{e['score']:.1f}%</td></tr>")
+
+    def table(of: list[dict]) -> str:
         # Worst first means worst by what went wrong, and a case can go wrong
         # without a single note pairing up to be called a wrong pitch:
         # laulun-aika-3-s5 agrees on one note out of fifty, loses 41 moments to
         # a count mismatch, and sorted 17th of 98 on voice+pitch alone. Counting
         # every fault puts it first, where a near-total loss belongs.
-        for e in sorted(entries, key=lambda e: (
+        rows = "".join(row(e) for e in sorted(of, key=lambda e: (
             -(e["voice"] + e["pitch"] + e["size"] + e.get("timing", 0)), e["name"])))
+        return ("<table><tr><th>case</th><th>agree</th><th>wrong voice</th>"
+                "<th>wrong pitch</th><th>note count</th><th>beat shifted</th>"
+                "<th>meter</th><th>unison</th>"
+                "<th>staves (who is wrong)</th><th>score</th></tr>"
+                f"{rows}</table>")
+
+    # The committed fixtures are the gate's cases, not the repertoire: small
+    # systems chosen because they were wrong once, owned by this repository and
+    # expected to be exactly right. In one worst-first table with the 93 song
+    # systems they read as five more songs — and the songs read as gated. They
+    # stay in the totals above (a note judged is a note judged); only the
+    # tables are apart.
+    committed = {case.name for case in cases.committed_cases()}
+    fixtures = [e for e in entries if e["name"] in committed]
+    songs = [e for e in entries if e["name"] not in committed]
+    fixture_section = "" if not fixtures else f"""
+<h2>The committed fixtures</h2>
+<p class="lead">The {len(fixtures)} systems this repository owns outright &mdash;
+the gate's own cases, each kept because it was once read wrongly. Counted in the
+totals above; kept apart so the song table below reads as the repertoire.</p>
+{table(fixtures)}
+<h2>Song systems</h2>"""
 
     body = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -839,10 +864,8 @@ read its counts as a consequence of that, not as many wrong notes. Whose wrong
 answer it is has to be settled against the printed page. Where somebody has looked and
 written the count into <code>fixturecheck/printed.json</code>, the staves column
 names the side at fault; where nobody has, it does not guess.</p>
-<table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
-<th>note count</th><th>beat shifted</th><th>meter</th><th>unison</th>
-<th>staves (who is wrong)</th><th>score</th></tr>
-{rows}</table>
+{fixture_section}
+{table(songs)}
 {NOT_MEASURED}
 </body></html>"""
     target = OUT / "index.html"
