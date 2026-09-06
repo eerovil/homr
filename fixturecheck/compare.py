@@ -149,19 +149,76 @@ def collapse_unisons(found: dict) -> dict:
 
 
 def _voice_rank(found: dict) -> dict[int, dict[str, int]]:
-    """The staff's voices as first, second, ... counted from the top line down.
+    """The staff's voices as first, second, ... by which one sings above which.
 
     Compared as a rank and not as a number: the two files number voices
     differently and neither numbering means anything on its own.
+
+    **Counted over every bar, not off the first note.** This used to walk the
+    file in order and append each voice as it was first seen, so a whole page's
+    voice correspondence rested on one moment. On Heraa Suomi p1 the first
+    moment of staff 1 holds a single note, which homr writes in voice 2 -- it
+    has that voice entering a quarter early -- so voice 2 became rank 1 for the
+    page, and every later bar where both voices sing reported every note as
+    being in the other voice: **30 faults, in bars that are note for note
+    correct.** Worse, that moment is not in the reference at all, and the loop
+    in `compare_output` iterates the reference's moments, so the note the whole
+    ranking turned on was never itself compared to anything. A measurement a
+    single unscored note can reverse is not a measurement.
+
+    **A bar at a time, and not a mean over the staff**, which is the part that
+    was measured rather than assumed. Both take the whole staff and both fix the
+    failure above; where they differ is a staff whose two lines cross, and there
+    a mean is decided by a tenth of a step. `heraa-suomi-final-s10` is the case:
+    its two basses cross bar by bar and the reference's own two voices sit 0.1
+    apart in mean height over 12 notes against 3, so the mean picks a winner on
+    nothing and reports 6 faults on a system read correctly. Counting bars won
+    -- 49 voice faults across the 63 bands of the #192 corpus against 55 for the
+    mean -- and it is also the statistic #192 already argued homr's numbering
+    with, so the harness and that argument now say the same thing.
+
+    What is left is real and is not hidden: where two lines cross often enough
+    that neither is above the other in most bars, this rank is a coin toss, and
+    `kayttaytymisohjeita-p3` pays 2 voice faults for it. That is a rule that can
+    be wrong about one staff and say so, against one that was wrong about a page
+    on evidence it never looked at.
     """
-    order: dict[int, list[str]] = {}
-    for (_, staff, _), group in sorted(found.items()):
-        for note in sorted(group, key=lambda n: -n["position"]):
-            order.setdefault(staff, [])
-            if note["voice"] not in order[staff]:
-                order[staff].append(note["voice"])
-    return {staff: {voice: rank + 1 for rank, voice in enumerate(voices)}
-            for staff, voices in order.items()}
+    wins: dict[int, dict[str, int]] = {}
+    labels: dict[int, set[str]] = {}
+    per_bar: dict[tuple[str, int], dict[str, list[int]]] = {}
+    for (bar, staff, _), group in found.items():
+        for note in group:
+            per_bar.setdefault((bar, staff), {}).setdefault(
+                note["voice"], []).append(note["position"])
+            labels.setdefault(staff, set()).add(note["voice"])
+    for (_, staff), per_voice in per_bar.items():
+        middle = {voice: sum(heard) / len(heard)
+                  for voice, heard in per_voice.items()}
+        for voice, height in middle.items():
+            seat = wins.setdefault(staff, {})
+            seat[voice] = seat.get(voice, 0) + sum(
+                1 for other in middle.values() if height > other)
+    return {staff: {voice: rank for rank, voice in enumerate(sorted(
+                found_here, key=lambda v: (-wins.get(staff, {}).get(v, 0), v)),
+                start=1)}
+            for staff, found_here in labels.items()}
+
+
+def _voice_correspondence(want: dict, got: dict) -> tuple[dict, dict]:
+    """Which of homr's voices is which of the reference's, per staff.
+
+    Each side ranked on its own by `_voice_rank`, and that is the whole of it.
+
+    The alternative measured for #196 was to **match** the two files' labels by
+    which pairs actually hold the same notes across the bars they share -- more
+    evidence, and no convention imposed on music that may not follow one. It is
+    refused on the numbers rather than on the argument: over the 63 bands it
+    costs 57 voice faults against 49, it is identical on all 14 assembled pages,
+    and it needs a fallback wherever two labels share no notes at all -- which
+    is precisely the badly-read system the number is most wanted for. Extra
+    machinery, an arbitrary tie-break, and nothing bought.
+    """
+    return _voice_rank(want), _voice_rank(got)
 
 
 @dataclass
@@ -444,7 +501,7 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     """
     want = collapse_unisons(read_score(reference))
     got = collapse_unisons(read_score(parsed))
-    here, there = _voice_rank(want), _voice_rank(got)
+    here, there = _voice_correspondence(want, got)
     # A voice is only wrong where the page gave it a choice. Where a staff prints
     # one line through a bar, homr numbering its notes voice 5 and then voice 6
     # is untidy and costs the singer nothing -- there is no second line for the

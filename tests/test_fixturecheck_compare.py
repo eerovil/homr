@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from fixturecheck.compare import (
+    _voice_rank,
     collapse_unisons,
     compare_output,
     printed_staves,
@@ -220,3 +221,104 @@ def test_a_head_doubled_where_one_part_sings_it_is_a_fault(tmp_path: Path) -> No
     result = compare_output(reference, parsed, "case")
 
     assert (result.agree, result.unison, result.size) == (0, 0, 1)
+
+
+def voices_over_bars(path: Path, name: str,
+                     bars: list[list[tuple]]) -> Path:
+    """One staff, bar by bar, each note `(beat, step, octave, voice)`.
+
+    Beats rather than document order, because that is what the failure is made
+    of: a voice entering at a beat the other file has nothing at.
+    """
+    measures = []
+    for number, notes in enumerate(bars, start=1):
+        written, at = [], 0.0
+        for beat, step, octave, voice in notes:
+            if beat < at:
+                written.append(f"<backup><duration>{int(at - beat)}"
+                               f"</duration></backup>")
+            elif beat > at:
+                written.append(f"<forward><duration>{int(beat - at)}"
+                               f"</duration></forward>")
+            written.append(
+                f"<note><pitch><step>{step}</step><octave>{octave}</octave>"
+                f"</pitch><duration>1</duration><voice>{voice}</voice></note>")
+            at = beat + 1
+        attributes = ("<attributes><divisions>1</divisions><clef><sign>G</sign>"
+                      "<line>2</line></clef></attributes>" if number == 1 else "")
+        measures.append(f'<measure number="{number}">{attributes}'
+                        f'{"".join(written)}</measure>')
+    target = path / f"{name}.musicxml"
+    target.write_text(
+        '<?xml version="1.0"?><score-partwise><part-list>'
+        '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
+        f'<part id="P1">{"".join(measures)}</part></score-partwise>')
+    return target
+
+
+#: The staff both files agree about: the upper line above the lower one, twice.
+TOGETHER = [[(1.0, "G", 4, "1"), (1.0, "C", 4, "2")],
+            [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")]]
+
+
+def test_a_voice_entering_early_does_not_reverse_the_staff(tmp_path: Path) -> None:
+    """The failure this rule was rewritten for, in the shape it arrived in.
+
+    homr has the lower line enter a beat early, so the first moment of its
+    staff holds one note and it is the *lower* voice. Reading the ranking off
+    that moment made the lower line rank 1 for the whole page and reported
+    every later note as being in the other voice -- 30 of them on Heraa Suomi
+    p1, in bars that are note for note right.
+
+    And the moment that decided it is **not in the reference at all**, so the
+    loop below never compares it to anything: the ranking turned on a note the
+    measurement does not score.
+    """
+    reference = voices_over_bars(tmp_path, "ref", TOGETHER)
+    parsed = voices_over_bars(tmp_path, "homr",
+                              [[(0.0, "C", 4, "2")] + TOGETHER[0], TOGETHER[1]])
+
+    result = compare_output(reference, parsed, "case")
+
+    assert (result.agree, result.voice) == (4, 0)
+
+
+def test_the_line_that_is_higher_in_more_bars_is_the_first_one(tmp_path: Path) -> None:
+    """Crossing lines are settled a bar at a time, not by a mean over the staff.
+
+    The upper line dives far below the lower one for one bar of three. Its mean
+    height over the staff then comes out the lower of the two, while it is
+    still the line above in two bars out of three -- which is what the rank is
+    read as saying. `heraa-suomi-final-s10` is this, and a mean reports 6
+    faults on a system read correctly.
+    """
+    crossing = [[(0.0, "G", 5, "1"), (0.0, "C", 4, "2")],
+                [(0.0, "A", 5, "1"), (0.0, "D", 4, "2")],
+                [(0.0, "C", 1, "1"), (0.0, "E", 4, "2")]]
+    ranks = _voice_rank(collapse_unisons(read_score(
+        voices_over_bars(tmp_path, "ref", crossing))))
+
+    assert ranks[1] == {"1": 1, "2": 2}
+
+
+def test_a_line_sung_in_one_bar_does_not_outrank_one_sung_throughout(
+        tmp_path: Path) -> None:
+    """A scrap of a voice high on the staff is one bar's evidence, not a page's.
+
+    This is the other half of the same failure: on the pre-#153 parses of Heraa
+    Suomi p1 the second voice was three notes that happened to sit high, and any
+    rule that weighs them against a line sung all the way down gets the staff
+    backwards.
+    """
+    reference = voices_over_bars(tmp_path, "ref", [
+        [(0.0, "G", 4, "1"), (0.0, "C", 4, "2")],
+        [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
+        [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")]])
+    parsed = voices_over_bars(tmp_path, "homr", [
+        [(0.0, "G", 4, "1"), (0.0, "C", 4, "2"), (2.0, "C", 7, "2")],
+        [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
+        [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")]])
+
+    result = compare_output(reference, parsed, "case")
+
+    assert (result.agree, result.voice) == (6, 0)
