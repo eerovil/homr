@@ -234,6 +234,138 @@ barline . . . . ."""
             ],
         )
 
+    def test_a_half_rest_does_not_swallow_the_notes_beside_it(self) -> None:
+        """A rest sharing a stream with notes sounding inside it is not their silence.
+
+        homr has no voice token, so a printed rest and the notes of the voice
+        engraved beside it come out in one stream. Here the upper staff's half
+        rest is written first and the upper staff sings again while the lower
+        staff is only one quarter into the bar -- so the tokens place that note
+        *inside* the rest, and the rest is somebody else's.
+
+        Half, deliberately: the worst case in this repertoire is a half rest,
+        and the narrow whole-bar version of this rule measured as nothing.
+        """
+        beside = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+timeSignature/4 . . . . .
+rest_2 _ _ _ _ upper&note_8 C3 _ _ _ lower
+note_8 D3 _ _ _ lower
+note_4 E5 _ _ _ upper&note_8 E3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(beside.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        quarter = int(measure.findtext("attributes/divisions", "1"))
+        upper = [
+            (_pitch(note), beat)
+            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
+            if _staff(note) == "1"
+        ]
+        self.assertEqual(upper, [("rest", 0), ("E", quarter)])
+
+        # The rest keeps its own length and its own place, so the two overlap --
+        # which is how they come out as the two voices the page prints.
+        voices = {
+            _pitch(note): _voice(note) for note in _notes(measure) if _staff(note) == "1"
+        }
+        self.assertNotEqual(voices["rest"], voices["E"])
+
+    def test_a_whole_bar_rest_does_not_swallow_them_either(self) -> None:
+        """The shape the choir app repairs at its own boundary, at the source.
+
+        A rest written for the whole bar is the loudest instance of the same
+        sentence: it takes every beat there is, so the notes engraved beside it
+        are written past the end of the bar.
+        """
+        whole = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+timeSignature/4 . . . . .
+rest_1 _ _ _ _ upper&note_4 C3 _ _ _ lower
+note_4 E5 _ _ _ upper&note_4 D3 _ _ _ lower
+note_4 F5 _ _ _ upper&note_4 E3 _ _ _ lower
+note_4 G5 _ _ _ upper&note_4 F3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(whole.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        quarter = int(measure.findtext("attributes/divisions", "1"))
+        upper = [
+            (_pitch(note), beat)
+            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
+            if _staff(note) == "1"
+        ]
+        self.assertEqual(
+            upper,
+            [("rest", 0), ("E", quarter), ("F", 2 * quarter), ("G", 3 * quarter)],
+        )
+
+    def test_a_rest_the_staff_is_really_silent_for_keeps_its_span(self) -> None:
+        """Nothing sounds inside it, so it is silence and the lane advances.
+
+        The upper staff rests for two quarters while the lower staff plays two,
+        and sings again only once the lower staff has caught up. There is no
+        note inside the rest's span, so the rest is exactly what it says.
+        """
+        silent = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+timeSignature/4 . . . . .
+rest_2 _ _ _ _ upper&note_4 C3 _ _ _ lower
+note_4 D3 _ _ _ lower
+note_2 E5 _ _ _ upper&note_2 E3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(silent.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        quarter = int(measure.findtext("attributes/divisions", "1"))
+        upper = [
+            (_pitch(note), beat)
+            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
+            if _staff(note) == "1"
+        ]
+        self.assertEqual(upper, [("rest", 0), ("E", 2 * quarter)])
+
+    def test_a_rest_is_not_disowned_by_another_rest(self) -> None:
+        """Only a note can say a rest was not this stream's silence.
+
+        Two rests in a row on the upper staff stay end to end. Piling the second
+        onto the first would say the staff was silent twice over the same beats,
+        which is not a reading of anything.
+        """
+        two_rests = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+timeSignature/4 . . . . .
+rest_4 _ _ _ _ upper&note_8 C3 _ _ _ lower
+rest_4 _ _ _ _ upper&note_8 D3 _ _ _ lower
+note_2 E5 _ _ _ upper&note_2 E3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(two_rests.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        quarter = int(measure.findtext("attributes/divisions", "1"))
+        upper = [
+            beat
+            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
+            if _staff(note) == "1"
+        ]
+        self.assertEqual(upper[:2], [0, quarter])
+
+    def test_one_staff_keeps_its_rests(self) -> None:
+        """A part of one staff has one stream, so there is no evidence and no change.
+
+        Which is most of this repertoire. What says a note sounds inside a rest
+        is another stream standing there; with nothing to compare against, the
+        rest is read as written rather than guessed at.
+        """
+        one_staff = """clef_G2 _ _ _ _ upper
+timeSignature/4 . . . . .
+rest_2 _ _ _ _ upper
+note_4 F4 _ _ _ upper
+note_4 G4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(one_staff.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        quarter = int(measure.findtext("attributes/divisions", "1"))
+        self.assertEqual(_beats(measure), [0, 2 * quarter, 3 * quarter])
+        self.assertEqual(_backups(measure), [])
+
     def test_rebalance_measure_voices_assigns_stable_voices_per_staff(self) -> None:
         measure = ET.Element("measure")
 
