@@ -21,14 +21,14 @@ The five committed fixtures are small single systems this repository owns outrig
 
 | when | harness | tier | homr | references | right |
 | --- | --- | --- | --- | --- | --- |
-| 2026-09-05T06:06:03+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
-| 2026-09-05T06:06:05+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 100.0% |
 | 2026-09-05T06:06:28+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 85.3% |
 | 2026-09-05T06:38:59+00:00 | `fixturecheck` | one | `71e6819` | `ff33f48a1bcaac77` | 95.8% |
 | 2026-09-05T14:10:54+00:00 | `fixturecheck` | one | `8faa87b` | `ff33f48a1bcaac77` | 97.5% |
 | 2026-09-05T14:33:10+00:00 | `fixturecheck` | one | `94b20bd` | `ff33f48a1bcaac77` | 97.5% |
 | 2026-09-05T17:09:23+00:00 | `fixturecheck` | all | `94b20bd` | `ff33f48a1bcaac77+new93` | 88.5% |
 | 2026-09-06T07:14:58+00:00 | `fixturecheck` | one | `86d0f2a` | `ff33f48a1bcaac77` | 97.6% |
+| 2026-09-06T07:51:47+00:00 | `fixturecheck` | all | `94b20bd` | `87e0fbd0ec898895` | 92.0% |
+| 2026-09-06T09:13:53+00:00 | `fixturecheck` | all | `86d0f2a` | `87e0fbd0ec898895` | 92.5% |
 | 2026-09-06T09:41:24+00:00 | `fixturecheck` | one | `86d0f2a` | `ff33f48a1bcaac77` | 85.3% |
 | 2026-09-06T09:49:00+00:00 | `fixturecheck` | one | `86d0f2a+dirty` | `ff33f48a1bcaac77` | 98.4% |
 | 2026-09-06T10:02:22+00:00 | `fixturecheck` | one | `86d0f2a+dirty` | `ff33f48a1bcaac77` | 98.4% |
