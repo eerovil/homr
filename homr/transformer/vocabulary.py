@@ -3,12 +3,14 @@ import itertools
 import random
 import re
 from fractions import Fraction
-from typing import Iterable
+from typing import Any, Iterable
 
 from homr.simple_logging import eprint
 
 nonote = "."
 empty = "_"  # used for decorations on note, if there is no decoration
+
+VALID_TIME_SIGNATURE_DENOMINATORS = [1, 2, 3, 4, 6, 8, 12, 16, 32, 48]
 
 
 def build_dict(tokens: Iterable[str]) -> dict[str, int]:
@@ -44,10 +46,11 @@ def build_rhythm() -> dict[str, int]:
     rhythm.extend([f"clef_F{c}" for c in range(3, 6)])
     rhythm.extend([f"clef_C{c}" for c in range(1, 6)])
     rhythm.extend([f"clef_G{c}" for c in range(1, 3)])
+    rhythm.append("clef_TAB5")
 
     # signatures
     rhythm.extend([f"keySignature_{c}" for c in range(-7, 8)])
-    rhythm.extend([f"timeSignature/{c}" for c in [1, 2, 3, 4, 6, 8, 12, 16, 32, 48]])
+    rhythm.extend([f"timeSignature/{c}" for c in VALID_TIME_SIGNATURE_DENOMINATORS])
 
     # rhythm, kern durations are based on https://www.humdrum.org/rep/kern/
     rhythm.extend([f"rest_{c}m" for c in range(2, 11)])  # multirests
@@ -109,19 +112,22 @@ def build_articulation() -> dict[str, int]:
         "accent_breathMark",
         "accent_breathMark_fermata",
         "accent_fermata",
-        "accent_fermata_staccato",
+        "accent_fermata_tremolo",
         "accent_staccatissimo",
         "accent_staccato",
         "accent_staccato_tenuto",
+        "accent_staccato_tremolo",
+        "accent_staccato_trill",
         "accent_tenuto",
         "accent_tremolo",
         "accent_trill",
-        "accent_fermata_trill",
         "arpeggiate",
-        "arpeggiate_breathMark_fermata",
+        "arpeggiate_breathMark",
         "arpeggiate_fermata",
         "arpeggiate_fermata_staccato",
+        "arpeggiate_fermata_tenuto",
         "arpeggiate_staccatissimo",
+        "arpeggiate_staccatissimo_staccato",
         "arpeggiate_staccato",
         "arpeggiate_staccato_tenuto",
         "arpeggiate_tenuto",
@@ -132,26 +138,30 @@ def build_articulation() -> dict[str, int]:
         "breathMark_fermata_tenuto",
         "breathMark_staccato",
         "breathMark_tenuto",
-        "breathMark_trill",
         "breathMark_tremolo",
-        "breathMark_staccato_tenuto",
+        "breathMark_trill",
         "fermata",
         "fermata_staccato",
-        "fermata_staccato_tenuto",
         "fermata_tenuto",
         "fermata_tremolo",
         "fermata_trill",
         "fermata_turn",
-        "spiccato",
         "staccatissimo",
+        "staccatissimo_staccato",
+        "staccatissimo_staccato_tenuto",
+        "staccatissimo_staccato_tenuto_trill",
+        "staccatissimo_tenuto",
         "staccato",
         "staccato_tenuto",
         "staccato_tremolo",
         "staccato_trill",
         "staccato_turn",
         "tenuto",
+        "tenuto_tremolo",
+        "tenuto_trill",
         "tremolo",
         "trill",
+        "trill_turn",
         "turn",
     ]
 
@@ -279,6 +289,8 @@ class EncodedSymbol:
         slur: str = nonote,
         position: str = nonote,
         coordinates: tuple[float, float] | None = None,
+        confidence: dict[str, Any] | None = None,
+        stem_direction: str | None = None,
     ) -> None:
         self.rhythm = rhythm
         self.pitch = pitch
@@ -293,6 +305,13 @@ class EncodedSymbol:
         # this ordering can be used to reject cases where attention-based coordinates
         # violate monotonic scan constraints and are therefore unreliable.
         self.coordinates = coordinates
+        # Optional decoder diagnostics. Keeping them on the symbol means the
+        # score post-processing decides which records reach the sidecar.
+        self.confidence = confidence
+        # Set only by the opt-in geometry post-processing pass.  It is not a
+        # transformer prediction and intentionally does not affect equality or
+        # token serialization.
+        self.stem_direction = stem_direction
         self._duration: SymbolDuration | None = None
 
     def is_control_symbol(self) -> bool:
@@ -486,10 +505,28 @@ def _remove_redudant_clefs_keys_and_time_signatures(
 def _remove_duplicated_piches(chord: list[EncodedSymbol]) -> list[EncodedSymbol]:
     if len(chord) <= 1 or not chord[0].rhythm.startswith(("note", "rest")):
         return chord
+    # A pitch written twice in one moment is normally the decoder repeating
+    # itself. It is not when the two carry opposite stems: a stem is only ever
+    # set from a notehead the segmentation found, so an up and a down means two
+    # heads were drawn there -- a unison the engraver printed as two heads side
+    # by side, which is two voices and not one note twice.
+    #
+    # That is a fact about the *group*, so it is read off the group before any
+    # key is built. Asking it of each symbol on its own keeps far more than the
+    # pair: a duplicate carrying a stem beside one carrying none would get two
+    # different keys and neither would be dropped, so a second note would be
+    # written where nothing ever saw a second head. A stem beside SHARED is the
+    # same trap. Only the two directions together are evidence.
+    stems: dict[str, set[str | None]] = {}
+    for symbol in chord:
+        stems.setdefault(symbol.pitch + " " + symbol.position, set()).add(symbol.stem_direction)
+
     by_pitch: dict[str, EncodedSymbol] = {}
     order_of_appearance = []
     for symbol in chord:
         key = symbol.pitch + " " + symbol.position
+        if stems[key] == {"up", "down"}:
+            key += " " + str(symbol.stem_direction)
         if key in by_pitch:
             if symbol.get_duration().fraction > by_pitch[key].get_duration().fraction:
                 by_pitch[symbol.pitch] = symbol
@@ -559,11 +596,44 @@ def _get_duration_of_measure(measure: list[list[EncodedSymbol]]) -> Fraction:
     return total_duration
 
 
-def _get_typical_duration_of_measures(measures: list[list[list[EncodedSymbol]]]) -> Fraction:
-    durations = [_get_duration_of_measure(m) for m in measures]
-    if len(durations) == 0:
-        return Fraction(0)
-    return sorted(durations)[len(durations) // 2]
+MIN_MEASURES_FOR_A_TYPICAL_LENGTH = 3
+
+
+def _spans_between_time_signatures(
+    measures: list[list[list[EncodedSymbol]]],
+) -> list[list[int]]:
+    """The measure indices under each signature in force, split where one changes."""
+    spans: list[list[int]] = []
+    current: list[int] = []
+    for i, measure in enumerate(measures):
+        changes = any(
+            symbol.rhythm.startswith("timeSignature") for chord in measure for symbol in chord
+        )
+        if changes and current:
+            spans.append(current)
+            current = []
+        current.append(i)
+    if current:
+        spans.append(current)
+    return spans
+
+
+def _get_typical_duration_of_measures(durations: list[Fraction]) -> Fraction | None:
+    """The median measure of a span, or None when the span cannot support one.
+
+    Fewer than `MIN_MEASURES_FOR_A_TYPICAL_LENGTH` measures is not a sample. Over
+    two, a median is whichever of them is longer; over one it is that measure
+    itself, which then reports every measure as typical. Both are arithmetic
+    dressed as evidence, and a threshold taken off them costs a measure its
+    tuplets on no grounds at all.
+
+    Empty measures do not vote -- the fragment after a crop's last barline is one,
+    and it is not a bar of music.
+    """
+    lengths = sorted(d for d in durations if d > Fraction(0))
+    if len(lengths) < MIN_MEASURES_FOR_A_TYPICAL_LENGTH:
+        return None
+    return lengths[len(lengths) // 2]
 
 
 def _remove_tuplets(measure: list[list[EncodedSymbol]]) -> list[list[EncodedSymbol]]:
@@ -571,19 +641,46 @@ def _remove_tuplets(measure: list[list[EncodedSymbol]]) -> list[list[EncodedSymb
 
 
 def _fix_over_eager_tuplets(chords: list[list[EncodedSymbol]]) -> list[list[EncodedSymbol]]:
-    """
-    The transformer tends to add too many tuplets, so we remove them
-    based on the length of a measurement.
+    """Remove tuplets from a measure that is short of the length its neighbours keep.
+
+    The transformer tends to add too many tuplets, and a spurious one makes its
+    measure come out **short** -- three eighths where the page prints two -- so a
+    measure below the length the music around it holds is the evidence that it
+    happened. What counts as "the length around it" is the whole of this pass.
+
+    It used to be the median measure of everything handed in, which is a fair
+    stand-in on a page of one meter and is wrong on a crop of several. Two things
+    replace it, each for a case the other does not cover:
+
+    - **Per span between time signatures.** A measure that carries a signature is
+      not judged against the measures before it. On Virta venhettä vie m8-m10 --
+      one printed system, cropped -- the page changes to 2/4 at m10 and homr reads
+      that change, but the crop's measures are 4, 4 and 2 quarters, so the median
+      was a whole and the one bar that was right about its own meter was the one
+      stripped. It prints a triplet of eighths there; the parse came out as five
+      plain eighths.
+    - **A span too short to have a typical measure is left alone.** Splitting on
+      its own is not enough, and the same crop shows why: it leaves a span of two
+      whose median is simply the longer of them, so m9 -- which prints a triplet
+      too -- would have lost it instead. See `_get_typical_duration_of_measures`.
+
+    Nothing to compare against means nothing removed. That is the safe direction:
+    over-keeping a tuplet leaves a measure the meter check can see, while
+    over-removing one throws away music no later pass recovers -- `clean_score`'s
+    `fix_missing_tuplets` needs a voice that kept the bracket, and here every voice
+    loses it in the same bar.
     """
     measures = _group_into_measures(chords)
-    mean = _get_typical_duration_of_measures(measures)
-    result = []
-    for i, measure in enumerate(measures):
-        if _get_duration_of_measure(measure) < mean:
-            eprint("Removing tuplets from measure #", i + 1)
-            result.append(_remove_tuplets(measure))
-        else:
-            result.append(measure)
+    durations = [_get_duration_of_measure(measure) for measure in measures]
+    result = list(measures)
+    for span in _spans_between_time_signatures(measures):
+        typical = _get_typical_duration_of_measures([durations[i] for i in span])
+        if typical is None:
+            continue
+        for i in span:
+            if Fraction(0) < durations[i] < typical:
+                eprint("Removing tuplets from measure #", i + 1)
+                result[i] = _remove_tuplets(measures[i])
     return _flatten_measures(result)
 
 

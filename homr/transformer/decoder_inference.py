@@ -36,6 +36,7 @@ class ScoreDecoder:
 
         self.fp16 = fp16
         self.use_gpu = use_gpu
+        self.device = "cuda" if use_gpu else "cpu"
         self.device_id = 0
         self.output_names = [
             "out_rhythms",
@@ -97,7 +98,7 @@ class ScoreDecoder:
 
             # Bind Outputs
             for name in output_names:
-                self.io_binding.bind_output(name, "cuda" if self.use_gpu else "cpu", self.device_id)
+                self.io_binding.bind_output(name, self.device, self.device_id)
 
             # Run inference
             self.net.run_with_iobinding(iobinding=self.io_binding)
@@ -115,7 +116,11 @@ class ScoreDecoder:
             slursp = outputs[5].numpy()
             attention = outputs[6].numpy()
 
-            rhythm_sample = np.array([[rhythmsp[:, -1, :].argmax()]])
+            raw_rhythm_logits = rhythmsp[:, -1, :]
+            constrained_rhythm_logits = apply_rhythm_constraints(
+                raw_rhythm_logits, self.config.forbidden_rhythm_tokens
+            )
+            rhythm_sample = np.array([[constrained_rhythm_logits.argmax()]])
             pitch_sample = np.array([[pitchsp[:, -1, :].argmax()]])
             lift_sample = np.array([[liftsp[:, -1, :].argmax()]])
             articulation_sample = np.array([[articulationsp[:, -1, :].argmax()]])
@@ -132,6 +137,25 @@ class ScoreDecoder:
             if rhythm_sample[0][0] == self.eos_token:
                 break
 
+            confidence = None
+            if self.config.record_confidence:
+                confidence = {
+                    "rhythm": rhythm_confidence(
+                        raw_rhythm_logits,
+                        constrained_rhythm_logits,
+                        self.inv_rhythm_vocab,
+                    ),
+                    "pitch": confidence_for_logits(pitchsp[:, -1, :], self.inv_pitch_vocab),
+                    "lift": confidence_for_logits(liftsp[:, -1, :], self.inv_lift_vocab),
+                    "position": confidence_for_logits(
+                        positionsp[:, -1, :], self.inv_position_vocab
+                    ),
+                    "articulation": confidence_for_logits(
+                        articulationsp[:, -1, :], self.inv_articulation_vocab
+                    ),
+                    "slur": confidence_for_logits(slursp[:, -1, :], self.inv_slur_vocab),
+                }
+
             symbol = EncodedSymbol(
                 rhythm=rhythm_token[0],
                 pitch=pitch_token[0],
@@ -140,6 +164,7 @@ class ScoreDecoder:
                 slur=slur_token[0],
                 position=position_token[0],
                 coordinates=attention,
+                confidence=confidence,
             )
             symbols.append(symbol)
 
@@ -162,7 +187,7 @@ class ScoreDecoder:
                 cache.append(
                     ort.OrtValue.ortvalue_from_numpy(
                         np.zeros((1, heads, cache_len, head_dim), dtype=np.float16),
-                        "cuda" if self.use_gpu else "cpu",
+                        self.device,
                         self.device_id,
                     )
                 )
@@ -170,7 +195,7 @@ class ScoreDecoder:
                 cache.append(
                     ort.OrtValue.ortvalue_from_numpy(
                         np.zeros((1, heads, cache_len, head_dim), dtype=np.float32),
-                        "cuda" if self.use_gpu else "cpu",
+                        self.device,
                         self.device_id,
                     )
                 )
@@ -183,6 +208,46 @@ def detokenize(tokens: NDArray, vocab: dict[int, str]) -> list[str]:
     toks = [vocab[tok.item()] for tok in tokens]
     toks = [t for t in toks if t not in ("[BOS]", "[EOS]", "[PAD]")]
     return toks
+
+
+def confidence_for_logits(
+    logits: NDArray, vocab: dict[int, str], top_k: int = 3
+) -> dict[str, Any]:
+    """Return the selected token and its closest alternatives for one decoder head."""
+    scores = np.asarray(logits, dtype=np.float64).reshape(-1)
+    shifted = scores - np.max(scores)
+    probabilities = np.exp(shifted)
+    probabilities /= probabilities.sum()
+    choices = np.argsort(-probabilities, kind="stable")[:top_k]
+    return {
+        "value": vocab[int(choices[0])],
+        "probability": float(probabilities[choices[0]]),
+        "alternatives": [
+            {"value": vocab[int(choice)], "probability": float(probabilities[choice])}
+            for choice in choices
+        ],
+        "margin": float(probabilities[choices[0]] - probabilities[choices[1]])
+        if len(choices) > 1
+        else None,
+    }
+
+
+def apply_rhythm_constraints(logits: NDArray, forbidden: set[int]) -> NDArray:
+    """Mask opt-in forbidden rhythm tokens without touching control symbols."""
+    if not forbidden:
+        return logits
+    constrained = logits.copy()
+    constrained[..., list(forbidden)] = -np.inf
+    return constrained
+
+
+def rhythm_confidence(
+    raw_logits: NDArray, constrained_logits: NDArray, vocab: dict[int, str]
+) -> dict[str, Any]:
+    report = confidence_for_logits(constrained_logits, vocab)
+    if not np.array_equal(raw_logits, constrained_logits):
+        report["unconstrained"] = confidence_for_logits(raw_logits, vocab)
+    return report
 
 
 def get_decoder(config: Config) -> ScoreDecoder:
@@ -200,14 +265,18 @@ def get_decoder(config: Config) -> ScoreDecoder:
             # Sometimes Ort falls automatically back to the CPU EP
             # if so we get an error due to the device selection in init_cache().
             # CoreML binds IO on the CPU (device == "cpu") even when the GPU/ANE runs the
-            # compute, so we only flip use_gpu on when CUDA device memory is in play.
+            # compute, so we only flip use_gpu on when CUDA/ROCm device memory is in play.
             active = onnx_transformer.get_providers()
-            if device == "cuda" and "CUDAExecutionProvider" in active:
-                use_gpu = True
-            elif device == "cuda":
-                eprint(
-                    "Onnxruntime is not using GPU and therefore falling back to CPU. This is slow."
-                )
+            if device == "cuda":
+                for active_provider in active:
+                    if active_provider in {"CUDAExecutionProvider", "ROCMExecutionProvider"}:
+                        use_gpu = True
+                        break
+                if not use_gpu:
+                    eprint(
+                        "Onnxruntime is not using GPU and therefore falling back to CPU. "
+                        "This is slow."
+                    )
 
         except Exception as ex:
             eprint(ex)

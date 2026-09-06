@@ -3,48 +3,130 @@ import math
 import cv2
 import numpy as np
 
-from homr import constants
+from homr import constants, reread
 from homr.debug import Debug
 from homr.image_utils import crop_image_and_return_new_top
-from homr.model import MultiStaff, Staff
+from homr.model import MultiStaff, Note, Staff
 from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
+from homr.stem_voice_hints import (
+    add_stem_voice_hints,
+    pair_unison_stems,
+    rescue_duplicate_pitches,
+)
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
 
 
-def _have_all_the_same_number_of_staffs(staffs: list[MultiStaff]) -> bool:
-    for staff in staffs:
-        if len(staff.staffs) != len(staffs[0].staffs):
-            return False
-    return True
+def _flatten_staffs(staffs: list[MultiStaff]) -> list[Staff]:
+    return [s for multi_staff in staffs for s in multi_staff.staffs]
 
 
-def _is_close_to_image_top_or_bottom(staff: MultiStaff, image: NDArray) -> bool:
-    tolerance = 50.0
-    closest_distance_to_top_or_bottom: list[float] = [
-        min(s.min_x, image.shape[0] - s.max_x) for s in staff.staffs
-    ]
-    return min(closest_distance_to_top_or_bottom) < tolerance
+def _regroup_by_period(
+    flat_staffs: list[Staff], period: int, front_trim: int, back_trim: int
+) -> list[MultiStaff]:
+    core = flat_staffs[front_trim : len(flat_staffs) - back_trim]
+    return [MultiStaff(core[i : i + period], []) for i in range(0, len(core), period)]
 
 
-def _ensure_same_number_of_staffs(staffs: list[MultiStaff], image: NDArray) -> list[MultiStaff]:
-    if _have_all_the_same_number_of_staffs(staffs):
+def _find_periodic_core(flat_staffs: list[Staff]) -> tuple[int, int, int] | None:
+    """
+    Find a repeating sequence of staff layouts among individual staffs, e.g.
+    a solo staff followed by a piano grand staff (2 staffs), repeated for
+    every system in a vocal score with piano accompaniment.
+
+    We work on the flattened sequence of raw staffs rather than on the
+    MultiStaff rows produced upstream, because that upstream grouping is
+    itself only a heuristic (staffs sharing a bar line or clef get merged
+    into one row) and can be inconsistent across a page: the same kind of
+    solo-staff-plus-grand-staff pair might end up pre-merged into one row for
+    one system and left as two separate rows for another, purely because of
+    how cleanly a bar line lined up. Searching row-by-row would then see two
+    different "shapes" for what is structurally the same repeating pattern.
+    Working on individual staffs sidesteps that inconsistency entirely.
+
+    A system right at the start or end of the page can break the pattern on
+    its own without invalidating it: an introduction or coda system with a
+    genuinely different layout, or simply the most poorly detected staff on
+    the page. We therefore allow trimming up to one period's worth of staffs
+    from either edge before requiring the remainder to tile exactly. We
+    never trim from the middle of the page: a mismatch there is a detection
+    problem to fix upstream, not something to paper over here.
+
+    Returns (period, front_trim, back_trim) for the smallest total trim and,
+    among ties, the smallest period -- so an already-uniform page (period 1,
+    no trim) is always preferred when it fits, and we never discard more of
+    the page than necessary. Returns None if no repeating core of at least
+    two full cycles can be found.
+    """
+    layout = [s.is_grandstaff for s in flat_staffs]
+    n = len(layout)
+    best: tuple[int, int, int, int] | None = None
+    for period in range(1, n // 2 + 1):
+        for front_trim in range(period + 1):
+            for back_trim in range(period + 1):
+                core = layout[front_trim : n - back_trim]
+                if len(core) < 2 * period or len(core) % period != 0:
+                    continue
+                rows = [tuple(core[i : i + period]) for i in range(0, len(core), period)]
+                if not all(row == rows[0] for row in rows):
+                    continue
+                candidate = (front_trim + back_trim, period, front_trim, back_trim)
+                if best is None or candidate[:2] < best[:2]:
+                    best = candidate
+    if best is None:
+        return None
+    _, period, front_trim, back_trim = best
+    return period, front_trim, back_trim
+
+
+def _ensure_same_number_of_staffs(staffs: list[MultiStaff]) -> list[MultiStaff]:
+    """
+    If every system already has the same number of *more than one* staff, trust that
+    directly rather than re-deriving it via _find_periodic_core. That function's signature
+    is each flat staff's is_grandstaff flag, which is a fine way to tell "solo staff" from
+    "piano grand staff" apart when the two are pre-merged inconsistently across the page
+    (see its own docstring) - but it carries zero information when a page has N genuinely
+    independent, same-type staffs per system and none of them are a grand staff (e.g. a
+    string quartet): the flattened signature is then a constant sequence, which trivially -
+    and wrongly - satisfies period=1, collapsing all N voices into one. Checking uniformity
+    upfront on the untouched, already-correct per-system grouping sidesteps that degenerate
+    case entirely.
+
+    Restricted to row length > 1: a page where every row is already a single raw staff
+    (nothing grouped yet, e.g. a solo-plus-piano page where no bar line happened to
+    pre-merge any pair) is *also* uniform by this same measure, but there _find_periodic_
+    core is exactly what's needed to discover the real, larger repeating pattern from
+    scratch - that's the case this function was originally written for, and it is never
+    already uniform at a row length above 1.
+    """
+    row_lengths = {len(multi_staff.staffs) for multi_staff in staffs}
+    if len(row_lengths) == 1 and next(iter(row_lengths)) > 1:
         return staffs
-    if len(staffs) > 2:
-        if _is_close_to_image_top_or_bottom(
-            staffs[0], image
-        ) and _have_all_the_same_number_of_staffs(staffs[1:]):
-            eprint("Removing first system from all voices, as it has a different number of staffs")
-            return staffs[1:]
-        if _is_close_to_image_top_or_bottom(
-            staffs[-1], image
-        ) and _have_all_the_same_number_of_staffs(staffs[:-1]):
-            eprint("Removing last system from all voices, as it has a different number of staffs")
-            return staffs[:-1]
+    flat_staffs = _flatten_staffs(staffs)
+    core = _find_periodic_core(flat_staffs)
+    if core is not None:
+        period, front_trim, back_trim = core
+        if front_trim > 0:
+            eprint(
+                f"Removing the first {front_trim} staff(s), as they don't fit "
+                "the staff layout the rest of the page repeats"
+            )
+        if back_trim > 0:
+            eprint(
+                f"Removing the last {back_trim} staff(s), as they don't fit "
+                "the staff layout the rest of the page repeats"
+            )
+        if period > 1:
+            eprint(
+                "Systems repeat every",
+                period,
+                "staffs with a different layout each time, combining them into one row",
+            )
+        return _regroup_by_period(flat_staffs, period, front_trim, back_trim)
     result: list[MultiStaff] = []
     for staff in staffs:
         result.extend(staff.break_apart())
@@ -181,10 +263,17 @@ def prepare_staff_image(
     eprint("Dewarping staff", index, "done")
 
     staff_image = remove_black_contours_at_edges_of_image(staff_image, staff.average_unit_size)
+    before_canvas = staff_image.shape
     staff_image = center_image_on_canvas(staff_image, image_dimensions)
+    # Follow the staff through the last steps as well, so the coordinates handed
+    # back describe the image handed back.  The dewarp and the second crop move a
+    # staff by tens of pixels on a grand staff, which is where this went
+    # unnoticed: nothing but the debug drawing used to read them.
+    transformed_staff = _onto_canvas(
+        _dewarp_staff(staff, dewarp, top_left, scaling_factor), before_canvas, image_dimensions
+    )
     debug.write_image_with_fixed_suffix(f"_staff-{index}_input.jpg", staff_image)
     if debug.debug:
-        transformed_staff = _dewarp_staff(staff, dewarp, top_left, scaling_factor)
         transformed_staff_image = staff_image.copy()
         for symbol in transformed_staff.symbols:
             center = symbol.center
@@ -201,7 +290,19 @@ def prepare_staff_image(
         debug.write_image_with_fixed_suffix(
             f"_staff-{index}_debug_annotated.jpg", transformed_staff_image
         )
-    return staff_image, staff
+    return staff_image, transformed_staff
+
+
+def _onto_canvas(staff: Staff, before: tuple[int, ...], canvas: NDArray) -> Staff:
+    """Move a staff onto the fixed canvas the same way its image was moved."""
+    scale_x = canvas[0] / before[1]
+    scale_y = canvas[1] / before[0]
+    offset_y = (tr_omr_max_height - canvas[1]) // 2
+
+    def transform(point: tuple[float, float]) -> tuple[float, float]:
+        return point[0] * scale_x, point[1] * scale_y + offset_y
+
+    return staff.transform_coordinates(transform)
 
 
 def _dewarp_staff(
@@ -232,6 +333,22 @@ def parse_staff_image(
     )
     eprint("Running TrOmr inference on staff image", index)
     result = parse_staff_tromr(staff_image=staff_image, staff=transformed_staff, config=config)
+    if config.use_stem_voice_hints:
+        noteheads = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]
+        hinted = add_stem_voice_hints(result, noteheads)
+        eprint("Applied", hinted, "stem voice hints on staff", index)
+        # Before the duplicate remover runs: a note the decoder gave its
+        # neighbour's pitch is about to be deleted as a duplicate, and the
+        # segmentation knows which head it really is.
+        rescued = rescue_duplicate_pitches(result, noteheads)
+        if rescued:
+            eprint("Rescued", rescued, "note(s) from being deleted as duplicates")
+        # And where the two heads are at one position rather than two, the pair
+        # is a unison drawn as two heads: give each its own stem so neither is
+        # read as the other written twice.
+        paired = pair_unison_stems(result, noteheads)
+        if paired:
+            eprint("Paired", paired, "unison(s) drawn as two noteheads")
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
@@ -256,6 +373,38 @@ def parse_staff_image(
     return result
 
 
+def _reread_if_doubtful(
+    debug: Debug,
+    index: int,
+    staff: Staff,
+    fused: list[EncodedSymbol],
+    image: NDArray,
+    config: Config,
+) -> list[EncodedSymbol]:
+    """Read a fused pair again one staff at a time when the decoder doubted a note.
+
+    Each half is framed as if it were an ordinary lone staff, against regions
+    naming only the pair: the page's own regions describe the *fused* staff, and
+    asking them where the staff below the upper half starts answers with the
+    fused staff's own top, which is above it.
+
+    Giving each half more paper than that was tried and is worse. Running each
+    one inwards to the other staff's lines -- everything the fused image held,
+    split once -- reads `sammon-ryosto`'s crowded bar as four noteheads against
+    the ordinary framing's five, because a taller crop is fitted to the decoder's
+    canvas by its height and loses the width the crowded bar needs.
+    """
+    if staff.merged_from is None or not reread.doubtful(fused):
+        return fused
+    upper, lower = staff.merged_from
+    eprint("Reading staff", index, "again, one staff at a time: a note was read unsurely")
+    halves = StaffRegions([MultiStaff([upper], []), MultiStaff([lower], [])])
+    upper_symbols = parse_staff_image(debug, index, upper, image, halves, config)
+    lower_symbols = parse_staff_image(debug, index, lower, image, halves, config)
+    result, _ = reread.better_of(fused, reread.splice(upper_symbols, lower_symbols))
+    return result
+
+
 def parse_staffs(
     debug: Debug, staffs: list[MultiStaff], image: NDArray, config: Config, selected_staff: int = -1
 ) -> list[list[EncodedSymbol]]:
@@ -263,7 +412,7 @@ def parse_staffs(
     Dewarps each staff and then runs it through an algorithm which extracts
     the rhythm and pitch information.
     """
-    staffs = _ensure_same_number_of_staffs(staffs, image)
+    staffs = _ensure_same_number_of_staffs(staffs)
     # For simplicity we call every staff in a multi staff a voice,
     # even if it's part of a grand staff.
     number_of_voices = _get_number_of_voices(staffs)
@@ -279,6 +428,7 @@ def parse_staffs(
                 i += 1
                 continue
             result_staff = parse_staff_image(debug, i, staff, image, regions, config)
+            result_staff = _reread_if_doubtful(debug, i, staff, result_staff, image, config)
             if len(result_staff) == 0:
                 eprint("Skipping empty staff", i)
                 i += 1

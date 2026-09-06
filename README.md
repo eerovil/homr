@@ -4,33 +4,133 @@ homr is an Optical Music Recognition (OMR) software designed to transform camera
 machine-readable MusicXML format. The resulting [MusicXML](https://www.w3.org/2021/06/musicxml40/) files can be further
 processed using tools such as [musescore](https://musescore.com/).
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/liebharc/homr/blob/main/colab.ipynb)
+For a quick try, visit our online demo at [homr.site](https://homr.site) or [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/liebharc/homr/blob/main/colab.ipynb)
 
 You might also want to check out [Andromr](https://github.com/aicelen/Andromr), an Android app for optical music recognition using homr.
 
+## About this fork
+
+`eerovil/homr` is a fork of [liebharc/homr](https://github.com/liebharc/homr), kept
+permanently rather than as a staging area. It exists to read Finnish choral scans for
+[musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins), which
+installs this fork's `main` and calls it as a subprocess.
+
+**Where a fix belongs.** A defect in a scanned score can be repaired here or in the
+choir app, and this is the rule for deciding (settled on
+[musescore-choir-plugins#141](https://github.com/eerovil/musescore-choir-plugins/issues/141)):
+
+> **homr's job is to produce MusicXML that, when rendered, looks like the original
+> page** — including stem direction, which is to say the voices. Anything after that
+> point belongs to the choir app.
+
+So if homr got the page wrong, the fix is here, whether or not the evidence is still in
+the pixels — a slur nobody engraved, two noteheads read as one, staves grouped into the
+wrong system. If the parse already matches the page and the app wants something further
+from it — which band to read next, what the operator is shown, how a practice track is
+built — that is the app's, not homr's. The rule is a claim about the *output*, so it is
+testable: render the MusicXML and hold it against the page.
+
+The choir app currently has some OMR repair code of its own that predates this rule and
+is on the wrong side of it. That is being migrated; the rule binds new fixes.
+
+**Upstreaming is opportunistic.** Fixes here are general improvements often enough, and
+one is welcome to go to `liebharc/homr` — but nothing is tracked, nothing is owed, and
+no decision here waits on upstream review. Note that `CONTRIBUTING.md` is upstream's
+file and describes contributing to *upstream*, not to this fork.
+
+**The measurement harness lives here** (`fixturecheck/`, `scripts/choir-bench.py`,
+`scripts/choir-worktree.sh`, `scripts/choir-k8s.sh`). It has to run inside homr's own
+environment, and it reaches into the choir repo through `CHOIR_REPO` for the fixtures
+and reference scores it judges against. See `scripts/README.md`.
+
 ## Prerequisites
 
-- Python 3.11
-- Poetry
-- Optional: NVidia GPU with CUDA 12.1
+- Python 3.11 or 3.12
+- Poetry or UV
+- Optional
+  - NVIDIA GPU with CUDA 12.1
+  - AMD GPU with ROCm 7.0
 
 ## Getting started (uv)
 
-The easiest way to get started is using `uvx` (`uv` must be installed). Note that is does not make use of the GPU.
-- `uvx homr <img>`
-- The resulting MusicXML file will be saved in the same directory as the input image
+The easiest way to get started is using `uvx` (`uv` must be installed). Select an inference backend:
+- CPU: `uvx --from 'homr[cpu]' homr <image>`
+- NVIDIA CUDA: `uvx --from 'homr[cuda]' homr <image>`
+- AMD ROCm: `uvx --python 3.12 --from 'homr[rocm]' homr <image>`
+
+Then see the resulting MusicXML:
+- It will be saved in the same directory as the input image
 - To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
 
 ## Getting started (poetry)
 
 - Clone the repository
 - Install dependencies for:
-  - GPU (requires CUDA): `poetry install --only main,gpu`
-  - CPU: `poetry install --only main`
-  - Development: `poetry install`
+  - Inference: `poetry install --only main --extras cpu`
+  - Development: `poetry install --extras cpu`
+  - If using GPU, replace `--extras cpu` to `--extras cuda` / `--extras rocm`
 - Run the program using `poetry run homr <image>`
 - The resulting MusicXML file will be saved in the same directory as the input image
 - To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
+
+### Optional score settings
+
+When you know notation facts about one score, keep them in a JSON file and opt in for that run:
+
+```json
+{
+  "decoder": {"minimum_duration": "16", "allow_tuplets": true, "allow_grace_notes": true},
+  "postprocessing": {"stem_voice_hints": true}
+}
+```
+
+```bash
+poetry run homr page.png --score-settings page.score-settings.json --output-confidence
+```
+
+`minimum_duration` is the shortest written base note value, so `16` permits dotted
+16ths and 16th-note tuplets but excludes 32nds. `--output-confidence` writes a
+`.confidence.json` sidecar with the selected decoder tokens, their probabilities,
+and their nearest alternatives. When a constraint changes a rhythm choice, that
+record also retains the unconstrained result.
+
+`stem_voice_hints` is **on** in this fork; set it to `false` to turn it off for a
+score. Each decoded note is matched to the notehead segmentation found for it,
+and where a staff is carrying two voices in a bar, a note drawn with an up stem
+becomes voice 1 (or 5 on staff 2) and a down stem voice 2 (or 6).
+
+A staff is taken to be carrying two voices when two notes sound at one moment
+with their stems drawn opposite ways, when a stem contradicts the note's height
+-- an up stem above the middle line, or a down stem below it -- or when one
+printed notehead carries both stems. Anywhere else, and wherever the match to a
+notehead is not clean, the existing voice assignment stands: on a staff carrying
+one voice the stems say how high the notes are, not which voice they are, and
+following them there would split that voice in half.
+
+That last shape is also written out rather than only counted. Older choral
+engraving prints a unison as one notehead carrying both stems -- two parts
+singing the same note -- so such a head is written into **both** voices, which
+renders as the one head with two stems the page draws. It is not doubled where
+the other voice is already sounding on that staff at that moment: there the
+second voice is in the bar under its own stem, and a third note would be
+invented.
+
+A unison the page draws as **two adjacent heads** is a different shape and is
+reached a different way. Both heads survive segmentation and the decoder emits
+both notes, at the right pitch and -- where the two parts hold the note for
+different lengths -- at the right two durations. What lost one of them was that
+both decoded notes claim the same staff position and their attention points sit
+a few pixels apart, so both matched the *same* head and took the same stem, and
+a pitch written twice with one stem is a duplicate: the second was deleted. So
+where a moment on one staff holds two decoded notes of one pitch and
+segmentation found exactly two heads at that position carrying opposite stems,
+the two are matched to the two heads **one to one, left to right** -- the axis
+the attention point is trustworthy on -- and a pitch written twice with opposite
+stems is no longer read as one note written twice. Nothing is invented: the two
+notes were already there.
+
+Whole notes are outside this. They carry no stem for the segmentation to find,
+so a unison of two whole heads still reads as one note.
 
 ## Example
 

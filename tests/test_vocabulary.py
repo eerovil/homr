@@ -5,6 +5,8 @@ from fractions import Fraction
 
 from homr.transformer.vocabulary import (
     EncodedSymbol,
+    _get_typical_duration_of_measures,
+    _spans_between_time_signatures,
     kern_to_symbol_duration,
     remove_duplicated_symbols,
 )
@@ -206,3 +208,67 @@ barline . . . . ."""
             duration = kern_to_symbol_duration(kern)
             self.assertEqual(duration.normal_notes, 1)
             self.assertEqual(duration.actual_notes, 1)
+
+    def test_a_measure_keeps_its_tuplets_under_its_own_time_signature(self) -> None:
+        """Virta venhettä vie m8-m10, one printed system, cropped.
+
+        The page changes to 2/4 at m10 and homr reads that change, so the crop
+        holds 4, 4 and 2 quarters. Judged against the whole crop the short bar was
+        the one stripped, and the triplet of eighths the page prints there came out
+        as plain eighths.
+        """
+        tokens = read_token_lines("""timeSignature/4 . . . . .
+note_4 F4 _ _ upper
+note_4 F4 _ _ upper
+note_4 F4 _ _ upper
+note_4 F4 _ _ upper
+barline . . . . .
+note_4 F4 _ _ upper
+note_4 F4 _ _ upper
+note_12 F4 _ _ upper
+note_12 G4 _ _ upper
+note_12 A4 _ _ upper
+note_4 F4 _ _ upper
+barline . . . . .
+timeSignature/4 . . . . .
+note_12 F4 _ _ upper
+note_12 G4 _ _ upper
+note_12 A4 _ _ upper
+rest_8 . _ _ upper
+note_8 F4 _ _ upper
+barline . . . . .""".splitlines())
+        result = remove_duplicated_symbols(tokens)
+        self.assertIn("note_12", token_lines_to_str(result).splitlines()[-6])
+        self.assertEqual(
+            [line.split(" ")[0] for line in token_lines_to_str(result).splitlines()[-6:]],
+            ["note_12", "note_12", "note_12", "rest_8", "note_8", "barline"],
+        )
+
+    def test_a_span_too_short_to_have_a_typical_measure_keeps_its_tuplets(self) -> None:
+        """Two measures have no median but the longer of them, so neither is judged."""
+        self.assertIsNone(_get_typical_duration_of_measures([Fraction(1), Fraction(3, 4)]))
+        self.assertIsNone(_get_typical_duration_of_measures([Fraction(1)]))
+        self.assertEqual(
+            _get_typical_duration_of_measures([Fraction(1), Fraction(3, 4), Fraction(1)]),
+            Fraction(1),
+        )
+
+    def test_an_empty_measure_does_not_vote_for_a_typical_length(self) -> None:
+        """The fragment after a crop's last barline is not a bar of music."""
+        self.assertIsNone(
+            _get_typical_duration_of_measures([Fraction(1), Fraction(3, 4), Fraction(0)])
+        )
+
+    def test_measures_are_grouped_by_the_signature_in_force(self) -> None:
+        def measure(*rhythms: str) -> list[list[EncodedSymbol]]:
+            return [[EncodedSymbol(rhythm)] for rhythm in rhythms]
+
+        measures = [
+            measure("timeSignature/4", "note_4"),
+            measure("note_4"),
+            measure("timeSignature/8", "note_8"),
+            measure("note_8"),
+        ]
+        self.assertEqual(_spans_between_time_signatures(measures), [[0, 1], [2, 3]])
+        self.assertEqual(_spans_between_time_signatures([measure("note_4")]), [[0]])
+        self.assertEqual(_spans_between_time_signatures([]), [])

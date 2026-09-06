@@ -1,0 +1,850 @@
+"""The report, which is the output rather than a thing you ask for afterwards.
+
+Every run writes it. There is no flag for "just the numbers": a count says a
+system agrees on staves, bars and noteheads and cannot say whether the parse is
+the music, and asking for the pictures separately is how a whole afternoon went
+on hand-built pages.
+
+Each case page opens with the same three images in the same order -- the printed
+band, homr's output engraved, the reference engraved -- so two cases can be read
+against each other without working out what is being shown.
+"""
+
+from __future__ import annotations
+
+import html
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+from fixturecheck import bars, cases, compare, references, series
+from fixturecheck.compare import Result
+
+#: Where the report is written, and **outside any checkout by default**.
+#:
+#: It used to be `check-report/` beside the source, which meant every worktree
+#: had its own and none of them was at an address. A report you can only reach
+#: by ssh-ing to the host and knowing which branch produced it is most of what
+#: made "how good is it now" unanswerable. One fixed path instead: every run
+#: from every checkout lands here, so there is one thing to serve and it is
+#: never stale for the reason that somebody ran the harness somewhere else.
+#:
+#: The page names the homr it measured, so a run from a branch overwriting a run
+#: from `main` is legible rather than confusing -- and the series, not this, is
+#: what accumulates.
+OUT = Path(os.environ.get("FIXTURECHECK_REPORT")
+           or Path.home() / ".local/share/homr-fixturecheck/report")
+
+#: Where that directory is reachable from, when somebody has served it. Only
+#: used to print a link and to put one in QUALITY.md: nothing here serves
+#: anything, because a static folder on a tailnet is one `tailscale serve`
+#: command and not a service to keep alive. See fixturecheck/README.md.
+URL = os.environ.get("FIXTURECHECK_REPORT_URL", "")
+
+STYLE = """
+body { font: 14px/1.55 system-ui, sans-serif; margin: 0 auto; max-width: 1150px;
+       padding: 24px; color: #1a1a1a; background: #fafafa; }
+h1 { font-size: 22px; margin-bottom: 2px; }
+h2 { font-size: 17px; margin: 30px 0 6px; }
+h3 { font-size: 13px; margin: 18px 0 2px; color: #444; text-transform: uppercase;
+     letter-spacing: .06em; }
+p.lead { color: #555; margin-top: 0; }
+a { color: #1b3a7a; }
+img { display: block; width: 100%; border: 1px solid #e2e2e2; border-radius: 6px;
+      background: #fff; margin: 4px 0 12px; }
+table { border-collapse: collapse; width: 100%; background: #fff;
+        border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden;
+        margin-bottom: 10px; }
+th, td { padding: 5px 9px; text-align: left; border-bottom: 1px solid #f0f0f0;
+         font-variant-numeric: tabular-nums; }
+th { background: #f4f4f4; font-size: 12px; text-transform: uppercase;
+     letter-spacing: .04em; color: #555; }
+tr.voice td { background: #fdecec; }
+tr.pitch td { background: #fde8d8; }
+tr.size  td { background: #fff8e1; }
+tr.timing td { background: #eef4fb; }
+tr.meter td { background: #f0e6fb; font-weight: 600; }
+tr.structure td { background: #f3e8fb; font-weight: 600; }
+tr.unison td { background: #fdf6e3; }
+td.ok { color: #1c5c2c; } td.no { color: #8a1f1f; font-weight: 600; }
+td.warn { color: #8a5a00; font-weight: 600; }
+.sum { display: flex; gap: 22px; flex-wrap: wrap; margin: 8px 0 16px; }
+.sum b { font-size: 20px; display: block; }
+.up { color: #1c5c2c; font-weight: 600; } .down { color: #8a1f1f; font-weight: 600; }
+.same { color: #888; }
+p.warn { background: #f3e8fb; border: 1px solid #ddc7ee; border-radius: 6px;
+         padding: 9px 12px; margin: 0 0 14px; }
+p.prov { color: #555; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+p.pass { background: #eaf6ec; border: 1px solid #c3e2c9; border-radius: 6px;
+         padding: 9px 12px; margin: 0 0 14px; color: #1c5c2c; }
+p.fail { background: #fdecec; border: 1px solid #f0c2c2; border-radius: 6px;
+         padding: 9px 12px; margin: 0 0 14px; color: #8a1f1f; }
+/* Amber and not red: a unison written as one voice is not a fault, and not
+   green either, which is what it used to be. */
+p.warned { background: #fdf6e3; border: 1px solid #e6d9a8; border-radius: 6px;
+           padding: 9px 12px; margin: 0 0 14px; color: #6b4a00; }
+#runbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+          margin: 0 0 12px; padding: 9px 11px; background: #fff;
+          border: 1px solid #e2e2e2; border-radius: 6px; font-size: 13px; }
+#runbar button { font: inherit; padding: 4px 10px; border-radius: 5px;
+                 border: 1px solid #c9c9c9; background: #f6f6f6; cursor: pointer; }
+#runbar button:hover { background: #ececec; }
+#runbar.busy button { opacity: .55; }
+#runbar .one { color: #666; }
+#runbar select { font: inherit; padding: 3px; }
+#runstate { color: #555; font-variant-numeric: tabular-nums; }
+#runbar.busy #runstate { color: #8a5a00; }
+tr.stale td { color: #6b6b6b; }
+tr.other td { color: #8a8a8a; background: #fbfbfb; font-style: italic; }
+span.when { font-size: 11px; color: #8a8a8a; }
+tr.detail td { background: #fcfcfc; padding: 0 9px 10px; }
+tr.detail summary { cursor: pointer; color: #1b3a7a; font-size: 12px;
+                    padding: 6px 0; }
+.sides { display: flex; gap: 18px; flex-wrap: wrap; }
+.sides > div { flex: 1 1 260px; min-width: 0; }
+.sides h4 { margin: 6px 0 4px; font-size: 12px; text-transform: uppercase;
+            letter-spacing: .05em; color: #666; }
+table.bar { margin: 0 0 8px; }
+table.bar th, table.bar td { padding: 3px 7px; font-size: 12px; }
+.crops { display: flex; gap: 18px; margin-top: 6px; align-items: flex-start;
+         flex-wrap: wrap; overflow-x: auto; padding-bottom: 4px; }
+.crops > div { flex: 0 0 auto; }
+/* Shown at exactly the size they were written at, because they were written to
+   a common scale: one staff is the same height in all three
+   (bars.STAFF_PIXELS). Anything that resizes them here -- stretching each to
+   fill its column, or capping the width -- undoes that and puts the same bar
+   on screen at three scales, which is what this looked like before. So they
+   wrap to the next line instead of shrinking, and the scale survives. */
+.crops img { margin: 2px 0 6px; width: auto; max-width: none; }
+/* A panel that has no picture says why instead, and that sentence must not be
+   the thing that makes the row too wide. */
+.crops p.lead { max-width: 300px; font-size: 12px; }
+"""
+
+
+def judged_over(total: dict) -> int:
+    """Everything the headline is taken over — matched notes, losses and shifts."""
+    return sum(total.get(k, 0) for k in ("agree", "voice", "pitch", "size", "timing"))
+
+
+#: What last rendered this folder, so a render from somewhere else is visible.
+RENDERED_FROM = "rendered-from.json"
+
+
+def _series_change(now: dict) -> str:
+    """Say when the history behind this URL is not the one it showed before.
+
+    The folder is shared and the series is not, so two checkouts render here
+    from two different records. Each page is right on its own; what is wrong is
+    reading them in sequence at one address and taking them for one history —
+    a gate that went from 5/5 to 3/5 because somebody rendered from a branch
+    looks exactly like a gate that regressed.
+
+    Only a *change* is worth a banner. Rendering repeatedly from the same series
+    is the ordinary case and says nothing.
+    """
+    stamp = OUT / RENDERED_FROM
+    was = None
+    if stamp.exists():
+        try:
+            was = json.loads(stamp.read_text())
+        except ValueError:
+            was = None
+    stamp.write_text(json.dumps(now))
+    if not was:
+        return ""
+    # **Compared by identity, never by the label.** A checkout's directory name
+    # is not a history: switching branches replaces `series.jsonl` under the
+    # same name, and two checkouts on two hosts can share a basename. Comparing
+    # names left the warning silent in exactly the cases it is for.
+    if series.continues(was):
+        return ""
+    same_id = was.get("series_id") == now.get("series_id")
+    why = ("the same series, rewritten after the point that render reached"
+           if same_id else "a different series")
+    return (f"<p class='warn'>This page was rendered from <b>"
+            f"{html.escape(str(now.get('checkout')))}</b> "
+            f"(<code>{html.escape(str(now.get('series_id')))}</code>, "
+            f"{now.get('runs')} run(s)). The previous render at this address "
+            f"came from <b>{html.escape(str(was.get('checkout')))}</b> "
+            f"(<code>{html.escape(str(was.get('series_id', '?')))}</code>, "
+            f"{was.get('runs')} run(s)) &mdash; {why}, so the numbers below are "
+            f"not a continuation of the ones you saw before. The series is "
+            f"committed per checkout; the folder is shared.</p>")
+
+
+def _provenance(run: dict | None) -> str:
+    """Which homr, which references, and **which series**.
+
+    Without all three no number here is readable: the first two say what was
+    measured, and the third says whose record it is being counted into.
+    """
+    if not run:
+        return ""
+    drifted = run.get("reference_drift", {}).get("changed", [])
+    warn = ""
+    if drifted:
+        warn = (f" &mdash; <b>{len(drifted)} reference(s) have moved since they were "
+                f"frozen</b>, so this run is not measured against the manifest: "
+                f"{html.escape(', '.join(drifted))}")
+    tally = run.get("outcomes", {})
+    lost = tally.get("unreadable", 0) + tally.get("unbuildable", 0)
+    missed = (f" {lost} case(s) could not be read and are recorded as such rather "
+              f"than skipped." if lost else "")
+    where = series.origin()
+    return (f"<p class='prov'>homr <b>{html.escape(str(run.get('homr', '?')))}</b>, "
+            f"references <b>{html.escape(str(run.get('references', '?')))}</b>, "
+            f"series <b>{html.escape(str(where['checkout']))}</b> "
+            f"({where['runs']} run(s)), "
+            f"{html.escape(str(run.get('at', '')))}{warn}.{missed}</p>")
+
+
+def _gate(run: dict | None) -> str:
+    """The gate over all the committed cases, not over this run's share.
+
+    The same figure `QUALITY.md` publishes, and it has to be: the table below
+    lists every case at its own latest measurement, so a banner reporting only
+    what this run happened to judge sat green above two failing rows.
+
+    What it says has changed with the rule under it. It used to count fixtures
+    that were `perfect`; it now counts cases standing at or above the reading
+    they were last accepted at, and names what fell where one did.
+    """
+    gate = series.published_gate(
+        [r for r in series.runs() if r.get("harness") == "fixturecheck"])
+    if not gate:
+        return ""
+    if gate["passed"]:
+        return (f"<p class='pass'>Gate <b>passed</b>: all {gate['cases']} committed "
+                f"cases stand at or above the reading they were accepted at, under "
+                f"homr <b>{html.escape(gate['homr'])}</b>, latest as of "
+                f"{html.escape(gate['as_of'])}.</p>")
+    fell = "".join(
+        f"<li><b>{html.escape(name)}</b> &mdash; {html.escape('; '.join(said))}</li>"
+        for name, said in gate["below"].items())
+    fell = f"<ul>{fell}</ul>" if fell else ""
+    never = ""
+    if gate["unevaluated"]:
+        never = (f" Not judged under homr <b>{html.escape(gate['homr'])}</b>: "
+                 f"<b>{html.escape(', '.join(gate['unevaluated']))}</b>.")
+    if gate["unremembered"]:
+        never += (f" No accepted reading yet: "
+                  f"<b>{html.escape(', '.join(gate['unremembered']))}</b> &mdash; "
+                  f"the next run over them records one.")
+    return (f"<p class='fail'>Gate <b>FAILED</b>: {gate['standing']}/{gate['cases']} "
+            f"committed cases stand, each counted at its own latest result."
+            f"{never} Nothing may read below what it was accepted at; a case that "
+            f"improves takes its memory up with it.{fell}</p>")
+
+
+def _controls(names: list[str]) -> str:
+    """Buttons that start a run, when something is serving that can start one.
+
+    The page is a folder of files, so these do nothing on their own —
+    `fixturecheck/serve.py` answers `/run` and `/queue`, and the bar hides
+    itself when it cannot reach them. That way the same HTML is right whether it
+    is being served or opened off disk, with no second version to keep in step.
+
+    `all` is thirty-five minutes and says so before it is pressed, because a
+    button whose cost is invisible gets pressed by mistake exactly once.
+    """
+    options = "".join(f"<option>{html.escape(n)}</option>" for n in sorted(names))
+    return f"""
+<div id="runbar" hidden>
+  <button data-tier="ten">Run the ten</button>
+  <button data-tier="all" data-cost="the whole repertoire, about 35 minutes">Run everything</button>
+  <span class="one">or one:
+    <select id="onecase">{options}</select>
+    <button data-tier="one">Run it</button>
+  </span>
+  <span id="runstate"></span>
+</div>
+<script>
+(function () {{
+  const bar = document.getElementById('runbar');
+  const state = document.getElementById('runstate');
+  const say = (text, busy) => {{
+    state.textContent = text;
+    bar.classList.toggle('busy', !!busy);
+  }};
+  const draw = (q) => {{
+    if (q.running) {{
+      const behind = q.waiting.length ? ` \\u00b7 ${{q.waiting.length}} waiting` : '';
+      say(`running ${{q.running}}${{behind}}`, true);
+    }} else if (q.last) {{
+      say(`last: ${{q.last.label}} \\u2014 ${{q.last.said || 'done'}}`, false);
+    }} else {{
+      say('', false);
+    }}
+  }};
+  const poll = () => fetch('queue', {{cache: 'no-store'}})
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(q => {{ bar.hidden = false; draw(q); }})
+    .catch(() => {{ bar.hidden = true; }});
+  bar.addEventListener('click', (event) => {{
+    const button = event.target.closest('button[data-tier]');
+    if (!button) return;
+    const cost = button.dataset.cost;
+    if (cost && !confirm(`Run ${{cost}}?`)) return;
+    const body = {{tier: button.dataset.tier}};
+    if (button.dataset.tier === 'one') {{
+      body.names = [document.getElementById('onecase').value];
+    }}
+    say('queueing\\u2026', true);
+    fetch('run', {{method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                  body: JSON.stringify(body)}})
+      .then(r => r.json())
+      .then(a => a.error ? say(a.error, false) : poll())
+      .catch(() => say('could not reach the runner', false));
+  }});
+  poll();
+  // The page is rewritten by a run, so a finished run is a reload rather than
+  // a redraw: the numbers below are what actually changed.
+  let wasRunning = false;
+  setInterval(() => fetch('queue', {{cache: 'no-store'}})
+    .then(r => r.json())
+    .then(q => {{
+      bar.hidden = false;
+      if (wasRunning && !q.running) {{ location.reload(); return; }}
+      wasRunning = !!q.running;
+      draw(q);
+    }})
+    .catch(() => {{ bar.hidden = true; }}), 3000);
+}})();
+</script>
+"""
+
+
+#: Said on the page as well as in QUALITY.md, because the table above it invites
+#: precisely this conclusion and the conclusion is wrong.
+NOT_MEASURED = """
+<h2>What this does not measure</h2>
+<p class="lead"><b>Whether the choir gets a correct practice track.</b> This
+compares homr's output against a reference for the same printed system &mdash;
+one stage before the score anybody sings from, and several before a video.
+Everything <code>clean_score</code> does afterwards is unmeasured, and so is
+every repair a person made by hand.</p>
+<p class="lead"><b>Detection.</b> The noteheads and stems found in the picture
+are a different layer from the MusicXML homr writes and disagree with it in both
+directions. There is no ground truth for detection here, so there is no number
+for it.</p>
+"""
+
+
+def _engrave(source: Path, into: Path, dpi: int = 220) -> str:
+    """One score as a picture, trimmed to the music rather than an empty A4."""
+    cli = (os.environ.get("MUSESCORE_CLI_PATH") or "musescore3").strip().strip('"')
+    run = subprocess.run([cli, "-T", "10", "-r", str(dpi), str(source), "-o", str(into)],
+                         capture_output=True, text=True, timeout=600)
+    numbered = into.with_name(f"{into.stem}-1.png")
+    if numbered.exists():
+        numbered.replace(into)
+    return into.name if run.returncode == 0 and into.exists() else ""
+
+
+#: Rows that get opened out into the whole bar. A row that agrees needs no
+#: explaining, and a structural row is about the system rather than a bar.
+FAULTS = ("voice", "pitch", "size", "timing")
+
+
+def _beats(notes: list[dict]) -> str:
+    """One side of a bar, as the notes it holds in the order they sound."""
+    if not notes:
+        return "<p class='lead'>nothing in this bar</p>"
+    cells = "".join(
+        f"<tr><td>{note['beat']:g}</td><td>{html.escape(str(note['name']))}</td>"
+        f"<td>{note['position']}</td>"
+        f"<td>{html.escape(str(note['voice']))}"
+        f"{' · chord' if note.get('chord') else ''}"
+        f"{'' if note.get('stem', True) else ' · no stem'}</td></tr>"
+        for note in notes)
+    return ("<table class='bar'><tr><th>beat</th><th>note</th><th>position</th>"
+            f"<th>voice</th></tr>{cells}</table>")
+
+
+def _bar_pictures(case, parsed: Path, row) -> str:
+    """The same bar three ways: the printed ink, homr's reading, the reference.
+
+    The tables above say what each side holds. Only the page says which of them
+    is right, and on this repertoire the reference has been the wrong one every
+    time anybody checked -- so the printed crop is the picture that matters and
+    the other two are what it is being read against.
+
+    Every piece is optional and says so when it is missing. A missing MuseScore
+    costs the engravings, a bar the detection cannot place costs the crop, and
+    neither costs the finding.
+    """
+    cli = (os.environ.get("MUSESCORE_CLI_PATH") or "musescore3").strip().strip('"')
+    stem = f"{case.name}-b{row.bar}-s{row.staff}"
+    parts = []
+
+    printed, why = _printed_crop(case, row, stem)
+    if printed:
+        parts.append(f"<div><h4>the printed bar &mdash; staff {row.staff}</h4><img src='{printed}' "
+                     f"alt='bar {html.escape(row.bar)} as printed'></div>")
+    else:
+        parts.append(f"<div><h4>the printed bar &mdash; staff {row.staff}</h4><p class='lead'>{html.escape(why)}"
+                     f"</p></div>")
+
+    for label, source, suffix in (("homr, engraved &mdash; the whole system", parsed, "homr"),
+                                  ("the reference, engraved &mdash; the whole system", case.reference, "ref")):
+        cut, why = _engraved_crop(case, source, row, suffix, stem, cli)
+        if cut:
+            parts.append(f"<div><h4>{label}</h4><img src='{cut}' alt='{label}'></div>")
+        else:
+            parts.append(f"<div><h4>{label}</h4><p class='lead'>"
+                         f"{html.escape(why)}</p></div>")
+    return f"<div class='crops'>{''.join(parts)}</div>"
+
+
+def _size(image: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image
+        with Image.open(image) as picture:
+            return picture.size
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+#: One render of a score, kept for as long as the report is being written. Each
+#: side is drawn once per case rather than once per fault -- the bar is cut out
+#: of the picture, so the picture is the thing worth keeping.
+_ENGRAVED: dict = {}
+
+
+def _engraved_crop(case, source: Path, row, suffix: str, stem: str,
+                   cli: str) -> tuple[str, str]:
+    """One bar cut out of the score's own engraving, or why it is not shown.
+
+    Cut rather than drawn again. Engraving a single bar on its own gave it a
+    title, a fresh layout, and a clef and key it does not carry in context, so
+    the detail under a fault looked like different music from the system at the
+    top of the page. MuseScore will say where each bar landed (`.mpos`), which
+    makes cutting exact and needs no detection at all.
+    """
+    key = (case.name, suffix)
+    if key not in _ENGRAVED:
+        _ENGRAVED[key] = bars.engraved(source, cli,
+                                       OUT / f"{case.name}-{suffix}-page.png")
+    drawn = _ENGRAVED[key]
+    if not drawn:
+        return "", "MuseScore could not draw this score, so there is no bar to cut out."
+    page, boxes = drawn
+    numbers = bars.bars_in(source)
+    size = _size(page)
+    if not size:
+        return "", "the engraving could not be read."
+    box = bars.engraved_box(boxes, numbers, row.bar, size)
+    if not box:
+        return "", (f"MuseScore reported {len(boxes)} bar position(s) for "
+                    f"{len(numbers)} bar(s) here, so which box is this bar is a "
+                    f"guess.")
+    cut = bars.crop(page, box, OUT / f"{stem}-{suffix}.png",
+                    staff_px=bars.STAFF_INCHES * bars.RENDER_DPI)
+    return (cut.name, "") if cut else ("", "the crop could not be written.")
+
+
+def _printed_crop(case, row, stem: str) -> tuple[str, str]:
+    """The bar cut out of the printed band, or why it is not shown."""
+    geo = bars.geometry(case.image, cases.CACHE / "geometry" / f"{case.name}.json")
+    if not geo:
+        return "", ("homr's own staff detection could not measure this picture, "
+                    "so there is nothing to cut the bar out by.")
+    numbers = bars.bars_in(case.reference)
+    if row.bar not in numbers:
+        return "", "the reference does not hold a bar of this number."
+    box = bars.bar_box(geo, row.staff, numbers.index(row.bar) + 1, len(numbers))
+    if not box:
+        found = bars.implied_bars(geo)
+        return "", (f"homr's detection cuts this system into {found} bar(s) and "
+                    f"the score here holds {len(numbers)}, so which bar is which "
+                    f"is a guess. No crop: the wrong bar under a fault is worse "
+                    f"than no picture. The engravings beside this are unaffected "
+                    f"— MuseScore says where it drew each bar, so they need no "
+                    f"detection.")
+    # How tall a staff is in this scan, so the crop comes out on the same scale
+    # as the engravings beside it.
+    band = geo["staves"][row.staff - 1]
+    shape = _size(case.image)
+    staff_px = (band["bottom"] - band["top"]) * shape[1] if shape else 0.0
+    cut = bars.crop(case.image, box, OUT / f"{stem}-page.png", staff_px=staff_px)
+    if not cut:
+        return "", "the crop could not be written."
+    return cut.name, ""
+
+
+def _bar_detail_row(case, parsed: Path, row) -> str:
+    """The whole bar, both sides, folded away under a fault.
+
+    A fault row says a fault happened; it cannot say what happened. "homr has
+    this bar's notes at other beats" is exactly true and tells you nothing about
+    *which* beats, and "2 noteheads against 1" does not say which one survived.
+    Deciding whether a reading is homr's mistake or our reference's needs the
+    bar, and needing the bar meant opening the score -- which is the work the
+    report exists to save.
+
+    Collapsed, so nothing moves for the rows that agree, and only on faults.
+    """
+    if row.kind not in FAULTS or not row.bar:
+        return ""
+    try:
+        page = compare.bar_contents(case.reference, row.bar, row.staff)
+        homr = compare.bar_contents(parsed, row.bar, row.staff)
+    except Exception:                                        # noqa: BLE001
+        # A detail that cannot be built must cost the detail and not the report:
+        # the row above it is the finding, and this is an explanation of it.
+        return ""
+    pictures = _bar_pictures(case, parsed, row)
+    return (
+        "<tr class='detail'><td colspan='4'>"
+        f"<details><summary>bar {html.escape(row.bar)}, staff {row.staff} in full"
+        "</summary><div class='sides'>"
+        f"<div><h4>the page</h4>{_beats(page)}</div>"
+        f"<div><h4>homr</h4>{_beats(homr)}</div>"
+        f"</div>{pictures}</details></td></tr>")
+
+
+def _verdict_class(kind: str) -> str:
+    """Green for a row that agrees, amber for a warning, red for a fault.
+
+    A unison row was green, on the argument that nothing in it was misread --
+    which is true, and which made a case whose second part is missing from the
+    file read as a case with nothing to look at. Three verdicts and not two.
+    """
+    if kind == "agree":
+        return "ok"
+    if kind == "unison":
+        return "warn"
+    return "no"
+
+
+def _still_wrong(result: Result, memory: dict | None) -> str:
+    """What is still wrong here, and how that stands against the accepted reading.
+
+    **The operator's stage-1 eye reads this**, and it is what replaces the
+    `perfect` flag the page used to carry. A flag said one bit about a whole
+    system; a list says which faults are left, so the judgement it invites is
+    "are these real, and are they on the page" rather than "is the light green".
+
+    The memory line beside it is the alarm in words. `worse` is the same call
+    the gate makes, so a case cannot read as fine here and fail the run.
+    """
+    faults = result.remaining
+    if faults:
+        rows = "".join(f"<li>{html.escape(said)}</li>" for said in faults)
+        body = f"<ul>{rows}</ul>"
+    else:
+        body = ("<p>Nothing this check can name is wrong with it. That is not the "
+                "same as the parse being right &mdash; look at the three pictures "
+                "below and decide that yourself.</p>")
+
+    # Said beside the faults rather than among them. A unison homr wrote into
+    # one voice is not on the list above and must not be: no note is misread,
+    # and folding it in would make the list mean something looser than it does.
+    # But leaving it unsaid is how a case missing a whole part came to read as
+    # a case with nothing wrong with it.
+    warned = (f"<p class='warned'>{html.escape(compare.unison_note(result.warnings))}"
+              f"</p>" if result.warnings else "")
+
+    stood = ""
+    if memory:
+        now = {"score": round(result.score, 2), "structure": result.structure,
+               "meter": result.meter}
+        fell = references.worse(now, memory)
+        if fell:
+            stood = (f"<p class='fail'>Below the reading this case was accepted "
+                     f"at: {html.escape('; '.join(fell))}.</p>")
+        elif references.better(now, memory):
+            stood = (f"<p class='pass'>Above the reading it was accepted at "
+                     f"({memory['score']:.2f}% of notes right) &mdash; this run "
+                     f"has moved its memory up to {now['score']:.2f}%.</p>")
+        else:
+            stood = (f"<p class='lead'>Standing exactly where it was accepted: "
+                     f"{memory['score']:.2f}% of notes right.</p>")
+    else:
+        stood = ("<p class='lead'>No accepted reading yet &mdash; this run records "
+                 "what it reads today, and nothing may fall below it afterwards.</p>")
+
+    return (f"<h2>What is still wrong here</h2>"
+            f"<p class='lead'>Every fault this check can name, at "
+            f"<b>{result.score:.1f}%</b> of notes right. Nothing here declares a "
+            f"parse correct: that is a judgement made by eye against the printed "
+            f"page.</p>{body}{warned}{stood}")
+
+
+def case_page(case, parsed: Path, result: Result, before: dict | None,
+              memory: dict | None = None) -> str:
+    """Write one case's page and return its filename."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    page = OUT / f"{case.name}-page.png"
+    shutil.copy(case.image, page)
+    output = _engrave(parsed, OUT / f"{case.name}-homr.png")
+    reference = _engrave(case.reference, OUT / f"{case.name}-ref.png")
+
+    def moved(field: str) -> str:
+        if not before or field not in before:
+            return ""
+        was = before[field]
+        now = getattr(result, field)
+        if was == now:
+            return "<span class='same'>no change</span>"
+        better = now < was if field != "agree" else now > was
+        return (f"<span class='{'up' if better else 'down'}'>"
+                f"{now - was:+d} since the last run</span>")
+
+    structure = ""
+    if result.structure:
+        verdict = {
+            "reference": (f"<b>The page prints {result.staves_printed}, so the "
+                          f"reference is the wrong one here</b> &mdash; the rows below "
+                          f"compare it against music it does not describe."),
+            "homr": (f"<b>The page prints {result.staves_printed}, so homr is the "
+                     f"wrong one here.</b>"),
+            "both": (f"<b>The page prints {result.staves_printed}, which is neither "
+                     f"of them.</b>"),
+            "": ("<b>Look at the printed page above before deciding which side is "
+                 "wrong.</b> Nobody has recorded what this system prints; when you "
+                 "have looked, put the count in <code>fixturecheck/printed.json</code> "
+                 "and this line will decide it next time."),
+        }[result.at_fault]
+        structure = (
+            f"<p class='warn'>The reference says <b>{result.staves_page}</b> staves and "
+            f"homr wrote <b>{result.staves_homr}</b>. Every note is matched on its "
+            f"staff, so from the first staff that diverges the rows below are "
+            f"comparing different music &mdash; read them as one wrong answer about "
+            f"the staves, not as many wrong notes. {verdict}</p>")
+
+    rows = "".join(
+        f"<tr class='{row.kind if row.kind != 'agree' else ''}'>"
+        f"<td>{html.escape(row.where)}</td><td>{html.escape(row.page)}</td>"
+        f"<td>{html.escape(row.homr)}</td>"
+        f"<td class='{_verdict_class(row.kind)}'>"
+        f"{html.escape(row.verdict)}</td></tr>"
+        + _bar_detail_row(case, parsed, row)
+        for row in result.rows)
+
+    body = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(case.name)}</title><style>{STYLE}</style></head><body>
+<p><a href="index.html">&larr; every case</a></p>
+<h1>{html.escape(case.name)}</h1>
+<p class="lead">{html.escape(case.origin)}
+{'&mdash; committed case, runnable on any clone' if case.committed else ''}
+{('<br>Pinned because: ' + html.escape(case.why)) if getattr(case, 'why', '') else ''}</p>
+{_still_wrong(result, memory)}
+<div class="sum">
+  <div><b>{result.agree}</b>agree {moved('agree')}</div>
+  <div><b>{result.voice}</b>wrong voice {moved('voice')}</div>
+  <div><b>{result.pitch}</b>wrong pitch {moved('pitch')}</div>
+  <div><b>{result.size}</b>different number of notes {moved('size')}</div>
+  <div><b>{result.timing}</b>beat shifted {moved('timing')}</div>
+  <div><b>{result.meter}</b>bar(s) in the wrong meter</div>
+  <div><b>{result.unison}</b>unison(s) written as one voice</div>
+</div>
+{structure}
+
+<h3>Input &mdash; the printed page</h3>
+<img src="{page.name}" alt="the printed system">
+<h3>Output &mdash; what homr writes</h3>
+{f'<img src="{output}" alt="homr">' if output else '<p class="lead">(could not engrave)</p>'}
+<h3>Fixture &mdash; the reference</h3>
+{f'<img src="{reference}" alt="reference">' if reference else '<p class="lead">(could not engrave)</p>'}
+
+<h2>Every note, the page against homr's output</h2>
+<p class="lead">Compared on staff position, so a score written an octave above
+where it sounds is not counted wrong, and on which of the staff's voices a note
+is in rather than the voice's number. This is homr's <b>output</b> &mdash; not
+the noteheads it detected, which is a different layer and can disagree in either
+direction.</p>
+<table><tr><th>where</th><th>the page</th><th>homr</th><th></th></tr>
+{rows}</table>
+</body></html>"""
+    target = OUT / f"{case.name}.html"
+    target.write_text(body)
+    return target.name
+
+
+def _staves(entry: dict) -> str:
+    """The staff disagreement, and who the page says is wrong where anyone looked."""
+    if not entry["structure"]:
+        return ""
+    said = f"{entry['staves_page']} vs {entry['staves_homr']}"
+    blame = entry.get("at_fault")
+    return f"{said} <span class='down'>({blame})</span>" if blame else said
+
+
+def _counted_note(entries: list[dict], counted: list[dict]) -> str:
+    """Say when some rows are on the page but out of the numbers above it."""
+    other = len(entries) - len(counted)
+    if not other:
+        return ""
+    homrs = sorted({e["elsewhere"] for e in entries if e.get("elsewhere")})
+    return (f"<b>{other} row(s) below were last measured under "
+            f"{html.escape(', '.join(homrs))} and are not in the totals above</b>"
+            f" &mdash; they are shown so a re-run of one case does not hide the "
+            f"rest, but a number taken under another homr is not evidence about "
+            f"this one. Re-run them to bring them in. ")
+
+
+def _with_standing(entries: list[dict]) -> list[dict]:
+    """This run's cases, plus every other case as it last stood.
+
+    A run of one case used to produce an index of one case, and the other
+    ninety-seven pages sat on disk with nothing linking to them — so the
+    cheapest thing you can do, re-reading a single system, threw away the view
+    of everything else. The series has held each case's own last measurement all
+    along; this reads it.
+
+    A case this run measured keeps its live entry, including what moved. Every
+    other case is shown as it last stood, marked with when that was, so a fresh
+    number and a month-old one are not read as the same thing.
+    """
+    fresh = {entry["name"] for entry in entries}
+    combined = [dict(entry, measured="", elsewhere="") for entry in entries]
+    under = series.current_identity(
+        [r for r in series.runs() if r.get("harness") == "fixturecheck"])
+    for name, (case, when, was) in series.standing("fixturecheck").items():
+        if name in fresh or case.get("outcome", series.READ) != series.READ:
+            continue
+        page = OUT / f"{name}.html"
+        counts = {k: case.get(k, 0) for k in
+                  ("agree", "voice", "pitch", "size", "timing", "unison",
+                   "staves_page", "staves_homr", "meter")}
+        scored = sum(counts[k] for k in ("agree", "voice", "pitch", "size", "timing"))
+        combined.append({
+            "name": name,
+            "page": page.name if page.exists() else "",
+            "score": 100.0 * counts["agree"] / scored if scored else 0.0,
+            "structure": int(counts["staves_page"] != counts["staves_homr"]),
+            "at_fault": case.get("at_fault", ""),
+            "before": None,
+            "measured": when,
+            # What produced it, when that is not what this report is about. Such
+            # a row is history: still shown, because losing it is how a one-case
+            # run threw the picture away, but **not counted**, because a number
+            # measured under another homr is not evidence about this one.
+            "elsewhere": "" if was == under else (was[0] or "?"),
+            **counts,
+        })
+    return combined
+
+
+def index_page(entries: list[dict], tier: str, run: dict | None = None) -> Path:
+    """The table of every case in this run, with what moved since the last one.
+
+    `run` is the series record this run just wrote. It carries the two things
+    the page could not say before and that made every number here ambiguous:
+    which homr was measured, and what state the references were in. "The current
+    homr" meant the fork's tip to one reader and the venv the choir sings from
+    to another, and no figure anywhere distinguished them.
+    """
+    OUT.mkdir(parents=True, exist_ok=True)
+    entries = _with_standing(entries)
+    # **Only rows measured under the identity being reported are counted.** The
+    # rest are shown as history and excluded here: folding them in produced a
+    # 98-case aggregate labelled with the newest run's homr when 97 of the rows
+    # had last been measured under the previous one, which is precisely the
+    # thing this whole harness was built to stop saying.
+    counted = [e for e in entries if not e.get("elsewhere")]
+    total = {k: sum(e.get(k, 0) for e in counted)
+             for k in ("agree", "voice", "pitch", "size", "timing", "structure",
+                       "unison", "meter")}
+    # Notes homr lost and beats it moved are faults, and are in the denominator.
+    # Leaving them out asks only "of the notes homr wrote, how many are right",
+    # under which a system missing half its notes reads 100%.
+    judged = judged_over(total)
+
+    def cell(entry: dict, field: str) -> str:
+        now = entry[field]
+        was = (entry.get("before") or {}).get(field)
+        if was is None or was == now:
+            return str(now)
+        better = now < was if field != "agree" else now > was
+        return f"{now} <span class='{'up' if better else 'down'}'>({now - was:+d})</span>"
+
+    def named(entry: dict) -> str:
+        """The case, linked when its page is on disk, and when it was measured."""
+        label = html.escape(entry["name"])
+        link = (f"<a href='{html.escape(entry['page'])}'>{label}</a>"
+                if entry.get("page") else label)
+        when = entry.get("measured") or ""
+        # Only the older ones are stamped: everything unstamped is this run, and
+        # dating every row would bury the distinction it exists to make.
+        other = entry.get("elsewhere") or ""
+        mark = html.escape(when[:10]) + (f" &middot; homr {html.escape(other)}"
+                                         if other else "")
+        stamp = f"<br><span class='when'>{mark}</span>" if when else ""
+        return link + stamp
+
+    rows = "".join(
+        f"<tr class='{('other' if e.get('elsewhere') else 'stale') if e.get('measured') else ''}'>"
+        f"<td>{named(e)}</td>"
+        f"<td>{cell(e, 'agree')}</td><td>{cell(e, 'voice')}</td>"
+        f"<td>{cell(e, 'pitch')}</td><td>{cell(e, 'size')}</td>"
+        f"<td>{cell(e, 'timing')}</td>"
+        f"<td>{cell(e, 'meter')}</td>"
+        f"<td class='{'warn' if e.get('unison') else ''}'>{cell(e, 'unison')}</td>"
+        f"<td>{_staves(e)}</td>"
+        f"<td>{e['score']:.1f}%</td></tr>"
+        # Worst first means worst by what went wrong, and a case can go wrong
+        # without a single note pairing up to be called a wrong pitch:
+        # laulun-aika-3-s5 agrees on one note out of fifty, loses 41 moments to
+        # a count mismatch, and sorted 17th of 98 on voice+pitch alone. Counting
+        # every fault puts it first, where a near-total loss belongs.
+        for e in sorted(entries, key=lambda e: (
+            -(e["voice"] + e["pitch"] + e["size"] + e.get("timing", 0)), e["name"])))
+
+    body = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fixture check &mdash; {html.escape(tier)}</title><style>{STYLE}</style></head><body>
+<h1>Fixture check &mdash; {html.escape(tier)}</h1>
+{_controls([e['name'] for e in entries])}
+{_series_change(series.origin())}
+{_provenance(run)}
+{_gate(run)}
+<p class="lead">{_counted_note(entries, counted)}{len(entries)} case(s), each one printed system judged against a
+reference built from its song's cleaned score. Sorted worst first. <b>Every case
+the series knows is listed, each at its own latest measurement</b> &mdash; a
+dated, greyed row was not re-read by this run, and an undated one was. A run of
+one case therefore still shows the whole picture rather than replacing it. A
+number in green or red is what changed since the last run of that same
+case.</p>
+<div class="sum">
+  <div><b>{total['agree']}</b>agree</div>
+  <div><b>{total['voice']}</b>wrong voice</div>
+  <div><b>{total['pitch']}</b>wrong pitch</div>
+  <div><b>{total['size']}</b>different number of notes</div>
+  <div><b>{total['timing']}</b>beat shifted</div>
+  <div><b>{total['structure']}</b>case(s) with the wrong staves</div>
+  <div><b>{total['meter']}</b>bar(s) in the wrong meter</div>
+  <div><b>{total['unison']}</b>unison(s) written as one voice</div>
+  <div><b>{100.0 * total['agree'] / judged if judged else 0:.1f}%</b>of everything judged is right</div>
+</div>
+<p class="lead">A <b>unison</b> is not counted in that percentage and never
+will be: the page prints one notehead, homr wrote one notehead, and there is no
+note to call wrong. It is here because the part the page means is still absent
+from the file &mdash; a practice track for that singer would be silence &mdash;
+and a column of zeroes is the only honest way to notice a case that is not.</p>
+<p class="lead">The percentage counts a note homr <b>lost</b> and a beat it
+<b>moved</b> against it, as well as a note it read wrongly. It did not before,
+and under the older definition a system missing half its notes could read 100%.
+No figure here is comparable with one quoted before 2026-09-05.</p>
+<p class="lead">A case whose staff count disagrees is one wrong answer about the
+structure, and the note rows under it are then comparing different music &mdash;
+read its counts as a consequence of that, not as many wrong notes. Whose wrong
+answer it is has to be settled against the printed page. Where somebody has looked and
+written the count into <code>fixturecheck/printed.json</code>, the staves column
+names the side at fault; where nobody has, it does not guess.</p>
+<table><tr><th>case</th><th>agree</th><th>wrong voice</th><th>wrong pitch</th>
+<th>note count</th><th>beat shifted</th><th>meter</th><th>unison</th>
+<th>staves (who is wrong)</th><th>score</th></tr>
+{rows}</table>
+{NOT_MEASURED}
+</body></html>"""
+    target = OUT / "index.html"
+    target.write_text(body)
+    return target

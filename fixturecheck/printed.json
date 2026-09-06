@@ -1,0 +1,60 @@
+{
+  "_": [
+    "How many staves the page prints in a system, read off the crop by a person.",
+    "",
+    "The check compares a reference against a parse, and when the two disagree",
+    "about the staves it has no third party to ask -- so it says they differ and",
+    "stops. That is not enough: on this repertoire the disagreement has been the",
+    "reference's fault as often as homr's, and telling them apart takes one look",
+    "at the printed band. Every entry here is one such look, written down so the",
+    "next reader inherits it instead of taking it again.",
+    "",
+    "A count, because that is the part a person can be sure of at a glance and",
+    "the part every note is keyed on. Not which voice is on which row -- that",
+    "needs the words and the range, and a half-remembered answer is worse than",
+    "none. `why` says what was seen, so the claim can be checked against the",
+    "crop the report already puts at the top of every case page.",
+    "",
+    "Absent means unknown, which is most cases. Nothing is inferred and nothing",
+    "is filled in from a parse: a number here is a person's reading or it is not",
+    "here at all."
+  ],
+  "systems": {
+    "laulun-aika-3-s1": {
+      "staves": 2,
+      "why": "one tenor staff labelled T1 over T2, and B. T3 is not printed."
+    },
+    "laulun-aika-3-s5": {
+      "staves": 3,
+      "why": "T3 on its own staff at the top, then T1/T2 sharing one, then B."
+    },
+    "laulun-aika-3-s6": {
+      "staves": 3,
+      "why": "T1, T2 and B, each labelled, each on its own staff. No T3."
+    },
+    "laulun-aika-3-s7": {
+      "staves": 4,
+      "why": "T3, T1, T2, B in that order down the page, each labelled and each with its own lyric line."
+    },
+    "kaksi-laulua-krapulasta-2-s6": {
+      "staves": 2,
+      "why": "a treble staff (G8vb) and a bass staff, joined by a bracket."
+    },
+    "kaksi-laulua-krapulasta-2-s13": {
+      "staves": 3,
+      "why": "a tenor staff and two separate bass staves, each with its own lyric line, under one bracket."
+    },
+    "kaksi-laulua-krapulasta-2-s16": {
+      "staves": 3,
+      "why": "treble, then two bass staves; the lowest rests through the whole system and is printed anyway."
+    },
+    "kayttaytymisohjeita-s1": {
+      "staves": 2,
+      "why": "T and B, each labelled, with divisi written as chords rather than as a third staff."
+    },
+    "kayttaytymisohjeita-s5": {
+      "staves": 3,
+      "why": "two treble staves (G8vb) and one bass staff carrying two voices."
+    }
+  }
+}

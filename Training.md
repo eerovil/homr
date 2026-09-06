@@ -22,9 +22,9 @@ Prerequisites:
 
 Download the datasets and convert them to the format required for training:
 
-- `training/datasets/convert_primus.py`
-- `training/datasets/convert_grandstaff.py`
-- `training/datasets/convert_lieder.py`
+- `training/omr_datasets/convert_primus.py`
+- `training/omr_datasets/convert_grandstaff.py`
+- `training/omr_datasets/convert_lieder.py`
   - This will also download and run MuseScore as an AppImage. If this fails, check your setup to ensure that you can run `datasets/MuseScore`.
   - Not all files are supported. At the end you'll see something like `Processed 1460/1467 files, skipped 350 files`, which is as expected.
 
@@ -76,6 +76,28 @@ This validation provides a **more representative indication of overall system pe
 **Note:** The test dataset cannot be published due to copyright restrictions. In addition, the dataset is subject to change over time, which may affect the comparability of results across different runs.
 
 Implementation: `rate_validation_result.py`
+
+## Run 426 - 27 epochs
+
+Commit: b6fd20809a8dcaf10dfd39a4ca4f64c6f056e644
+Day: 13 July 2026
+Transformer Smoke Test: 5%
+System Level: Total: 5.7 diffs, SER: 4.2% | 5.1 diffs, SER: 4.0% after PR-112
+Polish scores: OMR-NED 24.30% | 18.1% after PR-112
+SMB scores: OMR-NED 22.06% | 14.5% after PR-112
+
+Training with lieder+grandstaff+primux+pdmx+musetrainer datasets.
+
+Note that PR-110 and PR-112 improved the scoring results independent from the model itself.
+
+## Run 414
+
+Commit: 79aec9b6b66de2281972c9d4f9c606f3f84c9cd1
+Day: 7 July 2026
+Transformer Smoke Test: 6%
+System Level: Total: 5.9 diffs, SER: 4.9%
+
+Clean the Lieder dataset to introduce more training data
 
 ## Run 407 - at epoch 6
 

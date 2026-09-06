@@ -1,0 +1,18 @@
+{
+  "name": "Virta Venhettä Vie",
+  "slug": "virta-venhetta-vie",
+  "stage": "fix",
+  "mode": "normal",
+  "sources": {
+    "xml": "Virta-venhetta-vie.xml",
+    "pdf": "Virta venhettä vie.pdf"
+  },
+  "created_at": 1787475359.460669,
+  "updated_at": 1787493656.879068,
+  "cleaned": "Virta-venhetta-vie_cleaned.mscx",
+  "cleaned_fingerprint": "sha1:7f77aeb0d20f6c839bef86600e15f52101e0db65",
+  "health": {
+    "checked_against": "sha1:7f77aeb0d20f6c839bef86600e15f52101e0db65",
+    "issues": []
+  }
+}

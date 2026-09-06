@@ -1,7 +1,9 @@
 import argparse
 import glob
+import json
 import os
 import sys
+import xml.etree.ElementTree as ET
 from concurrent.futures import Future
 from dataclasses import dataclass
 from enum import Enum
@@ -27,11 +29,17 @@ from homr.brace_dot_detection import (
     prepare_brace_dot_image,
 )
 from homr.debug import Debug
-from homr.model import InputPredictions, MultiStaff
+from homr.model import InputPredictions, MultiStaff, Staff
 from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
 from homr.noise_filtering import filter_predictions
-from homr.note_detection import add_notes_to_staffs, combine_noteheads_with_stems
-from homr.onnx_providers import coreml_available, cuda_available
+from homr.note_detection import (
+    add_notes_to_staffs,
+    combine_noteheads_with_stems,
+    shed_staff_lines,
+    split_notehead_ellipse,
+)
+from homr.onnx_providers import coreml_available, cuda_available, rocm_available
+from homr.pdf_utils import render_pdf_to_image
 from homr.resize import resize_image
 from homr.segmentation.config import segnet_path_onnx, segnet_path_onnx_fp16
 from homr.segmentation.inference_segnet import extract
@@ -41,6 +49,8 @@ from homr.staff_parsing import parse_staffs
 from homr.staff_position_save_load import load_staff_positions, save_staff_positions
 from homr.title_detection import detect_title, download_ocr_weights
 from homr.transformer.configs import Config, default_config
+from homr.transformer.score_settings import RhythmSettings
+from homr.transformer.vocabulary import EncodedSymbol
 from homr.type_definitions import NDArray
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -121,6 +131,10 @@ def load_and_preprocess_predictions(
     predictions = filter_predictions(predictions, debug)
 
     predictions.staff = make_lines_stronger(predictions.staff, (1, 2))
+    # Before anything looks for a notehead, take the staff line back out of the
+    # mask it will look in, so two heads joined only by a line are two
+    # components and never have to be split apart again.
+    predictions.notehead = shed_staff_lines(predictions.notehead, predictions.staff)
     debug.write_threshold_image("staff", predictions.staff)
     debug.write_threshold_image("symbols", predictions.symbols)
     debug.write_threshold_image("stems_rest", predictions.stems_rest)
@@ -156,9 +170,11 @@ class ProcessingConfig:
     enable_debug: bool
     enable_cache: bool
     write_staff_positions: bool
+    write_confidence: bool
+    score_settings: str | None
     read_staff_positions: bool
     selected_staff: int
-    # The transformer (encoder/decoder) only benefits from CUDA: its fp16 "GPU"
+    # The transformer (encoder/decoder) only benefits from CUDA/ROCm: its fp16 "GPU"
     # models are slower than the fp32 ones when they end up on the CPU EP, and
     # the CoreML EP cannot run the decoder. Segnet additionally supports CoreML.
     transformer_use_gpu: bool
@@ -166,6 +182,7 @@ class ProcessingConfig:
     # Opt-in (--coreml-encoder): run the encoder on the Apple GPU via CoreML.
     # Only helps across many images (slow one-time MLProgram compile).
     coreml_encoder: bool
+    title_detection: bool
 
 
 def process_image(
@@ -174,6 +191,9 @@ def process_image(
     xml_generator_args: XmlGeneratorArguments,
 ) -> None:
     eprint("Processing " + image_path)
+    if image_path.lower().endswith(".pdf"):
+        render_pdf_to_image(image_path)
+        image_path = replace_extension(image_path, ".png")
     xml_file = replace_extension(image_path, ".musicxml")
     debug_cleanup: Debug | None = None
     try:
@@ -188,13 +208,24 @@ def process_image(
                 debug, image, staff_position_files, config.selected_staff
             )
             title = ""
+            # parse_staffs() expects a grayscale image (cv2.findContours requires it),
+            # matching what the normal detect_staffs_in_image() path hands it
+            # (predictions.preprocessed). Apply the same CLAHE preprocessing here so the
+            # two code paths feed the symbol-recognition encoder consistent input.
+            image = color_adjust.apply_clahe(image)
         else:
-            multi_staffs, image, debug, title_future = detect_staffs_in_image(image_path, config)
+            multi_staffs, image, debug, title_future, _ = detect_staffs_in_image(image_path, config)
         debug_cleanup = debug
 
         transformer_config = Config()
         transformer_config.use_gpu_inference = config.transformer_use_gpu
         transformer_config.use_coreml_encoder = config.coreml_encoder
+        if config.score_settings:
+            score_settings = _load_score_settings(config.score_settings)
+            transformer_config.forbidden_rhythm_tokens = score_settings.forbidden_rhythm_tokens(
+                transformer_config.vocab.rhythm
+            )
+            transformer_config.use_stem_voice_hints = score_settings.stem_voice_hints
 
         result_staffs = parse_staffs(
             debug,
@@ -204,12 +235,17 @@ def process_image(
             config=transformer_config,
         )
 
-        title = title_future.result(60)
+        if not config.read_staff_positions:
+            title = title_future.result(60)
         eprint("Found title:", title)
 
         eprint("Writing XML", result_staffs)
         xml = generate_xml(xml_generator_args, result_staffs, title)
-        xml.write(xml_file)
+        ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
+        if config.write_confidence:
+            confidence_file = replace_extension(image_path, ".confidence.json")
+            _write_confidence(confidence_file, result_staffs)
+            eprint("Confidence was written to", confidence_file)
 
         eprint("Finished parsing " + str(len(result_staffs)) + " staves")
         teaser_file = replace_extension(image_path, "_teaser.png")
@@ -229,9 +265,62 @@ def process_image(
             debug_cleanup.clean_debug_files_from_previous_runs()
 
 
+def _write_confidence(path: str, staffs: list[list[EncodedSymbol]]) -> None:
+    """Write scores for the symbols that survived score post-processing."""
+    records = []
+    for staff_index, symbols in enumerate(staffs):
+        for symbol_index, symbol in enumerate(symbols):
+            if symbol.confidence is None:
+                continue
+            coordinates = None
+            if symbol.coordinates is not None:
+                values = np.asarray(symbol.coordinates).reshape(-1)
+                if len(values) >= 2 and np.isfinite(values[:2]).all():
+                    coordinates = [float(values[0]), float(values[1])]
+            records.append(
+                {
+                    "staff": staff_index,
+                    "symbol": symbol_index,
+                    "token": {
+                        "rhythm": symbol.rhythm,
+                        "pitch": symbol.pitch,
+                        "lift": symbol.lift,
+                        "position": symbol.position,
+                        "articulation": symbol.articulation,
+                        "slur": symbol.slur,
+                    },
+                    "attention": coordinates,
+                    "confidence": symbol.confidence,
+                }
+            )
+    with open(path, "w") as file:
+        json.dump({"version": 1, "symbols": records}, file, indent=2)
+        file.write("\n")
+
+
+def _load_score_settings(path: str) -> RhythmSettings:
+    try:
+        with open(path) as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise InvalidProgramArgumentException(f"Could not read score settings {path}: {error}") from error
+    if not isinstance(data, dict):
+        raise InvalidProgramArgumentException("score settings must be a JSON object")
+    try:
+        return RhythmSettings.from_json(data)
+    except ValueError as error:
+        raise InvalidProgramArgumentException(f"Invalid score settings: {error}") from error
+
+
 def detect_staffs_in_image(
     image_path: str, config: ProcessingConfig
-) -> tuple[list[MultiStaff], NDArray, Debug, Future[str]]:
+) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], list[Staff]]:
+    """Detect staffs and their symbols.
+
+    The last element is the printed staffs as they were detected, before grand
+    staffs are merged, so a caller can still tell which printed staff a note was
+    assigned to.
+    """
     predictions, debug = load_and_preprocess_predictions(
         image_path, config.enable_debug, config.enable_cache, config.segnet_use_gpu
     )
@@ -241,7 +330,15 @@ def detect_staffs_in_image(
     debug.write_bounding_boxes("staff_fragments", symbols.staff_fragments)
     eprint("Found " + str(len(symbols.staff_fragments)) + " staff line fragments")
 
-    noteheads_with_stems = combine_noteheads_with_stems(symbols.noteheads, symbols.stems_rest)
+    unit_size = float(np.median([notehead.size[1] for notehead in symbols.noteheads]))
+    split_noteheads = [
+        split_notehead
+        for notehead in symbols.noteheads
+        for split_notehead in split_notehead_ellipse(notehead, predictions.notehead, unit_size)
+    ]
+    noteheads_with_stems = combine_noteheads_with_stems(
+        split_noteheads, symbols.stems_rest, predictions.preprocessed
+    )
     debug.write_bounding_boxes_alternating_colors("notehead_with_stems", noteheads_with_stems)
     eprint("Found " + str(len(noteheads_with_stems)) + " noteheads")
     if len(noteheads_with_stems) == 0:
@@ -272,7 +369,12 @@ def detect_staffs_in_image(
     )
     if len(staffs) == 0:
         raise Exception("No staffs found")
-    title_future = detect_title(debug, staffs[0])
+    if config.title_detection:
+        title_future = detect_title(debug, staffs[0])
+    else:
+        title_future = Future()
+        title_future.set_result("")
+
     debug.write_bounding_boxes_alternating_colors("staffs", staffs)
 
     brace_dot_img = prepare_brace_dot_image(predictions.symbols, predictions.staff)
@@ -293,12 +395,12 @@ def detect_staffs_in_image(
 
     debug.write_all_bounding_boxes_alternating_colors("notes", multi_staffs, notes)
 
-    return multi_staffs, predictions.preprocessed, debug, title_future
+    return multi_staffs, predictions.preprocessed, debug, title_future, staffs
 
 
 def get_all_image_files_in_folder(folder: str) -> list[str]:
     image_files = []
-    for ext in ["png", "jpg", "jpeg", "PNG", "JPG", "JPEG"]:
+    for ext in ["png", "jpg", "jpeg", "pdf", "PNG", "JPG", "JPEG", "PDF"]:
         image_files.extend(glob.glob(os.path.join(folder, "**", f"*.{ext}"), recursive=True))
     without_teasers = [
         img
@@ -364,6 +466,15 @@ def main() -> None:
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument(
+        "--output-confidence",
+        action="store_true",
+        help="Writes decoder token confidences to a .confidence.json sidecar",
+    )
+    parser.add_argument(
+        "--score-settings",
+        help="JSON file with opt-in decoder constraints, such as no 32nd notes",
+    )
+    parser.add_argument(
         "--cache", action="store_true", help="Read an existing cache file or create a new one"
     )
     parser.add_argument(
@@ -402,19 +513,24 @@ def main() -> None:
         + "CoreML. Compiling the model takes 26-60 s at startup, so this only "
         + "pays off when processing many images. Has no effect with CUDA.",
     )
+    parser.add_argument(
+        "--no-title", action="store_true", help="Don't detect title for faster inference"
+    )
 
     args = parser.parse_args()
 
     force_gpu = args.gpu == GpuSupport.FORCE
     auto_gpu = args.gpu == GpuSupport.AUTO
 
-    # CUDA speeds up the whole pipeline. CoreML only helps segnet: the fp16
+    # CUDA/ROCm speeds up the whole pipeline. CoreML only helps segnet: the fp16
     # models the GPU path uses are slower on the CPU EP than the fp32 ones,
     # and the CoreML EP cannot run the decoder (see Segnet for details).
-    transformer_use_gpu = force_gpu or (auto_gpu and cuda_available())
-    segnet_use_gpu = force_gpu or (auto_gpu and (cuda_available() or coreml_available()))
+    transformer_use_gpu = force_gpu or (auto_gpu and (cuda_available() or rocm_available()))
+    segnet_use_gpu = force_gpu or (
+        auto_gpu and (cuda_available() or rocm_available() or coreml_available())
+    )
     # The CoreML encoder is a separate opt-in and only applies when the
-    # transformer isn't already on CUDA.
+    # transformer isn't already on CUDA/ROCm.
     coreml_encoder = args.coreml_encoder and not transformer_use_gpu and coreml_available()
 
     download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
@@ -427,11 +543,14 @@ def main() -> None:
         args.debug,
         args.cache,
         args.write_staff_positions,
+        args.output_confidence,
+        args.score_settings,
         args.read_staff_positions,
         -1,
         transformer_use_gpu,
         segnet_use_gpu,
         coreml_encoder,
+        not args.no_title,
     )
 
     xml_generator_args = XmlGeneratorArguments(

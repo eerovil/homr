@@ -1,0 +1,10 @@
+{
+  "decoder": {
+    "minimum_duration": "16",
+    "allow_tuplets": true,
+    "allow_grace_notes": true
+  },
+  "postprocessing": {
+    "stem_voice_hints": true
+  }
+}

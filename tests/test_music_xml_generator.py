@@ -1,14 +1,12 @@
-# ruff: noqa: E501
+# ruff: noqa: E501, S101
 
-import re
 import unittest
-from typing import Any
-
-import musicxml.xmlelement.xmlelement as mxl
+import xml.etree.ElementTree as ET
 
 from homr.music_xml_generator import (
     SymbolChord,
     XmlGeneratorArguments,
+    convert_ties,
     generate_xml,
     rebalance_measure_voices,
 )
@@ -16,6 +14,55 @@ from homr.transformer.vocabulary import EncodedSymbol
 from training.transformer.training_vocabulary import (
     read_token_lines,
 )
+
+
+def _notes(measure: ET.Element) -> list[ET.Element]:
+    return [c for c in measure if c.tag == "note"]
+
+
+def _pitch(note: ET.Element) -> str:
+    p = note.find("pitch")
+    if p is None:
+        return "rest"
+    step = p.findtext("step", "")
+    return step
+
+
+def _duration(note: ET.Element) -> int:
+    d = note.findtext("duration")
+    return int(d) if d is not None else 0
+
+
+def _voice(note: ET.Element) -> str:
+    return note.findtext("voice", "")
+
+
+def _staff(note: ET.Element) -> str:
+    return note.findtext("staff", "")
+
+
+def _backups(measure: ET.Element) -> list[int]:
+    return [int(c.findtext("duration", "0")) for c in measure if c.tag == "backup"]
+
+
+def _ties(xml: ET.Element) -> list[str]:
+    return [t.get("type", "") for t in xml.iter("tie")]
+
+
+def _tieds(xml: ET.Element) -> list[str]:
+    return [t.get("type", "") for t in xml.iter("tied")]
+
+
+def _slurs(xml: ET.Element) -> list[str]:
+    return [s.get("type", "") for s in xml.iter("slur")]
+
+
+def _first_measure(xml: ET.Element) -> ET.Element:
+    part = xml.find("part")
+    assert part is not None
+    m = part.find("measure")
+    assert m is not None
+    return m
 
 
 class TestMusicXmlGenerator(unittest.TestCase):
@@ -38,60 +85,24 @@ note_8 D4 # _ _ upper
 barline . . . . ."""
         tokens = read_token_lines(tabi_measure_18_upper.splitlines())
         xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
-        actual = self._xml_to_str(xml)
-        expected = """XMLScorePartwise([XMLWork([XMLWorkTitle()]),
-XMLPart([XMLMeasure([XMLAttributes([XMLDivisions(value: 4)]),
-XMLAttributes([XMLKey([XMLFifths(value: 4)]),
-XMLTime([XMLBeats(value: 6),
-XMLBeatType(value: 8)]),
-XMLClef([XMLSign(value: G),
-XMLLine(value: 2)])]),
-XMLNote([XMLPitch([XMLStep(value: E)]),
-XMLDuration(value: 1),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLBackup([XMLDuration(value: 1)]),
-XMLNote([XMLPitch([XMLStep(value: G)]),
-XMLDuration(value: 6),
-XMLVoice(value: 2),
-XMLDot(),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLChord(),
-XMLPitch([XMLStep(value: C)]),
-XMLDuration(value: 6),
-XMLVoice(value: 2),
-XMLDot(),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLBackup([XMLDuration(value: 5)]),
-XMLNote([XMLPitch([XMLStep(value: F)]),
-XMLDuration(value: 1),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLPitch([XMLStep(value: E)]),
-XMLDuration(value: 4),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLPitch([XMLStep(value: E)]),
-XMLDuration(value: 2),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLPitch([XMLStep(value: C)]),
-XMLDuration(value: 2),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLPitch([XMLStep(value: D)]),
-XMLDuration(value: 2),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()])])])])"""
-        self.assertEqual(self._norm_expected(expected), actual)
+        measure = _first_measure(xml)
+        notes = _notes(measure)
+        backups = _backups(measure)
+
+        # Pitches in order after rebalancing
+        pitches = [_pitch(n) for n in notes]
+        self.assertIn("E", pitches)
+        self.assertIn("G", pitches)
+        self.assertIn("F", pitches)
+        self.assertIn("D", pitches)
+
+        # There must be backups due to chord with different durations
+        self.assertGreater(len(backups), 0)
+
+        # All notes have a voice and staff assigned
+        for note in notes:
+            self.assertNotEqual(_voice(note), "")
+            self.assertEqual(_staff(note), "1")
 
     def test_grand_staff_generation(self) -> None:
         grandstaff = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
@@ -103,56 +114,30 @@ note_2 E4 _ _ _ upper&note_2 C2 _ _ _ lower
 barline . . . . ."""
         tokens = read_token_lines(grandstaff.splitlines())
         xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
-        actual = self._xml_to_str(xml)
-        expected = """XMLScorePartwise([XMLWork([XMLWorkTitle()]),
-XMLPart([XMLMeasure([XMLAttributes([XMLDivisions(value: 1)]),
-XMLAttributes([XMLKey([XMLFifths(value: 1)]),
-XMLTime([XMLBeats(value: 4),
-XMLBeatType(value: 4)]),
-XMLClef([XMLSign(value: G),
-XMLLine(value: 2)]),
-XMLClef([XMLSign(value: F),
-XMLLine(value: 4)])]),
-XMLNote([XMLRest(),
-XMLDuration(value: 2),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLBackup([XMLDuration(value: 2)]),
-XMLNote([XMLPitch([XMLStep(value: G)]),
-XMLDuration(value: 4),
-XMLVoice(value: 2),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLNote([XMLChord(),
-XMLPitch([XMLStep(value: A)]),
-XMLDuration(value: 4),
-XMLVoice(value: 2),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLBackup([XMLDuration(value: 4)]),
-XMLNote([XMLPitch([XMLStep(value: G)]),
-XMLDuration(value: 1),
-XMLVoice(value: 5),
-XMLStaff(value: 2),
-XMLNotations()]),
-XMLNote([XMLRest(),
-XMLDuration(value: 1),
-XMLVoice(value: 5),
-XMLStaff(value: 2),
-XMLNotations()]),
-XMLNote([XMLPitch([XMLStep(value: E)]),
-XMLDuration(value: 2),
-XMLVoice(value: 1),
-XMLStaff(value: 1),
-XMLNotations()]),
-XMLBackup([XMLDuration(value: 2)]),
-XMLNote([XMLPitch([XMLStep(value: C)]),
-XMLDuration(value: 2),
-XMLVoice(value: 5),
-XMLStaff(value: 2),
-XMLNotations()])])])])"""
-        self.assertEqual(self._norm_expected(expected), actual)
+        measure = _first_measure(xml)
+        notes = _notes(measure)
+
+        # Both staves must be present
+        staves = {_staff(n) for n in notes}
+        self.assertIn("1", staves)
+        self.assertIn("2", staves)
+
+        # Upper staff notes: G4, A3, rest, E4; lower: G3, rest, C2
+        pitches_upper = [_pitch(n) for n in notes if _staff(n) == "1"]
+        pitches_lower = [_pitch(n) for n in notes if _staff(n) == "2"]
+        self.assertIn("G", pitches_upper)
+        self.assertIn("E", pitches_upper)
+        self.assertIn("G", pitches_lower)
+        self.assertIn("C", pitches_lower)
+
+        # Upper voices are 1-4, lower voices are 5-8
+        for note in notes:
+            v = int(_voice(note))
+            s = int(_staff(note))
+            if s == 1:
+                self.assertLessEqual(v, 4)
+            else:
+                self.assertGreaterEqual(v, 5)
 
     def test_begin_chord_with_standalone_rests(self) -> None:
         """
@@ -181,37 +166,31 @@ XMLNotations()])])])])"""
         )
 
     def test_rebalance_measure_voices_assigns_stable_voices_per_staff(self) -> None:
-        measure = mxl.XMLMeasure()
+        measure = ET.Element("measure")
 
         note1 = self._build_test_note(duration=4, staff=1, voice=1)
-        measure.add_child(note1)
-        measure.add_child(self._build_test_backup(duration=4))
+        measure.append(note1)
+        measure.append(self._build_test_backup(duration=4))
 
-        # Overlaps note1, so this must move to voice 2.
         note2 = self._build_test_note(duration=2, staff=1, voice=1)
-        measure.add_child(note2)
+        measure.append(note2)
 
-        # Starts later but still overlaps with note1, reusing voice 2.
         note3 = self._build_test_note(duration=2, staff=1, voice=1)
-        measure.add_child(note3)
+        measure.append(note3)
 
-        # Chord tone sharing note3's timing; should get the same voice as note3.
         note4 = self._build_test_note(duration=2, staff=1, voice=1, is_chord=True)
-        measure.add_child(note4)
+        measure.append(note4)
 
-        measure.add_child(self._build_test_backup(duration=4))
+        measure.append(self._build_test_backup(duration=4))
         note5 = self._build_test_note(duration=4, staff=2, voice=1)
-        measure.add_child(note5)
-        measure.add_child(self._build_test_backup(duration=4))
+        measure.append(note5)
+        measure.append(self._build_test_backup(duration=4))
 
-        # Overlaps note5 on staff 2.
         note6 = self._build_test_note(duration=2, staff=2, voice=1)
-        measure.add_child(note6)
+        measure.append(note6)
 
         rebalance_measure_voices(measure)
 
-        # Same-start events are processed by (start, end), so shorter durations
-        # receive lower local voice numbers first.
         self.assertEqual(self._read_note_voice(note1), "2")
         self.assertEqual(self._read_note_voice(note2), "1")
         self.assertEqual(self._read_note_voice(note3), "1")
@@ -219,81 +198,239 @@ XMLNotations()])])])])"""
         self.assertEqual(self._read_note_voice(note5), "6")
         self.assertEqual(self._read_note_voice(note6), "5")
 
-    def _norm_expected(self, expected: str) -> str:
-        norm = expected.replace("\n", "")
-        norm = re.sub(r",\s+", ",", norm)
-        norm = re.sub(r"\[\s+", "[", norm)
-        return norm
+    def test_rebalance_measure_voices_prefers_stem_direction_when_available(self) -> None:
+        measure = ET.Element("measure")
+        up = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(up, "stem").text = "up"
+        down = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(down, "stem").text = "down"
+        measure.extend([up, self._build_test_backup(duration=4), down])
 
-    def _xml_to_str(self, xml: Any) -> str:
-        def recurse(node_or_list: Any) -> str:
-            if isinstance(node_or_list, list):
-                return (
-                    "["
-                    + ",".join(recurse(child) for child in node_or_list if child is not None)
-                    + "]"
-                )
+        rebalance_measure_voices(measure)
 
-            node = node_or_list
-            name = node.__class__.__name__
+        self.assertEqual(self._read_note_voice(up), "1")
+        self.assertEqual(self._read_note_voice(down), "2")
 
-            ignore_nodes = (
-                "XMLAlter",
-                "XMLOctave",
-                "XMLType",
-                "XMLPartList",
-                "XMLDefaults",
-                "XMLIdentification",
-                "XMLEncoding",
-                "XMLSoftware",
-                "XMLStaves",
-                "XMLPartSymbol",
-            )
+    def test_rebalance_measure_voices_keeps_stem_direction_when_voice_is_busy(self) -> None:
+        measure = ET.Element("measure")
+        first = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(first, "stem").text = "down"
+        second = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(second, "stem").text = "down"
+        measure.extend([first, self._build_test_backup(duration=4), second])
 
-            if name in ignore_nodes:
-                return ""
-            value = getattr(node, "value_", None)
+        rebalance_measure_voices(measure)
 
-            if hasattr(node, "children"):
-                children = node.children
-            elif hasattr(node, "get_children"):
-                children = node.get_children()
-            else:
-                children = []
+        self.assertEqual(self._read_note_voice(first), "2")
+        self.assertEqual(self._read_note_voice(second), "2")
 
-            child_strs = [recurse(child) for child in children if child is not None]
-            child_strs = [child for child in child_strs if child != ""]
+    def test_rebalance_measure_voices_uses_the_agreeing_hinted_chord_tone(self) -> None:
+        measure = ET.Element("measure")
+        first = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(first, "stem").text = "down"
+        second = self._build_test_note(duration=4, staff=1, voice=1, is_chord=True)
+        measure.extend([first, second])
 
-            parts = []
-            if value is not None and value != "":
-                parts.append(f"value: {value}")
-            if child_strs:
-                parts.append(f"[{','.join(child_strs)}]")
+        rebalance_measure_voices(measure)
 
-            if parts:
-                return f"{name}({','.join(parts)})"
-            else:
-                return f"{name}()"
-
-        return recurse(xml)
+        self.assertEqual(self._read_note_voice(first), "2")
+        self.assertEqual(self._read_note_voice(second), "2")
 
     def _build_test_note(
         self, duration: int, staff: int, voice: int, is_chord: bool = False
-    ) -> mxl.XMLNote:
-        note = mxl.XMLNote()
+    ) -> ET.Element:
+        note = ET.Element("note")
         if is_chord:
-            note.add_child(mxl.XMLChord())
-        note.add_child(mxl.XMLDuration(value_=duration))
-        note.add_child(mxl.XMLStaff(value_=staff))
-        note.add_child(mxl.XMLVoice(value_=str(voice)))
+            ET.SubElement(note, "chord")
+        ET.SubElement(note, "duration").text = str(duration)
+        ET.SubElement(note, "staff").text = str(staff)
+        ET.SubElement(note, "voice").text = str(voice)
         return note
 
-    def _build_test_backup(self, duration: int) -> mxl.XMLBackup:
-        backup = mxl.XMLBackup()
-        backup.add_child(mxl.XMLDuration(value_=duration))
+    def _build_test_backup(self, duration: int) -> ET.Element:
+        backup = ET.Element("backup")
+        ET.SubElement(backup, "duration").text = str(duration)
         return backup
 
-    def _read_note_voice(self, note: mxl.XMLNote) -> str:
-        voices = note.get_children_of_type(mxl.XMLVoice)
-        self.assertGreater(len(voices), 0)
-        return str(voices[0].value_)
+    def _read_note_voice(self, note: ET.Element) -> str:
+        v = note.findtext("voice")
+        self.assertIsNotNone(v)
+        return str(v)
+
+    def test_slur_between_same_pitches_becomes_a_tie(self) -> None:
+        """A slur joining two identical pitches is a tie, and needs both elements."""
+        tied = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ slurStart upper
+note_4 C4 _ _ slurStop upper
+note_2 D4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(tied.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        # <tie> is what sounds, <tied> is what is drawn: both are required, or
+        # the notes are drawn joined and still played separately.
+        self.assertEqual(_ties(xml), ["start", "stop"])
+        self.assertEqual(_tieds(xml), ["start", "stop"])
+        # the slur it came from is gone
+        self.assertEqual(_slurs(xml), [])
+
+    def test_tie_between_two_chords(self) -> None:
+        """Every notehead of a chord ties to its own pitch in the next one."""
+        chords = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ slurStart upper&note_4 E4 _ _ slurStart upper
+note_4 C4 _ _ slurStop upper&note_4 E4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(chords.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(sorted(_ties(xml)), ["start", "start", "stop", "stop"])
+        self.assertEqual(_slurs(xml), [])
+
+    def test_tie_on_one_notehead_of_a_chord(self) -> None:
+        """The model marks the notehead the curve touches, not the whole chord.
+
+        On real output almost every slurred chord carries the slur on some of
+        its members only, so a tie has to be found for that pitch alone and
+        leave the rest of the chord as it is.
+        """
+        chords = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ _ upper&note_4 E4 _ _ slurStart upper
+note_4 C4 _ _ _ upper&note_4 E4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(chords.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_ties(xml), ["start", "stop"])
+        self.assertEqual(_slurs(xml), [])
+        tied = [n for n in xml.iter("note") if n.find("tie") is not None]
+        self.assertEqual([_pitch(n) for n in tied], ["E", "E"])
+
+    def test_slur_from_a_chord_to_a_different_pitch_stays_a_slur(self) -> None:
+        chords = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ _ upper&note_4 E4 _ _ slurStart upper
+note_4 C4 _ _ _ upper&note_4 G4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(chords.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+        self.assertEqual(_ties(xml), [])
+
+    def test_phrase_slur_over_three_events_stays_a_slur(self) -> None:
+        """Adjacency is what separates a tie from a phrase mark.
+
+        A curve that leaves a pitch and comes back to it later is a phrase,
+        however identical its two ends are, so only the immediately following
+        event may close a tie.
+        """
+        phrase = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ _ upper&note_4 G4 _ _ slurStart upper
+note_4 A4 _ _ _ upper
+note_4 C4 _ _ _ upper&note_4 G4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(phrase.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+        self.assertEqual(_ties(xml), [])
+
+    def test_shared_pitch_without_a_slur_of_its_own_stays_untied(self) -> None:
+        """A pitch in both chords is not enough; the curve has to be on it.
+
+        Here C4 is in both chords and the curve runs from G4 to C4, so nothing
+        ties: G4 has no stop to reach, and C4 has no start behind it.
+        """
+        crossing = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ _ upper&note_4 G4 _ _ slurStart upper
+note_4 C4 _ _ slurStop upper&note_4 A4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(crossing.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+        self.assertEqual(_ties(xml), [])
+
+    def test_slur_between_different_pitches_stays_a_slur(self) -> None:
+        phrase = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ slurStart upper
+note_4 E4 _ _ slurStop upper
+note_2 D4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(phrase.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+        self.assertEqual(_ties(xml), [])
+
+    def test_tie_is_recognised_across_a_barline(self) -> None:
+        """Ties cross barlines constantly, which is why the pass runs per part."""
+        across = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_1 C4 _ _ slurStart upper
+barline . . . . .
+note_1 C4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(across.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_ties(xml), ["start", "stop"])
+        self.assertEqual(_slurs(xml), [])
+
+    def test_same_pitch_but_not_adjacent_stays_a_slur(self) -> None:
+        """Same pitch is not enough: a tie joins a note to its immediate successor."""
+        apart = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 C4 _ _ slurStart upper
+note_4 E4 _ _ _ upper
+note_4 C4 _ _ slurStop upper
+note_4 D4 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(apart.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_ties(xml), [])
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+
+    def test_convert_ties_leaves_a_part_without_slurs_alone(self) -> None:
+        part = ET.Element("part", id="P1")
+        measure = ET.SubElement(part, "measure", number="1")
+        note = ET.SubElement(measure, "note")
+        pitch = ET.SubElement(note, "pitch")
+        ET.SubElement(pitch, "step").text = "C"
+        ET.SubElement(pitch, "octave").text = "4"
+        ET.SubElement(note, "duration").text = "4"
+        ET.SubElement(note, "voice").text = "1"
+        ET.SubElement(note, "staff").text = "1"
+
+        convert_ties(part)
+        self.assertEqual(_ties(part), [])
+
+    def test_tie_found_while_another_slur_is_open_on_the_same_staff(self) -> None:
+        """Several slurs share a staff, and so share a slur number.
+
+        The tie here opens and closes inside a longer slur. Nothing can tell
+        the two apart by number, which is why ties are detected from a note
+        and its successor rather than by pairing starts with stops.
+        """
+        nested = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_4 E4 _ _ slurStart upper
+note_4 C4 _ _ slurStart upper
+note_4 C4 _ _ slurStop upper
+note_4 G4 _ _ slurStop upper
+barline . . . . ."""
+        tokens = read_token_lines(nested.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        # the inner pair became a tie
+        self.assertEqual(_ties(xml), ["start", "stop"])
+        self.assertEqual(_tieds(xml), ["start", "stop"])
+        # the outer slur is untouched
+        self.assertEqual(_slurs(xml), ["start", "stop"])

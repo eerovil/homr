@@ -10,7 +10,7 @@ root_dir = os.getcwd()
 
 class FilePaths:
     def __init__(self) -> None:
-        model_name = "pytorch_model_396-f6feedb42ff90087d898b0941a55d040fa6b2903"
+        model_name = "pytorch_model_426-b6fd20809a8dcaf10dfd39a4ca4f64c6f056e644"
         self.encoder_path = os.path.join(
             workspace,
             f"encoder_{model_name}.onnx",
@@ -85,6 +85,13 @@ class DecoderArgs:
 class Config:
     def __init__(self) -> None:
         self.vocab = Vocabulary()
+        self.forbidden_rhythm_tokens: set[int] = set()
+        # On by default because `homr.reread` reads them: a fused grand staff is
+        # read again one staff at a time when the decoder was unsure of a note,
+        # and without the probabilities there is nothing to be unsure with.
+        # `--output-confidence` decides whether they also reach a sidecar.
+        self.record_confidence = True
+        self.use_stem_voice_hints = True
         self.filepaths = FilePaths()
         self.channels = 1
         self.patch_size = 16
@@ -128,8 +135,8 @@ class Config:
 
         # Scheduled Sampling parameters
         self.scheduled_sampling_start_prob = 1.0
-        self.scheduled_sampling_end_prob = 0.7
-        self.scheduled_sampling_decay_steps = 20000
+        self.scheduled_sampling_end_prob = 0.4
+        self.scheduled_sampling_decay_steps = 45000
 
     def to_dict(self) -> dict[str, Any]:
         return {

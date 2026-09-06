@@ -1,0 +1,1765 @@
+{
+  "staffs": [
+    {
+      "voice_group": 0,
+      "system": 0,
+      "detector_notes": [
+        {
+          "x": 401.7,
+          "y": 67.8,
+          "staff_position": 11,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              1659.5,
+              238.5
+            ],
+            "size": [
+              3.0,
+              55.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 428.9,
+          "y": 70.5,
+          "staff_position": 10,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              1772.5,
+              246.0
+            ],
+            "size": [
+              3.0,
+              66.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 82.8,
+          "y": 70.8,
+          "staff_position": 10,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              359.0,
+              247.5
+            ],
+            "size": [
+              4.9,
+              79.1
+            ],
+            "angle": -2.1
+          }
+        },
+        {
+          "x": 173.5,
+          "y": 74.3,
+          "staff_position": 9,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              726.9,
+              265.0
+            ],
+            "size": [
+              3.0,
+              60.0
+            ],
+            "angle": 1.1
+          }
+        },
+        {
+          "x": 201.0,
+          "y": 77.5,
+          "staff_position": 8,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              839.4,
+              270.5
+            ],
+            "size": [
+              4.3,
+              77.0
+            ],
+            "angle": 2.5
+          }
+        },
+        {
+          "x": 366.6,
+          "y": 77.9,
+          "staff_position": 8,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              1517.5,
+              309.0
+            ],
+            "size": [
+              0.7,
+              2.1
+            ],
+            "angle": -45.0
+          }
+        },
+        {
+          "x": 236.1,
+          "y": 77.9,
+          "staff_position": 8,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              978.0,
+              310.0
+            ],
+            "size": [
+              2.0,
+              2.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 297.7,
+          "y": 81.5,
+          "staff_position": 7,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1208.0,
+              353.5
+            ],
+            "size": [
+              4.0,
+              19.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 332.3,
+          "y": 84.9,
+          "staff_position": 6,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              1376.5,
+              324.0
+            ],
+            "size": [
+              3.0,
+              32.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 276.7,
+          "y": 81.4,
+          "staff_position": 7,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1124.0,
+              383.0
+            ],
+            "size": [
+              4.0,
+              20.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 276.7,
+          "y": 88.7,
+          "staff_position": 5,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1124.0,
+              383.0
+            ],
+            "size": [
+              4.0,
+              20.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 201.3,
+          "y": 85.7,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              812.5,
+              378.5
+            ],
+            "size": [
+              3.0,
+              25.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 235.4,
+          "y": 85.7,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              954.2,
+              407.0
+            ],
+            "size": [
+              3.8,
+              78.0
+            ],
+            "angle": 1.0
+          }
+        },
+        {
+          "x": 84.3,
+          "y": 85.8,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              333.5,
+              379.5
+            ],
+            "size": [
+              3.0,
+              25.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 146.0,
+          "y": 85.8,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              587.4,
+              407.0
+            ],
+            "size": [
+              3.9,
+              80.0
+            ],
+            "angle": -0.8
+          }
+        },
+        {
+          "x": 366.4,
+          "y": 86.0,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1491.5,
+              379.5
+            ],
+            "size": [
+              3.0,
+              25.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 304.0,
+          "y": 88.7,
+          "staff_position": 5,
+          "stem": "up",
+          "stem_geometry": {
+            "center": [
+              1261.5,
+              348.0
+            ],
+            "size": [
+              3.0,
+              22.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 111.9,
+          "y": 88.9,
+          "staff_position": 5,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              446.5,
+              382.0
+            ],
+            "size": [
+              3.0,
+              18.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 173.8,
+          "y": 92.7,
+          "staff_position": 4,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              700.5,
+              408.5
+            ],
+            "size": [
+              3.0,
+              27.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 428.6,
+          "y": 96.0,
+          "staff_position": 3,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1747.5,
+              413.0
+            ],
+            "size": [
+              3.0,
+              18.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 400.9,
+          "y": 99.9,
+          "staff_position": 2,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1634.4,
+              459.0
+            ],
+            "size": [
+              4.9,
+              66.0
+            ],
+            "angle": -1.9
+          }
+        },
+        {
+          "x": 174.9,
+          "y": 173.3,
+          "staff_position": 11,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              714.5,
+              726.0
+            ],
+            "size": [
+              13.0,
+              2.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 401.5,
+          "y": 173.5,
+          "staff_position": 11,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1644.5,
+              726.5
+            ],
+            "size": [
+              17.0,
+              3.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 112.3,
+          "y": 173.8,
+          "staff_position": 11,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              460.5,
+              726.5
+            ],
+            "size": [
+              19.0,
+              3.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 366.9,
+          "y": 174.0,
+          "staff_position": 11,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1509.7,
+              725.5
+            ],
+            "size": [
+              4.4,
+              1.7
+            ],
+            "angle": -33.7
+          }
+        },
+        {
+          "x": 429.1,
+          "y": 174.2,
+          "staff_position": 11,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1755.1,
+              728.1
+            ],
+            "size": [
+              6.1,
+              0.8
+            ],
+            "angle": 9.5
+          }
+        },
+        {
+          "x": 276.7,
+          "y": 180.9,
+          "staff_position": 9,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1141.3,
+              756.9
+            ],
+            "size": [
+              0.4,
+              2.2
+            ],
+            "angle": 26.6
+          }
+        },
+        {
+          "x": 173.8,
+          "y": 181.1,
+          "staff_position": 9,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              701.5,
+              762.5
+            ],
+            "size": [
+              3.0,
+              17.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 331.8,
+          "y": 184.4,
+          "staff_position": 8,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1350.0,
+              769.0
+            ],
+            "size": [
+              2.0,
+              4.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 235.7,
+          "y": 184.4,
+          "staff_position": 8,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              955.5,
+              786.0
+            ],
+            "size": [
+              3.0,
+              20.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 77.9,
+          "y": 184.6,
+          "staff_position": 8,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              318.7,
+              768.1
+            ],
+            "size": [
+              0.4,
+              2.2
+            ],
+            "angle": 26.6
+          }
+        },
+        {
+          "x": 201.0,
+          "y": 184.6,
+          "staff_position": 8,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              814.5,
+              788.5
+            ],
+            "size": [
+              3.0,
+              23.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 401.1,
+          "y": 188.3,
+          "staff_position": 7,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1647.3,
+              785.5
+            ],
+            "size": [
+              5.4,
+              1.1
+            ],
+            "angle": -21.8
+          }
+        },
+        {
+          "x": 277.1,
+          "y": 188.3,
+          "staff_position": 7,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1124.5,
+              790.5
+            ],
+            "size": [
+              3.0,
+              19.0
+            ],
+            "angle": 0.0
+          }
+        },
+        {
+          "x": 86.8,
+          "y": 191.6,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              336.4,
+              815.0
+            ],
+            "size": [
+              3.9,
+              26.1
+            ],
+            "angle": -2.7
+          }
+        },
+        {
+          "x": 332.1,
+          "y": 192.3,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1350.6,
+              812.5
+            ],
+            "size": [
+              3.7,
+              31.1
+            ],
+            "angle": -3.0
+          }
+        },
+        {
+          "x": 428.8,
+          "y": 192.3,
+          "staff_position": 6,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1748.8,
+              817.0
+            ],
+            "size": [
+              3.4,
+              26.0
+            ],
+            "angle": -3.6
+          }
+        },
+        {
+          "x": 366.5,
+          "y": 198.9,
+          "staff_position": 4,
+          "stem": "down",
+          "stem_geometry": {
+            "center": [
+              1493.6,
+              845.6
+            ],
+            "size": [
+              4.1,
+              25.0
+            ],
+            "angle": -8.1
+          }
+        }
+      ],
+      "decoded_notes": [
+        {
+          "token": 4,
+          "pitch": "G5",
+          "rhythm": "note_2",
+          "attention": [
+            88.0,
+            51.7
+          ],
+          "nearest_detector_note": {
+            "x": 82.8,
+            "y": 70.8,
+            "staff_position": 10,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                359.0,
+                247.5
+              ],
+              "size": [
+                4.9,
+                79.1
+              ],
+              "angle": -2.1
+            }
+          },
+          "distance": 19.8
+        },
+        {
+          "token": 6,
+          "pitch": "C5",
+          "rhythm": "note_4",
+          "attention": [
+            88.0,
+            83.5
+          ],
+          "nearest_detector_note": {
+            "x": 84.3,
+            "y": 85.8,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                333.5,
+                379.5
+              ],
+              "size": [
+                3.0,
+                25.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 4.4
+        },
+        {
+          "token": 8,
+          "pitch": "G3",
+          "rhythm": "note_4",
+          "attention": [
+            87.9,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 77.9,
+            "y": 184.6,
+            "staff_position": 8,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                318.7,
+                768.1
+              ],
+              "size": [
+                0.4,
+                2.2
+              ],
+              "angle": 26.6
+            }
+          },
+          "distance": 19.4
+        },
+        {
+          "token": 10,
+          "pitch": "E3",
+          "rhythm": "note_2",
+          "attention": [
+            88.1,
+            199.6
+          ],
+          "nearest_detector_note": {
+            "x": 86.8,
+            "y": 191.6,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                336.4,
+                815.0
+              ],
+              "size": [
+                3.9,
+                26.1
+              ],
+              "angle": -2.7
+            }
+          },
+          "distance": 8.1
+        },
+        {
+          "token": 11,
+          "pitch": "B4",
+          "rhythm": "note_8.",
+          "attention": [
+            120.1,
+            84.1
+          ],
+          "nearest_detector_note": {
+            "x": 111.9,
+            "y": 88.9,
+            "staff_position": 5,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                446.5,
+                382.0
+              ],
+              "size": [
+                3.0,
+                18.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 9.5
+        },
+        {
+          "token": 13,
+          "pitch": "C4",
+          "rhythm": "note_4",
+          "attention": [
+            120.0,
+            168.1
+          ],
+          "nearest_detector_note": {
+            "x": 112.3,
+            "y": 173.8,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                460.5,
+                726.5
+              ],
+              "size": [
+                19.0,
+                3.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 9.5
+        },
+        {
+          "token": 14,
+          "pitch": "C5",
+          "rhythm": "note_16",
+          "attention": [
+            151.8,
+            78.4
+          ],
+          "nearest_detector_note": {
+            "x": 146.0,
+            "y": 85.8,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                587.4,
+                407.0
+              ],
+              "size": [
+                3.9,
+                80.0
+              ],
+              "angle": -0.8
+            }
+          },
+          "distance": 9.4
+        },
+        {
+          "token": 15,
+          "pitch": "F5",
+          "rhythm": "note_4",
+          "attention": [
+            183.9,
+            55.8
+          ],
+          "nearest_detector_note": {
+            "x": 173.5,
+            "y": 74.3,
+            "staff_position": 9,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                726.9,
+                265.0
+              ],
+              "size": [
+                3.0,
+                60.0
+              ],
+              "angle": 1.1
+            }
+          },
+          "distance": 21.3
+        },
+        {
+          "token": 17,
+          "pitch": "A4",
+          "rhythm": "note_4",
+          "attention": [
+            183.9,
+            88.0
+          ],
+          "nearest_detector_note": {
+            "x": 173.8,
+            "y": 92.7,
+            "staff_position": 4,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                700.5,
+                408.5
+              ],
+              "size": [
+                3.0,
+                27.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 11.2
+        },
+        {
+          "token": 19,
+          "pitch": "C4",
+          "rhythm": "note_4",
+          "attention": [
+            183.9,
+            167.6
+          ],
+          "nearest_detector_note": {
+            "x": 174.9,
+            "y": 173.3,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                714.5,
+                726.0
+              ],
+              "size": [
+                13.0,
+                2.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 10.7
+        },
+        {
+          "token": 21,
+          "pitch": "A3",
+          "rhythm": "note_4",
+          "attention": [
+            184.0,
+            195.0
+          ],
+          "nearest_detector_note": {
+            "x": 173.8,
+            "y": 181.1,
+            "staff_position": 9,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                701.5,
+                762.5
+              ],
+              "size": [
+                3.0,
+                17.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 17.2
+        },
+        {
+          "token": 22,
+          "pitch": "E5",
+          "rhythm": "note_8.",
+          "attention": [
+            216.0,
+            55.7
+          ],
+          "nearest_detector_note": {
+            "x": 201.0,
+            "y": 77.5,
+            "staff_position": 8,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                839.4,
+                270.5
+              ],
+              "size": [
+                4.3,
+                77.0
+              ],
+              "angle": 2.5
+            }
+          },
+          "distance": 26.5
+        },
+        {
+          "token": 24,
+          "pitch": "C5",
+          "rhythm": "note_8.",
+          "attention": [
+            215.9,
+            88.1
+          ],
+          "nearest_detector_note": {
+            "x": 201.3,
+            "y": 85.7,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                812.5,
+                378.5
+              ],
+              "size": [
+                3.0,
+                25.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 14.8
+        },
+        {
+          "token": 26,
+          "pitch": "G3",
+          "rhythm": "note_8.",
+          "attention": [
+            216.0,
+            168.1
+          ],
+          "nearest_detector_note": {
+            "x": 201.0,
+            "y": 184.6,
+            "staff_position": 8,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                814.5,
+                788.5
+              ],
+              "size": [
+                3.0,
+                23.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 22.3
+        },
+        {
+          "token": 28,
+          "pitch": "G3",
+          "rhythm": "note_8.",
+          "attention": [
+            216.0,
+            199.7
+          ],
+          "nearest_detector_note": {
+            "x": 201.0,
+            "y": 184.6,
+            "staff_position": 8,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                814.5,
+                788.5
+              ],
+              "size": [
+                3.0,
+                23.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 21.3
+        },
+        {
+          "token": 29,
+          "pitch": "E5",
+          "rhythm": "note_32",
+          "attention": [
+            248.0,
+            55.9
+          ],
+          "nearest_detector_note": {
+            "x": 236.1,
+            "y": 77.9,
+            "staff_position": 8,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                978.0,
+                310.0
+              ],
+              "size": [
+                2.0,
+                2.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 25.0
+        },
+        {
+          "token": 31,
+          "pitch": "C5",
+          "rhythm": "note_16",
+          "attention": [
+            248.0,
+            88.2
+          ],
+          "nearest_detector_note": {
+            "x": 235.4,
+            "y": 85.7,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                954.2,
+                407.0
+              ],
+              "size": [
+                3.8,
+                78.0
+              ],
+              "angle": 1.0
+            }
+          },
+          "distance": 12.8
+        },
+        {
+          "token": 33,
+          "pitch": "G3",
+          "rhythm": "note_32",
+          "attention": [
+            248.0,
+            169.2
+          ],
+          "nearest_detector_note": {
+            "x": 235.7,
+            "y": 184.4,
+            "staff_position": 8,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                955.5,
+                786.0
+              ],
+              "size": [
+                3.0,
+                20.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 19.6
+        },
+        {
+          "token": 35,
+          "pitch": "G3",
+          "rhythm": "note_32",
+          "attention": [
+            248.0,
+            200.0
+          ],
+          "nearest_detector_note": {
+            "x": 235.7,
+            "y": 184.4,
+            "staff_position": 8,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                955.5,
+                786.0
+              ],
+              "size": [
+                3.0,
+                20.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 19.8
+        },
+        {
+          "token": 37,
+          "pitch": "D5",
+          "rhythm": "note_8",
+          "attention": [
+            296.0,
+            56.0
+          ],
+          "nearest_detector_note": {
+            "x": 297.7,
+            "y": 81.5,
+            "staff_position": 7,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1208.0,
+                353.5
+              ],
+              "size": [
+                4.0,
+                19.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 25.6
+        },
+        {
+          "token": 39,
+          "pitch": "B4",
+          "rhythm": "note_8",
+          "attention": [
+            295.0,
+            87.6
+          ],
+          "nearest_detector_note": {
+            "x": 297.7,
+            "y": 81.5,
+            "staff_position": 7,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1208.0,
+                353.5
+              ],
+              "size": [
+                4.0,
+                19.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 6.7
+        },
+        {
+          "token": 41,
+          "pitch": "A3",
+          "rhythm": "note_4",
+          "attention": [
+            295.9,
+            167.9
+          ],
+          "nearest_detector_note": {
+            "x": 276.7,
+            "y": 180.9,
+            "staff_position": 9,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1141.3,
+                756.9
+              ],
+              "size": [
+                0.4,
+                2.2
+              ],
+              "angle": 26.6
+            }
+          },
+          "distance": 23.2
+        },
+        {
+          "token": 43,
+          "pitch": "F3",
+          "rhythm": "note_4",
+          "attention": [
+            296.0,
+            200.0
+          ],
+          "nearest_detector_note": {
+            "x": 277.1,
+            "y": 188.3,
+            "staff_position": 7,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1124.5,
+                790.5
+              ],
+              "size": [
+                3.0,
+                19.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 22.2
+        },
+        {
+          "token": 44,
+          "pitch": "D5",
+          "rhythm": "note_8",
+          "attention": [
+            311.7,
+            72.7
+          ],
+          "nearest_detector_note": {
+            "x": 297.7,
+            "y": 81.5,
+            "staff_position": 7,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1208.0,
+                353.5
+              ],
+              "size": [
+                4.0,
+                19.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 16.5
+        },
+        {
+          "token": 46,
+          "pitch": "B4",
+          "rhythm": "note_8",
+          "attention": [
+            327.8,
+            87.0
+          ],
+          "nearest_detector_note": {
+            "x": 332.3,
+            "y": 84.9,
+            "staff_position": 6,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1376.5,
+                324.0
+              ],
+              "size": [
+                3.0,
+                32.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 5.0
+        },
+        {
+          "token": 47,
+          "pitch": "C5",
+          "rhythm": "note_8",
+          "attention": [
+            344.5,
+            69.4
+          ],
+          "nearest_detector_note": {
+            "x": 332.3,
+            "y": 84.9,
+            "staff_position": 6,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1376.5,
+                324.0
+              ],
+              "size": [
+                3.0,
+                32.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 19.7
+        },
+        {
+          "token": 49,
+          "pitch": "C5",
+          "rhythm": "note_8",
+          "attention": [
+            345.5,
+            88.0
+          ],
+          "nearest_detector_note": {
+            "x": 332.3,
+            "y": 84.9,
+            "staff_position": 6,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1376.5,
+                324.0
+              ],
+              "size": [
+                3.0,
+                32.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 13.5
+        },
+        {
+          "token": 51,
+          "pitch": "G3",
+          "rhythm": "note_8",
+          "attention": [
+            351.9,
+            174.0
+          ],
+          "nearest_detector_note": {
+            "x": 366.9,
+            "y": 174.0,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1509.7,
+                725.5
+              ],
+              "size": [
+                4.4,
+                1.7
+              ],
+              "angle": -33.7
+            }
+          },
+          "distance": 15.0
+        },
+        {
+          "token": 53,
+          "pitch": "E3",
+          "rhythm": "note_8",
+          "attention": [
+            353.7,
+            201.1
+          ],
+          "nearest_detector_note": {
+            "x": 366.5,
+            "y": 198.9,
+            "staff_position": 4,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1493.6,
+                845.6
+              ],
+              "size": [
+                4.1,
+                25.0
+              ],
+              "angle": -8.1
+            }
+          },
+          "distance": 13.0
+        },
+        {
+          "token": 54,
+          "pitch": "E5",
+          "rhythm": "note_8",
+          "attention": [
+            391.5,
+            55.4
+          ],
+          "nearest_detector_note": {
+            "x": 401.7,
+            "y": 67.8,
+            "staff_position": 11,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1659.5,
+                238.5
+              ],
+              "size": [
+                3.0,
+                55.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 16.0
+        },
+        {
+          "token": 56,
+          "pitch": "C5",
+          "rhythm": "note_8",
+          "attention": [
+            391.6,
+            88.0
+          ],
+          "nearest_detector_note": {
+            "x": 400.9,
+            "y": 99.9,
+            "staff_position": 2,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1634.4,
+                459.0
+              ],
+              "size": [
+                4.9,
+                66.0
+              ],
+              "angle": -1.9
+            }
+          },
+          "distance": 15.1
+        },
+        {
+          "token": 58,
+          "pitch": "C4",
+          "rhythm": "note_8",
+          "attention": [
+            391.9,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 401.5,
+            "y": 173.5,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1644.5,
+                726.5
+              ],
+              "size": [
+                17.0,
+                3.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 11.0
+        },
+        {
+          "token": 60,
+          "pitch": "C3",
+          "rhythm": "note_8",
+          "attention": [
+            391.6,
+            200.6
+          ],
+          "nearest_detector_note": {
+            "x": 401.1,
+            "y": 188.3,
+            "staff_position": 7,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1647.3,
+                785.5
+              ],
+              "size": [
+                5.4,
+                1.1
+              ],
+              "angle": -21.8
+            }
+          },
+          "distance": 15.6
+        },
+        {
+          "token": 61,
+          "pitch": "A5",
+          "rhythm": "note_4",
+          "attention": [
+            422.7,
+            46.1
+          ],
+          "nearest_detector_note": {
+            "x": 428.9,
+            "y": 70.5,
+            "staff_position": 10,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1772.5,
+                246.0
+              ],
+              "size": [
+                3.0,
+                66.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 25.2
+        },
+        {
+          "token": 63,
+          "pitch": "F4",
+          "rhythm": "note_4",
+          "attention": [
+            423.9,
+            90.3
+          ],
+          "nearest_detector_note": {
+            "x": 428.6,
+            "y": 96.0,
+            "staff_position": 3,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1747.5,
+                413.0
+              ],
+              "size": [
+                3.0,
+                18.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 7.4
+        },
+        {
+          "token": 65,
+          "pitch": "C4",
+          "rhythm": "note_4",
+          "attention": [
+            423.9,
+            168.0
+          ],
+          "nearest_detector_note": {
+            "x": 429.1,
+            "y": 174.2,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1755.1,
+                728.1
+              ],
+              "size": [
+                6.1,
+                0.8
+              ],
+              "angle": 9.5
+            }
+          },
+          "distance": 8.1
+        },
+        {
+          "token": 67,
+          "pitch": "F3",
+          "rhythm": "note_4",
+          "attention": [
+            423.9,
+            198.5
+          ],
+          "nearest_detector_note": {
+            "x": 428.8,
+            "y": 192.3,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1748.8,
+                817.0
+              ],
+              "size": [
+                3.4,
+                26.0
+              ],
+              "angle": -3.6
+            }
+          },
+          "distance": 7.9
+        },
+        {
+          "token": 68,
+          "pitch": "G5",
+          "rhythm": "note_4",
+          "attention": [
+            456.0,
+            53.4
+          ],
+          "nearest_detector_note": {
+            "x": 428.9,
+            "y": 70.5,
+            "staff_position": 10,
+            "stem": "up",
+            "stem_geometry": {
+              "center": [
+                1772.5,
+                246.0
+              ],
+              "size": [
+                3.0,
+                66.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 32.0
+        },
+        {
+          "token": 70,
+          "pitch": "G4",
+          "rhythm": "note_4",
+          "attention": [
+            455.9,
+            88.3
+          ],
+          "nearest_detector_note": {
+            "x": 428.6,
+            "y": 96.0,
+            "staff_position": 3,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1747.5,
+                413.0
+              ],
+              "size": [
+                3.0,
+                18.0
+              ],
+              "angle": 0.0
+            }
+          },
+          "distance": 28.4
+        },
+        {
+          "token": 72,
+          "pitch": "C4",
+          "rhythm": "note_4",
+          "attention": [
+            455.9,
+            169.5
+          ],
+          "nearest_detector_note": {
+            "x": 429.1,
+            "y": 174.2,
+            "staff_position": 11,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1755.1,
+                728.1
+              ],
+              "size": [
+                6.1,
+                0.8
+              ],
+              "angle": 9.5
+            }
+          },
+          "distance": 27.2
+        },
+        {
+          "token": 74,
+          "pitch": "E3",
+          "rhythm": "note_4",
+          "attention": [
+            456.0,
+            200.0
+          ],
+          "nearest_detector_note": {
+            "x": 428.8,
+            "y": 192.3,
+            "staff_position": 6,
+            "stem": "down",
+            "stem_geometry": {
+              "center": [
+                1748.8,
+                817.0
+              ],
+              "size": [
+                3.4,
+                26.0
+              ],
+              "angle": -3.6
+            }
+          },
+          "distance": 28.3
+        }
+      ]
+    }
+  ]
+}
