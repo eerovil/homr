@@ -509,6 +509,13 @@ def _remove_duplicated_piches(chord: list[EncodedSymbol]) -> list[EncodedSymbol]
     order_of_appearance = []
     for symbol in chord:
         key = symbol.pitch + " " + symbol.position
+        # A pitch written twice in one moment is normally the decoder repeating
+        # itself. It is not when the two carry opposite stems: a stem is only
+        # ever set from a notehead the segmentation found, so two of them means
+        # two heads were drawn there -- a unison the engraver printed as two
+        # heads side by side, which is two voices and not one note twice.
+        if symbol.stem_direction in {"up", "down"}:
+            key += " " + symbol.stem_direction
         if key in by_pitch:
             if symbol.get_duration().fraction > by_pitch[key].get_duration().fraction:
                 by_pitch[symbol.pitch] = symbol

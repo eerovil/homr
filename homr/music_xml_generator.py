@@ -261,7 +261,11 @@ def build_measures(
         close_current_measure()
     if first_attributes.find("time") is None:
         time_el = ET.SubElement(first_attributes, "time")
-        beats = max(int(state.nominator * 4), 1)
+        # Rounded rather than truncated: the nominator is the *median* of the
+        # bars' measured lengths, so over an even number of bars it is an
+        # average of two of them and need not be a whole number of quarters.
+        # Flooring 1.875 said the page was in 1/4, a meter no bar of it is in.
+        beats = max(round(state.nominator * 4), 1)
         ET.SubElement(time_el, "beats").text = str(beats)
         ET.SubElement(time_el, "beat-type").text = "4"
     return measures
