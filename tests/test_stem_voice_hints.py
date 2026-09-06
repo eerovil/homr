@@ -323,6 +323,55 @@ def test_a_pitch_written_twice_the_same_way_is_still_one_note() -> None:
     assert len(_remove_duplicated_piches(stemless)) == 1
 
 
+def test_one_stem_beside_none_is_not_two_heads() -> None:
+    """Both directions together are the evidence; one of them is not.
+
+    Read symbol by symbol this pair gets two different keys -- `B4 upper down`
+    and `B4 upper` -- and neither is dropped, so a second note is written where
+    nothing ever saw a second head.
+    """
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper"),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_a_stem_beside_a_shared_head_is_not_two_heads() -> None:
+    """`SHARED` is doubled in the XML layer; doubling it here as well invents one."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction=SHARED),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_a_third_note_of_the_same_pitch_collapses_the_whole_group() -> None:
+    """Two heads are two heads; three decoded notes on them are the decoder repeating."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_4", pitch="B4", position="upper"),
+    ]
+
+    assert len(_remove_duplicated_piches(chord)) == 1
+
+
+def test_the_pair_survives_beside_the_rest_of_its_chord() -> None:
+    """The other pitches of the moment are their own groups and are untouched."""
+    chord = [
+        EncodedSymbol("note_2", pitch="B4", position="upper", stem_direction="down"),
+        EncodedSymbol("note_8", pitch="B4", position="upper", stem_direction="up"),
+        EncodedSymbol("note_2", pitch="G4", position="upper", stem_direction="down"),
+    ]
+
+    kept = _remove_duplicated_piches(chord)
+
+    assert [symbol.pitch for symbol in kept] == ["B4", "B4", "G4"]
+
+
 def test_the_two_notes_of_the_unison_reach_the_file_as_two_voices() -> None:
     """End to end: opposite stems are what the voice rebalancer splits on."""
     voice = [

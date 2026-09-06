@@ -505,17 +505,28 @@ def _remove_redudant_clefs_keys_and_time_signatures(
 def _remove_duplicated_piches(chord: list[EncodedSymbol]) -> list[EncodedSymbol]:
     if len(chord) <= 1 or not chord[0].rhythm.startswith(("note", "rest")):
         return chord
+    # A pitch written twice in one moment is normally the decoder repeating
+    # itself. It is not when the two carry opposite stems: a stem is only ever
+    # set from a notehead the segmentation found, so an up and a down means two
+    # heads were drawn there -- a unison the engraver printed as two heads side
+    # by side, which is two voices and not one note twice.
+    #
+    # That is a fact about the *group*, so it is read off the group before any
+    # key is built. Asking it of each symbol on its own keeps far more than the
+    # pair: a duplicate carrying a stem beside one carrying none would get two
+    # different keys and neither would be dropped, so a second note would be
+    # written where nothing ever saw a second head. A stem beside SHARED is the
+    # same trap. Only the two directions together are evidence.
+    stems: dict[str, set[str | None]] = {}
+    for symbol in chord:
+        stems.setdefault(symbol.pitch + " " + symbol.position, set()).add(symbol.stem_direction)
+
     by_pitch: dict[str, EncodedSymbol] = {}
     order_of_appearance = []
     for symbol in chord:
         key = symbol.pitch + " " + symbol.position
-        # A pitch written twice in one moment is normally the decoder repeating
-        # itself. It is not when the two carry opposite stems: a stem is only
-        # ever set from a notehead the segmentation found, so two of them means
-        # two heads were drawn there -- a unison the engraver printed as two
-        # heads side by side, which is two voices and not one note twice.
-        if symbol.stem_direction in {"up", "down"}:
-            key += " " + symbol.stem_direction
+        if stems[key] == {"up", "down"}:
+            key += " " + str(symbol.stem_direction)
         if key in by_pitch:
             if symbol.get_duration().fraction > by_pitch[key].get_duration().fraction:
                 by_pitch[symbol.pitch] = symbol
