@@ -143,6 +143,39 @@ def pitch_at(position: int, clef: tuple[str, int]) -> str | None:
     return f"{_STEPS[note % 7]}{note // 7}"
 
 
+def _columns(
+    symbols: list[EncodedSymbol], clefs: list[tuple[str, int] | None]
+) -> list[list[int]]:
+    """The decoded notes of one staff, grouped into the moments they sound at.
+
+    Grouped by how close the notes are, not by a grid: two notes of one moment
+    sit a fraction of a pixel apart and a fixed bucket puts them either side of
+    its boundary. This one did -- 184.0 and 184.1 became bucket 11 and bucket
+    12 -- and the pair this exists for was never looked at.
+    """
+    per_staff: dict[str, list[tuple[float, int]]] = {}
+    for index, symbol in enumerate(symbols):
+        if not symbol.rhythm.startswith("note"):
+            continue
+        coordinates = _note_coordinates(symbol)
+        if coordinates is None or clefs[index] is None:
+            continue
+        per_staff.setdefault(symbol.position, []).append((coordinates[0], index))
+    columns: list[list[int]] = []
+    for places in per_staff.values():
+        group: list[int] = []
+        last: float | None = None
+        for x, index in sorted(places):
+            if last is not None and x - last > _MATCH_X_TOLERANCE:
+                columns.append(group)
+                group = []
+            group.append(index)
+            last = x
+        if group:
+            columns.append(group)
+    return columns
+
+
 def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
     """Re-pitch a note that duplicates its neighbour and is about to be deleted.
 
@@ -167,33 +200,8 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
     exactly as the decoder produced it.
     """
     clefs = _clefs_in_force(symbols)
-    # Grouped by how close the notes are, not by a grid: two notes of one moment
-    # sit a fraction of a pixel apart and a fixed bucket puts them either side of
-    # its boundary. This one did -- 184.0 and 184.1 became bucket 11 and bucket
-    # 12 -- and the pair this exists for was never looked at.
-    per_staff: dict[str, list[tuple[float, int]]] = {}
-    for index, symbol in enumerate(symbols):
-        if not symbol.rhythm.startswith("note"):
-            continue
-        coordinates = _note_coordinates(symbol)
-        if coordinates is None or clefs[index] is None:
-            continue
-        per_staff.setdefault(symbol.position, []).append((coordinates[0], index))
-    columns: list[list[int]] = []
-    for places in per_staff.values():
-        group: list[int] = []
-        last: float | None = None
-        for x, index in sorted(places):
-            if last is not None and x - last > _MATCH_X_TOLERANCE:
-                columns.append(group)
-                group = []
-            group.append(index)
-            last = x
-        if group:
-            columns.append(group)
-
     rescued = 0
-    for members in columns:
+    for members in _columns(symbols, clefs):
         if len(members) != 2:
             continue
         first, second = (symbols[i] for i in members)
@@ -230,6 +238,66 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
                 "up" if owner.stem_directions[0] == StemDirection.UP else "down")
         rescued += 1
     return rescued
+
+
+def pair_unison_stems(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
+    """Give each head of a two-head unison its own stem, so both survive.
+
+    An engraver may draw a unison as one head with two stems -- which
+    ``SHARED`` carries -- or as two heads side by side at the same staff
+    position, one open with its stem one way and one filled with its stem the
+    other. The second shape reaches here intact: the segmentation finds both
+    heads and the decoder emits both notes. What loses one is that both decoded
+    notes match the *same* head (they claim one position and their attention
+    points are a pixel apart in y), so both take the same stem, and
+    ``_remove_duplicated_piches`` then reads them as one note written twice.
+
+    So where a column holds two decoded notes of one pitch and the segmentation
+    found exactly two heads at that position carrying opposite stems, the two
+    are matched one to one, left to right. That is the only reliable axis: the
+    attention point is trustworthy across the staff and not up it.
+    """
+    clefs = _clefs_in_force(symbols)
+    paired = 0
+    for column in _columns(symbols, clefs):
+        # Within the moment, only the notes of one pitch: the rest of the chord
+        # shares the column and says nothing about this pair.
+        same_pitch: dict[str, list[int]] = {}
+        for index in column:
+            same_pitch.setdefault(symbols[index].pitch, []).append(index)
+        for members in same_pitch.values():
+            if len(members) != 2:
+                continue
+            first, second = (symbols[i] for i in members)
+            clef = clefs[members[0]]
+            position = expected_position(first.pitch, clef)
+            if position is None:
+                continue
+            paired += _pair(first, second, notes, position)
+    return paired
+
+
+def _pair(
+    first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], position: int
+) -> int:
+    """Match the two notes to the two heads, left to right, and return 1 if done."""
+    x, y = _note_coordinates(first)
+    here = [
+        note
+        for note in notes
+        if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
+        and note.position == position
+        and abs(note.center[1] - y) <= _COLUMN_REACH
+    ]
+    if len(here) != 2 or any(len(note.stem_directions) != 1 for note in here):
+        return 0
+    if here[0].stem_directions[0] == here[1].stem_directions[0]:
+        return 0
+    heads = sorted(here, key=lambda note: note.center[0])
+    tokens = sorted((first, second), key=lambda s: _note_coordinates(s)[0])
+    for token, head in zip(tokens, heads, strict=True):
+        token.stem_direction = "up" if head.stem_directions[0] == StemDirection.UP else "down"
+    return 1
 
 
 def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int:

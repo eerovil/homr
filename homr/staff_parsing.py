@@ -11,7 +11,11 @@ from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
-from homr.stem_voice_hints import add_stem_voice_hints, rescue_duplicate_pitches
+from homr.stem_voice_hints import (
+    add_stem_voice_hints,
+    pair_unison_stems,
+    rescue_duplicate_pitches,
+)
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
@@ -339,6 +343,12 @@ def parse_staff_image(
         rescued = rescue_duplicate_pitches(result, noteheads)
         if rescued:
             eprint("Rescued", rescued, "note(s) from being deleted as duplicates")
+        # And where the two heads are at one position rather than two, the pair
+        # is a unison drawn as two heads: give each its own stem so neither is
+        # read as the other written twice.
+        paired = pair_unison_stems(result, noteheads)
+        if paired:
+            eprint("Paired", paired, "unison(s) drawn as two noteheads")
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
