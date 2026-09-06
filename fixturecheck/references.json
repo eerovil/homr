@@ -4,13 +4,325 @@
    "image": "068b31fc1ff37214",
    "reference": "17062fdda97de069"
   },
+  "heraa-suomi-final-s1": {
+   "image": "5417bdd3d5ca3fec",
+   "reference": "0d5ef9f74a466fcd"
+  },
+  "heraa-suomi-final-s10": {
+   "image": "8f0fb3c1b329c62a",
+   "reference": "77672b3efe5c16f8"
+  },
+  "heraa-suomi-final-s11": {
+   "image": "3144d1a4b2a20f69",
+   "reference": "32a49d6c6e8e8672"
+  },
+  "heraa-suomi-final-s12": {
+   "image": "c2489f8a4a1b1db1",
+   "reference": "f436a8b3d2eb9f92"
+  },
+  "heraa-suomi-final-s13": {
+   "image": "f157f73e44f1909c",
+   "reference": "5678d556284bf2bc"
+  },
+  "heraa-suomi-final-s14": {
+   "image": "505f03ffaf87f8aa",
+   "reference": "c90adb9044acbc81"
+  },
+  "heraa-suomi-final-s15": {
+   "image": "883d733def81f276",
+   "reference": "e9bc8868f408d7e8"
+  },
+  "heraa-suomi-final-s16": {
+   "image": "aff2bc5ff20a39f4",
+   "reference": "571a44631778d987"
+  },
+  "heraa-suomi-final-s17": {
+   "image": "d3e5adabfb910245",
+   "reference": "78fc8336f55b4f50"
+  },
+  "heraa-suomi-final-s18": {
+   "image": "653577b194553fe1",
+   "reference": "3c0f7e03df79ca3c"
+  },
+  "heraa-suomi-final-s19": {
+   "image": "29b65d7c96dbad4f",
+   "reference": "48d193d7772f8821"
+  },
+  "heraa-suomi-final-s2": {
+   "image": "cfb58e2ba138ef65",
+   "reference": "c2bf16febe458863"
+  },
+  "heraa-suomi-final-s20": {
+   "image": "294a193c792859ee",
+   "reference": "cdce0f71e2f84028"
+  },
+  "heraa-suomi-final-s21": {
+   "image": "1edf1856b33327b1",
+   "reference": "bce42e5b310f2a20"
+  },
+  "heraa-suomi-final-s22": {
+   "image": "190cba801757dec5",
+   "reference": "8b0b17ffef78952f"
+  },
+  "heraa-suomi-final-s23": {
+   "image": "2d5fe2cb00569f28",
+   "reference": "b3632f443f7441bb"
+  },
+  "heraa-suomi-final-s24": {
+   "image": "80dfcc12c62f20c5",
+   "reference": "37b684bab9c53b9a"
+  },
+  "heraa-suomi-final-s3": {
+   "image": "e01ab6165576622c",
+   "reference": "4a3b23c6be2adf5f"
+  },
+  "heraa-suomi-final-s4": {
+   "image": "215d43dbedbbc945",
+   "reference": "3c6e7046014b234e"
+  },
+  "heraa-suomi-final-s5": {
+   "image": "2ecfaf73a5378602",
+   "reference": "9bce3f68ead7c688"
+  },
+  "heraa-suomi-final-s6": {
+   "image": "7a38ba1d53bbc463",
+   "reference": "63ed219f91443512"
+  },
+  "heraa-suomi-final-s7": {
+   "image": "b65e26a5559121c5",
+   "reference": "bcef2f5afcbf9244"
+  },
+  "heraa-suomi-final-s8": {
+   "image": "08e9d0327b762ebb",
+   "reference": "870cd77bb0a980fe"
+  },
+  "heraa-suomi-final-s9": {
+   "image": "cf1cae45836800d1",
+   "reference": "3390cb67aae98961"
+  },
+  "kaksi-laulua-krapulasta-2-s1": {
+   "image": "fea5cfc12fa91cd3",
+   "reference": "faa930e871c66912"
+  },
+  "kaksi-laulua-krapulasta-2-s10": {
+   "image": "2caec29df2664b35",
+   "reference": "34e070fc78d57985"
+  },
+  "kaksi-laulua-krapulasta-2-s11": {
+   "image": "f152034715442e3e",
+   "reference": "44d1d95212cc8075"
+  },
+  "kaksi-laulua-krapulasta-2-s12": {
+   "image": "349e8b136f3a13f1",
+   "reference": "3cdad1e30c68d9c8"
+  },
+  "kaksi-laulua-krapulasta-2-s13": {
+   "image": "ce72df175a622c88",
+   "reference": "731b2f22b94bc7a2"
+  },
+  "kaksi-laulua-krapulasta-2-s14": {
+   "image": "56aa93401eb2b631",
+   "reference": "7ea3bf8ef81130e5"
+  },
+  "kaksi-laulua-krapulasta-2-s15": {
+   "image": "cda523eb8a6fdf18",
+   "reference": "d3e1ec5fdd32aecd"
+  },
+  "kaksi-laulua-krapulasta-2-s16": {
+   "image": "fcdd865442c58ad4",
+   "reference": "f5728d05b04ccda9"
+  },
+  "kaksi-laulua-krapulasta-2-s17": {
+   "image": "cc5bca7b13d2f59f",
+   "reference": "f90daef9922e244f"
+  },
+  "kaksi-laulua-krapulasta-2-s18": {
+   "image": "5eb5ee52f9b69bb5",
+   "reference": "02a39f31ea8a459d"
+  },
+  "kaksi-laulua-krapulasta-2-s19": {
+   "image": "0761a53b7028a3eb",
+   "reference": "b97df1c28fd38c6e"
+  },
+  "kaksi-laulua-krapulasta-2-s2": {
+   "image": "af6443c2a9740b10",
+   "reference": "383ef0275f49a4e9"
+  },
+  "kaksi-laulua-krapulasta-2-s20": {
+   "image": "bd900c51ce75a69f",
+   "reference": "0393a9d8def81206"
+  },
+  "kaksi-laulua-krapulasta-2-s3": {
+   "image": "d980a311146076f8",
+   "reference": "34347c8923638ab2"
+  },
+  "kaksi-laulua-krapulasta-2-s4": {
+   "image": "b38e3ec663b5b15a",
+   "reference": "8675b99f7efad518"
+  },
+  "kaksi-laulua-krapulasta-2-s5": {
+   "image": "cda2ef528c5f68ee",
+   "reference": "ed779fba9b181261"
+  },
+  "kaksi-laulua-krapulasta-2-s6": {
+   "image": "0cff9f960739eed2",
+   "reference": "7b9432c820a33c2a"
+  },
+  "kaksi-laulua-krapulasta-2-s7": {
+   "image": "847f0e92a5c30d13",
+   "reference": "908e338361313f5d"
+  },
+  "kaksi-laulua-krapulasta-2-s8": {
+   "image": "40f4792afb43c7c2",
+   "reference": "c245f642815b88d4"
+  },
+  "kaksi-laulua-krapulasta-2-s9": {
+   "image": "b04dd65457d0d64f",
+   "reference": "dc3aa61b310cd0b4"
+  },
+  "kayttaytymisohjeita-s1": {
+   "image": "ccc132874f01c652",
+   "reference": "2ec4b44ad37d4c45"
+  },
+  "kayttaytymisohjeita-s10": {
+   "image": "08d47d5c8927f0df",
+   "reference": "a4069bc01c2d88f4"
+  },
+  "kayttaytymisohjeita-s11": {
+   "image": "6ca7cc7c7bb1f2a5",
+   "reference": "24b88f4bc0524599"
+  },
+  "kayttaytymisohjeita-s12": {
+   "image": "a53776d35bf5634a",
+   "reference": "be3708aada3ba1b6"
+  },
+  "kayttaytymisohjeita-s13": {
+   "image": "0ed30c1aa32798c6",
+   "reference": "1e582f3dc0384906"
+  },
+  "kayttaytymisohjeita-s14": {
+   "image": "6fecdf4ac61f719d",
+   "reference": "834193e89802fa05"
+  },
+  "kayttaytymisohjeita-s15": {
+   "image": "d2d486cb065e14ae",
+   "reference": "4559780fbf9d0714"
+  },
+  "kayttaytymisohjeita-s16": {
+   "image": "6e3d6ccb937b16c6",
+   "reference": "8cbca2dcc8562dd0"
+  },
+  "kayttaytymisohjeita-s17": {
+   "image": "353b1b7f4e25e3fd",
+   "reference": "78631629b353aa20"
+  },
+  "kayttaytymisohjeita-s18": {
+   "image": "f570e6fcf1355f34",
+   "reference": "31970190b8d938ec"
+  },
+  "kayttaytymisohjeita-s19": {
+   "image": "3fe656698a0eee45",
+   "reference": "f0d2639be6fc7774"
+  },
+  "kayttaytymisohjeita-s2": {
+   "image": "75e80538afdf94e9",
+   "reference": "b9e3ddce7d839982"
+  },
+  "kayttaytymisohjeita-s3": {
+   "image": "9665f1feeb2141fa",
+   "reference": "ec6596b3b6b008e8"
+  },
+  "kayttaytymisohjeita-s4": {
+   "image": "0827a2fae475feff",
+   "reference": "219c72994572880a"
+  },
+  "kayttaytymisohjeita-s5": {
+   "image": "88b7ae41f9e5ccb6",
+   "reference": "2f783db154fcb342"
+  },
+  "kayttaytymisohjeita-s6": {
+   "image": "2f57fe6b46308588",
+   "reference": "834193e89802fa05"
+  },
+  "kayttaytymisohjeita-s7": {
+   "image": "9502f260efe4a246",
+   "reference": "fdc64001f05382e5"
+  },
+  "kayttaytymisohjeita-s8": {
+   "image": "63850d26eb163c4a",
+   "reference": "08d5481326c4b4c0"
+  },
+  "kayttaytymisohjeita-s9": {
+   "image": "9d88200c8e2c8ada",
+   "reference": "7561c65a629d786e"
+  },
   "kolme-kakea": {
    "image": "b95e747c6ce251b8",
    "reference": "fd08d7d9b346058d"
   },
+  "laulun-aika-3-s1": {
+   "image": "aa0ab2ec1f174cf2",
+   "reference": "4a805da0c2f156ba"
+  },
+  "laulun-aika-3-s2": {
+   "image": "1cfe1678f1d0c16a",
+   "reference": "8d8f5a5938a42bff"
+  },
+  "laulun-aika-3-s3": {
+   "image": "32c296983b952043",
+   "reference": "fa8c8ce221223bbb"
+  },
+  "laulun-aika-3-s4": {
+   "image": "c36e8958f0dd3bae",
+   "reference": "dc40302bf6dcb37a"
+  },
+  "laulun-aika-3-s5": {
+   "image": "6815c7003347a51f",
+   "reference": "23cc3dd8103ee676"
+  },
+  "laulun-aika-3-s6": {
+   "image": "ef61fc2d6f71470c",
+   "reference": "78e9276d1b07fc97"
+  },
+  "laulun-aika-3-s7": {
+   "image": "0844e9d1fd992e32",
+   "reference": "0907722594022f12"
+  },
   "laulun-aika-s2": {
    "image": "1cfe1678f1d0c16a",
    "reference": "b863e0b8d93ea5aa"
+  },
+  "pois-meni-mereen-paiva-s1": {
+   "image": "93ba604d295812e2",
+   "reference": "3d79f1622e1bcf80"
+  },
+  "pois-meni-mereen-paiva-s2": {
+   "image": "f1ead280a38a7c32",
+   "reference": "5c7b60eeb2a89457"
+  },
+  "pois-meni-mereen-paiva-s3": {
+   "image": "0f5ef5c71729c015",
+   "reference": "de3d0910050e9f15"
+  },
+  "pois-meni-mereen-paiva-s4": {
+   "image": "a7b72df8fbad0d87",
+   "reference": "622af6523a4247c4"
+  },
+  "pois-meni-mereen-paiva-s5": {
+   "image": "3edbc411ffb121fd",
+   "reference": "c13e2ee9ab4ec2fb"
+  },
+  "pois-meni-mereen-paiva-s6": {
+   "image": "093e5562ce8ba5f5",
+   "reference": "e037a8d17373e35d"
+  },
+  "pois-meni-mereen-paiva-s7": {
+   "image": "93d5354f969f51a8",
+   "reference": "1e21c60256527a48"
+  },
+  "pois-meni-mereen-paiva-s8": {
+   "image": "8b62b3ea1966a3b9",
+   "reference": "a9955e14203edba9"
   },
   "sammon-ryosto": {
    "image": "76fae301b00ef10e",
@@ -19,8 +331,68 @@
   "system4": {
    "image": "8792777f6b4397b0",
    "reference": "3eb7f8e201a2322a"
+  },
+  "virta-scratch-s1": {
+   "image": "dea1940128e5809c",
+   "reference": "471c8972668f6a72"
+  },
+  "virta-scratch-s10": {
+   "image": "d76765577a4b0ee8",
+   "reference": "9d4938a886c684c7"
+  },
+  "virta-scratch-s11": {
+   "image": "81e37860fb21e8df",
+   "reference": "a926a15a59192909"
+  },
+  "virta-scratch-s12": {
+   "image": "8fd262af196f5d20",
+   "reference": "d973f0f0b3fad80b"
+  },
+  "virta-scratch-s13": {
+   "image": "3a8565fe1b7f5bb6",
+   "reference": "ca1ca6c7f9a790f1"
+  },
+  "virta-scratch-s14": {
+   "image": "36cc05a9de1e3d79",
+   "reference": "ecc32133ada7fe6f"
+  },
+  "virta-scratch-s15": {
+   "image": "84197f938ea5d7a3",
+   "reference": "a3d453cba132289a"
+  },
+  "virta-scratch-s2": {
+   "image": "7243090b9eac20d6",
+   "reference": "e585a0bf8ac921f8"
+  },
+  "virta-scratch-s3": {
+   "image": "3d436448972f39fe",
+   "reference": "4a7f992afe79a631"
+  },
+  "virta-scratch-s4": {
+   "image": "6b426e8fdb569356",
+   "reference": "5cebaf2e4ae66671"
+  },
+  "virta-scratch-s5": {
+   "image": "2f6f38c90c2ac8a3",
+   "reference": "da329b5c02b7e417"
+  },
+  "virta-scratch-s6": {
+   "image": "0227e4e4e4d53d06",
+   "reference": "6a2de1b19d1d6875"
+  },
+  "virta-scratch-s7": {
+   "image": "ae950e06bd318d78",
+   "reference": "ae240bee6394178d"
+  },
+  "virta-scratch-s8": {
+   "image": "472ff7135682aca3",
+   "reference": "ee6f2369be1be90c"
+  },
+  "virta-scratch-s9": {
+   "image": "331bf6a173dcb197",
+   "reference": "3af1ca1f08cdd889"
   }
  },
- "digest": "ff33f48a1bcaac77",
+ "digest": "87e0fbd0ec898895",
  "why": "A fingerprint per case, not the music: this repository is public and the songs are not ours. A reference changing is then a deliberate commit rather than a silent drift under a number. See fixturecheck/references.py."
 }
