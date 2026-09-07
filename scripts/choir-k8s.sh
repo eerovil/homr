@@ -30,7 +30,10 @@
 #   scripts/choir-k8s.sh down                # delete the pod, keep the volume
 #   scripts/choir-k8s.sh purge               # delete the volume too
 #
-# choir-bench.py --kubernetes does up/ship/shim for you.
+# choir-bench.py and fixturecheck both do up/ship/shim for you, and both
+# PREFER the pod: they read pages in it whenever the cluster answers and fall
+# back to this host out loud when it does not. choir-bench.py --kubernetes
+# insists, --local never asks; fixturecheck takes CHOIR_K8S=off / require.
 set -euo pipefail
 
 KUBECTL="${KUBECTL:-kubectl}"

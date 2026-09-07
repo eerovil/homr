@@ -11,6 +11,13 @@ that can judge a fixture can judge the whole repertoire.
     python -m fixturecheck corpus                 tier 3 — everything, ~35 min
     python -m fixturecheck ten                    the written-down sample, ~90s
 
+**Pages are read in the cluster's pod when it answers**, on this host when it
+does not (`fixturecheck/pod.py`, plumbing `scripts/choir-k8s.sh`) — a sweep is
+minutes of every core on a host that also runs the live choir app, and the pod
+is a wash per page. `CHOIR_K8S=off` stays local, `=require` refuses to fall
+back. A pod parse is cached and recorded under a `~pod` tag, because the pod
+is a different architecture and a reading says where it was made.
+
 **Every run writes `check-report/index.html`.** There is no mode that reports
 only numbers: a count can say a system agrees on staves, bars and noteheads and
 cannot say whether the parse is the music. Each case page opens with the same
