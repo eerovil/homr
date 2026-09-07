@@ -132,6 +132,48 @@ notes were already there.
 Whole notes are outside this. They carry no stem for the segmentation to find,
 so a unison of two whole heads still reads as one note.
 
+### A note value the bar contradicts
+
+This pull request proposes one more repair, and unlike the two above it does not
+add evidence -- it chooses between readings the model already produced.
+
+A misread note value is not silent: the bar it is in stops adding up, and every
+note after it in that staff is written late or early, or past the end of the bar
+and lost outright. On the `hanget-soi` fixture the page prints a dotted quarter,
+a 16th rest and a 16th against a half chord; the model read the dotted quarter as
+a **half** at 88.2% confidence, so that staff measures two and a half quarters of
+a bar everything else says is two, and the 16th the page prints at the last
+sixteenth of the bar never reaches the file.
+
+The value the page prints is not out of reach. The decoder scores every rhythm
+token at every step, and `note_4.` is sitting there as its fourth reading of that
+symbol, at 0.9%. What was missing was a reason to prefer it, and the arithmetic
+is one: it is the only reading that makes the bar add up. So `repair_bar_arithmetic`
+walks the bars that do not add up and, where **exactly one** of the decoder's own
+alternatives fixes one, takes it. Nothing is invented -- a value the model never
+offered is never written, and the symbol keeps its pitch, its stem and its place.
+
+Most of the rule is refusals, because repairing an ambiguous bar is guessing at
+the music rather than reading it:
+
+- **Never off one staff.** What a bar of this span measures is read off the bars
+  every staff agrees about, at least two of them; and in the bar being repaired
+  every staff but one must already measure that. A system printing one staff is
+  never repaired.
+- **Never the bar that opens a span**, which is where an anacrusis is.
+- **Never a bar this cannot measure** -- a tuplet, a grace note or a
+  multi-measure rest anywhere in it.
+- **Never a head the page may have drawn as part of a chord.** Two notes of one
+  moment drawn with the same stem are one chord and share a value; only a note
+  standing alone on its stem can have a value of its own, and a note whose stem
+  nothing was matched to is no evidence either way.
+- **Never more than one way.** Two alternatives that both make the bar add up are
+  two readings of the page with nothing to choose between them, so the bar is
+  left as it was read.
+- **Never a different kind of symbol.** A note stays a note and a rest a rest.
+
+It says what it did on stderr, naming the bar's note and both values.
+
 ## Example
 
 The example below provides an overview of the current performance of the implementation. While some errors are present

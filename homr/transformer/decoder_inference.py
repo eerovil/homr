@@ -241,12 +241,24 @@ def apply_rhythm_constraints(logits: NDArray, forbidden: set[int]) -> NDArray:
     return constrained
 
 
+#: How many rhythm readings each symbol carries away from the decoder.
+#:
+#: Three is enough to see how close a decision was, which is what the other
+#: heads record. The rhythm head is also read by `repair_bar_arithmetic`, which
+#: has to *find* the value the page prints rather than judge the one that was
+#: taken, and that sits further down: the dotted quarter `hanget-soi` bar 2 is
+#: missing is the model's fourth reading of that symbol, at 0.9%.
+RHYTHM_CANDIDATES = 8
+
+
 def rhythm_confidence(
     raw_logits: NDArray, constrained_logits: NDArray, vocab: dict[int, str]
 ) -> dict[str, Any]:
-    report = confidence_for_logits(constrained_logits, vocab)
+    report = confidence_for_logits(constrained_logits, vocab, top_k=RHYTHM_CANDIDATES)
     if not np.array_equal(raw_logits, constrained_logits):
-        report["unconstrained"] = confidence_for_logits(raw_logits, vocab)
+        report["unconstrained"] = confidence_for_logits(
+            raw_logits, vocab, top_k=RHYTHM_CANDIDATES
+        )
     return report
 
 
