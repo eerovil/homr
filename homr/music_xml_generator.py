@@ -1365,8 +1365,18 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
       shortening one of them would take a printed chord apart. Only a note
       standing alone on its stem can have a value of its own, and a note whose
       stem nothing was matched to has no evidence either way.
-    - **Never more than one way.** Two alternatives that both make the bar add up
-      are two readings of the page, and this has no way to choose between them.
+    - **Never more than one way, on the arithmetic alone.** Two alternatives
+      that both make the bar add up are two readings of the page, and the sum of
+      a staff cannot choose between them -- it knows how much music is in the
+      bar and nothing about where any of it falls. Where more than one fits, the
+      **moments** are asked (`_moments_agree`), and one is taken only if exactly
+      one of them leaves the staves dating every moment they share alike. That
+      is a second piece of evidence and not a tie-break: nothing here compares
+      two candidates' probabilities, and a bar where the moments cannot choose
+      either is still refused.
+    - **Never let the moments decide a bar holding a rest** (`_holds_a_rest`).
+      A rest may not be the silence of the stream it stands in, so a moment
+      holding one is a column the tokens are known not to line up.
     - **Never a different kind of symbol.** A note stays a note and a rest a
       rest: this is correcting a value, not deciding that something else was
       printed.
@@ -1378,20 +1388,21 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
             continue
         repair = _repair_for_bar(voice, span, target)
         if repair is not None:
-            chord_index, symbol_index, rhythm = repair
-            repairs[(chord_index, symbol_index)] = rhythm
+            chord_index, symbol_index, rhythm, why = repair
+            repairs[(chord_index, symbol_index)] = (rhythm, why)
     if not repairs:
         return voice
     out = []
     for chord_index, chord in enumerate(voice):
         symbols = list(chord.symbols)
         for symbol_index, symbol in enumerate(symbols):
-            rhythm = repairs.get((chord_index, symbol_index))
-            if rhythm is None:
+            repair = repairs.get((chord_index, symbol_index))
+            if repair is None:
                 continue
+            rhythm, why = repair
             eprint(
                 f"Bar arithmetic: reading {symbol.pitch} as {rhythm} rather than "
-                f"{symbol.rhythm}, the only alternative that makes its bar add up"
+                f"{symbol.rhythm}, {why}"
             )
             symbols[symbol_index] = symbol.change_rhythm(rhythm)
         out.append(SymbolChord(symbols, chord.tuplet_mark))
@@ -1450,8 +1461,13 @@ _REPAIR_WITNESS_BARS = 2
 
 def _repair_for_bar(
     voice: list[SymbolChord], span: tuple[int, int], target: Fraction
-) -> tuple[int, int, str] | None:
-    """The one alternative that makes this bar add up, where there is exactly one."""
+) -> tuple[int, int, str, str] | None:
+    """The one alternative that makes this bar add up, where there is exactly one.
+
+    Where more than one does, the moments are asked as well: see
+    `_moments_agree`. That is a second reading of the page rather than a
+    tie-break, and it only ever speaks where the arithmetic has already refused.
+    """
     lengths = _staff_lengths(voice, span)
     if len(lengths) < 2:
         return None
@@ -1475,7 +1491,95 @@ def _repair_for_bar(
                 swapped = _length_with(voice, span, position, chord_index, symbol_index, candidate)
                 if swapped == target:
                     found.append((chord_index, symbol_index, candidate))
-    return found[0] if len(found) == 1 else None
+    if len(found) == 1:
+        return (*found[0], "the only alternative that makes its bar add up")
+    if not found or _holds_a_rest(voice, span):
+        return None
+    agreeing = [candidate for candidate in found if _moments_agree(voice, span, *candidate)]
+    if len(agreeing) != 1:
+        return None
+    return (
+        *agreeing[0],
+        f"the only one of {len(found)} that make its bar add up which also leaves "
+        "the staves agreeing about when each shared moment sounds",
+    )
+
+
+def _holds_a_rest(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
+    """Whether this bar has a rest in it, which stops the moments deciding.
+
+    homr's token language has no voice -- upstream say so themselves in
+    liebharc/homr#126 -- so a printed rest and the notes of the voice engraved
+    **beside** it come out in one stream. A rest is therefore the least
+    trustworthy thing in the bar: it may not be the silence of the stream it
+    stands in, which is the whole reason `disown_silence` exists, and a staff
+    whose length is mostly a rest's is a length about the rest.
+
+    That is not a reason to distrust the arithmetic -- it is why `hanget-soi`
+    bar 2's staves disagree at a moment under the reading the page prints, and
+    that repair is right and stands. It is a reason not to let the **moments**
+    decide, since a moment holding a rest is a column the tokens have already
+    been shown not to line up. On `virta-scratch-s7`'s last bar they picked a
+    candidate confidently and wrongly, shortening a dotted quarter the page
+    prints in a bar of two rests, in a piece whose bars are genuinely uneven --
+    the one place on the corpus where this cost notes.
+    """
+    return any(
+        symbol.rhythm.startswith("rest")
+        for chord in voice[span[0] : span[1]]
+        for symbol in chord.symbols
+    )
+
+
+def _moments_agree(
+    voice: list[SymbolChord],
+    span: tuple[int, int],
+    at_chord: int,
+    at_symbol: int,
+    rhythm: str,
+) -> bool:
+    """Whether the staves would still date every moment they share alike.
+
+    The arithmetic sums a staff and knows nothing about *when* inside the bar
+    anything falls, so two candidates that each take the same amount off the
+    same staff look identical to it. On `hanget-soi` bar 3 the bass is a
+    sixteenth short and four alternatives close it, two of them a genuine
+    reading of that voice: the page's own -- the first of two beamed eighths
+    read as a sixteenth -- and the second of them read as a dotted eighth
+    instead. Both make the staff measure two quarters, and #203 refused the bar
+    rather than choose, which was right on the evidence it had.
+
+    There is other evidence, and homr has already read it. The tokens are read
+    across the page, so the symbols of one moment are printed above one another
+    and **sound together** -- the claim `disown_silence` already rests on. The
+    treble of that bar adds up, and it dates the moment the bass's last note
+    stands in at beat 1.5. Only the page's own reading puts it there; the dotted
+    eighth puts it at 1.25, in a column the other staff says is 1.5. So the
+    moments pick one, and they pick the one printed.
+
+    **It is asked as a discriminator and never as a precondition**, which is the
+    part that has to stay true. A moment is where homr thinks two symbols line
+    up, and it is only approximately that: in bar 2 of the same fixture a
+    sixteenth rest printed at beat 1.5 shares a moment with a bass quarter
+    printed at 1, so the staves disagree there under the reading the page
+    prints. Vetoing on that would take back #203's repair. Good enough to
+    choose between readings, then, and not good enough to refuse the only one.
+    """
+    cursors: dict[str, Fraction] = {}
+    for chord_index in range(span[0], span[1]):
+        sounding: dict[str, list[Fraction]] = {}
+        for symbol_index, symbol in enumerate(voice[chord_index].symbols):
+            if not symbol.rhythm.startswith(("note", "rest")):
+                continue
+            swapped = chord_index == at_chord and symbol_index == at_symbol
+            duration = (EncodedSymbol(rhythm) if swapped else symbol).get_duration().fraction
+            sounding.setdefault(symbol.position, []).append(duration)
+        standing = {cursors.get(position, Fraction(0)) for position in sounding}
+        if len(standing) > 1:
+            return False
+        for position, durations in sounding.items():
+            cursors[position] = cursors.get(position, Fraction(0)) + min(durations)
+    return True
 
 
 def _plain_value(rhythm: str) -> bool:
