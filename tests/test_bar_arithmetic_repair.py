@@ -23,7 +23,10 @@ short and four alternatives close it; only one of them leaves the two staves
 dating every moment they share alike, and it is the one the page prints. It is
 asked as a discriminator and never as a precondition: bar 2's staves disagree
 under the reading the page prints, and asking them first would take back the
-repair the file above exists for.
+repair the file above exists for. And they are never asked at all in a bar
+holding a rest, which is the same fact said once more -- a rest may not be the
+silence of the stream it stands in, so the column it sits in is one the tokens
+are known not to line up.
 """
 
 from fractions import Fraction
@@ -354,3 +357,11 @@ def test_a_candidate_that_moves_a_shared_moment_out_of_step_is_not_taken():
     )
     assert rhythms(repair_bar_arithmetic(voice)) == ["note_4"] * 3 + [
         "note_4", "note_2"] + ["note_4"] * 3
+
+
+def test_the_moments_never_decide_a_bar_holding_a_rest():
+    """A rest may not be the silence of the stream it stands in, so the column
+    it sits in is one the tokens are known not to line up."""
+    voice = system(even_bar(), hanget_soi_bar_3(), even_bar())
+    voice[4].symbols[0].rhythm = "rest_16"
+    assert repair_bar_arithmetic(voice) is voice

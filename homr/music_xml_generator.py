@@ -1374,6 +1374,9 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
       is a second piece of evidence and not a tie-break: nothing here compares
       two candidates' probabilities, and a bar where the moments cannot choose
       either is still refused.
+    - **Never let the moments decide a bar holding a rest** (`_holds_a_rest`).
+      A rest may not be the silence of the stream it stands in, so a moment
+      holding one is a column the tokens are known not to line up.
     - **Never a different kind of symbol.** A note stays a note and a rest a
       rest: this is correcting a value, not deciding that something else was
       printed.
@@ -1490,7 +1493,7 @@ def _repair_for_bar(
                     found.append((chord_index, symbol_index, candidate))
     if len(found) == 1:
         return (*found[0], "the only alternative that makes its bar add up")
-    if not found:
+    if not found or _holds_a_rest(voice, span):
         return None
     agreeing = [candidate for candidate in found if _moments_agree(voice, span, *candidate)]
     if len(agreeing) != 1:
@@ -1499,6 +1502,32 @@ def _repair_for_bar(
         *agreeing[0],
         f"the only one of {len(found)} that make its bar add up which also leaves "
         "the staves agreeing about when each shared moment sounds",
+    )
+
+
+def _holds_a_rest(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
+    """Whether this bar has a rest in it, which stops the moments deciding.
+
+    homr's token language has no voice -- upstream say so themselves in
+    liebharc/homr#126 -- so a printed rest and the notes of the voice engraved
+    **beside** it come out in one stream. A rest is therefore the least
+    trustworthy thing in the bar: it may not be the silence of the stream it
+    stands in, which is the whole reason `disown_silence` exists, and a staff
+    whose length is mostly a rest's is a length about the rest.
+
+    That is not a reason to distrust the arithmetic -- it is why `hanget-soi`
+    bar 2's staves disagree at a moment under the reading the page prints, and
+    that repair is right and stands. It is a reason not to let the **moments**
+    decide, since a moment holding a rest is a column the tokens have already
+    been shown not to line up. On `virta-scratch-s7`'s last bar they picked a
+    candidate confidently and wrongly, shortening a dotted quarter the page
+    prints in a bar of two rests, in a piece whose bars are genuinely uneven --
+    the one place on the corpus where this cost notes.
+    """
+    return any(
+        symbol.rhythm.startswith("rest")
+        for chord in voice[span[0] : span[1]]
+        for symbol in chord.symbols
     )
 
 

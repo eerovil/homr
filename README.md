@@ -204,6 +204,15 @@ same fixture a 16th rest printed at beat 1.5 shares a moment with a bass quarter
 printed at beat 1, so under the reading the page prints those staves disagree.
 Good enough to choose between readings; not good enough to refuse the only one.
 
+And a bar **holding a rest** is one the moments may not decide at all. homr's
+token language has no voice, so a printed rest and the notes of the voice
+engraved beside it come out in one stream -- which is what makes bar 2's own
+moments disagree, and what makes a moment holding a rest a column the tokens are
+already known not to line up. Measured over the whole corpus, that guard is the
+difference between this costing notes and not: without it the moments pick a
+value confidently and wrongly on one bar of two rests in a piece whose bars are
+genuinely uneven, and it is the only place on 93 systems where they were wrong.
+
 ## Example
 
 The example below provides an overview of the current performance of the implementation. While some errors are present
