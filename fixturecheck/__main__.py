@@ -52,10 +52,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fixturecheck import cases, quality, references, report, series  # noqa: E402
+from fixturecheck import cases, pod, quality, references, report, series  # noqa: E402
 from fixturecheck.compare import compare_output  # noqa: E402
 
 PARSES = cases.CACHE / "parses"
+
+
+def _local_read(image: Path) -> list[str]:
+    """This interpreter, this tree's homr -- the read `parse` always made.
+
+    The image goes last, which is homr's own CLI shape and the one thing the
+    pod shim relies on."""
+    return [sys.executable, "-c", "from homr.main import main; main()",
+            "--gpu", "no", str(image)]
 
 
 def parse(case: cases.Case, fingerprint: str) -> Path | None:
@@ -65,21 +74,30 @@ def parse(case: cases.Case, fingerprint: str) -> Path | None:
     report or adding a case re-runs nothing. Nothing here shares a filename with
     a reference -- homr writes `<image>.musicxml`, which is exactly where the
     reference lives, and that silently destroyed ninety-three of them once.
+
+    Read in the cluster's pod when it answers (`pod.shim`), here when it does
+    not -- and a pod parse is cached under its own `~pod` name, because the pod
+    is a different architecture and a parse has to say where it was read. A pod
+    that stops answering mid-run costs the case in flight one local re-read and
+    takes the pod out of the rest of the run; a page homr genuinely could not
+    read is still `None`, on either side.
     """
     PARSES.mkdir(parents=True, exist_ok=True)
-    out = PARSES / f"{case.name}@{fingerprint}.musicxml"
+    reader = pod.shim()
+    out = PARSES / f"{case.name}@{fingerprint}{pod.TAG if reader else ''}.musicxml"
     if out.exists():
         return out
     with tempfile.TemporaryDirectory(prefix="parse-") as tmp:
         copy = Path(tmp) / f"{case.name}.png"
         shutil.copy(case.image, copy)
-        run = subprocess.run(
-            [sys.executable, "-c", "from homr.main import main; main()",
-             str(copy), "--gpu", "no"],
-            capture_output=True, text=True, timeout=900,
-            cwd=cases.ROOT)
+        cmd = [reader, "--gpu", "no", str(copy)] if reader else _local_read(copy)
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=900,
+                             cwd=cases.ROOT)
         produced = copy.with_suffix(".musicxml")
         if run.returncode != 0 or not produced.exists():
+            if reader and not pod.alive():
+                pod.lose()
+                return parse(case, fingerprint)
             return None
         shutil.copy(produced, out)
     return out
@@ -159,10 +177,14 @@ def ratchet(records: list[series.CaseRecord], memory: dict,
 
 def run_cases(names: list[str], tier: str) -> int:
     fingerprint = code_fingerprint()
+    # Resolved before the first line is printed, so the run says where it read
+    # from the start. `shown` is what the record carries: a run whose pages
+    # were read in the pod is not the same measurement as one read here.
+    shown = fingerprint + pod.tag()
     committed = {case.name for case in cases.committed_cases()}
     standing = series.previous_cases("fixturecheck")
     memory = references.accepted()
-    print(f"homr {fingerprint}: {len(names)} case(s)")
+    print(f"homr {shown}: {len(names)} case(s)")
 
     entries: list[dict] = []
     records: list[series.CaseRecord] = []
@@ -246,7 +268,7 @@ def run_cases(names: list[str], tier: str) -> int:
         extra["reference_drift"] = moved
     run = series.record_run("fixturecheck", tier, records,
                             references=references.stamp(built), gate=gate,
-                            extra=extra)
+                            extra=extra, homr=shown)
     quality.write()
 
     if entries:

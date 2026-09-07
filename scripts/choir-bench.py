@@ -363,7 +363,20 @@ def compare(new: dict, old: dict) -> None:
             f"-> {new['scan']['holes']} holes, {new['scan']['bars']} bars")
 
 
-def _kubernetes_shim(tree: str | None) -> str:
+def _cluster_answers() -> bool:
+    """One cheap question with a short deadline, so a sleeping Mac costs
+    seconds rather than the 180s ``choir-k8s.sh up`` is prepared to wait."""
+    kubectl = os.environ.get("KUBECTL", "kubectl")
+    try:
+        probe = subprocess.run(
+            [kubectl, "--request-timeout=5s", "get", "--raw", "/readyz"],
+            capture_output=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+
+def _kubernetes_shim(tree: str | None, soft: bool = False) -> str | None:
     """Prepare the pod and return an executable that reads a page in it.
 
     Three steps, all in ``choir-k8s.sh``: build the pod and its venv if this is
@@ -375,16 +388,26 @@ def _kubernetes_shim(tree: str | None) -> str:
     a few hundred KB of Python and a second of wall clock, and a sweep measuring
     source the pod does not actually have is the one failure worth spending a
     second to make impossible.
+
+    ``soft`` is the default path (the pod preferred, this host the fallback):
+    every failure returns None for the caller to say out loud, where the
+    explicit ``--kubernetes`` still refuses to run anywhere else.
     """
+    def refuse(reason: str) -> None:
+        if soft:
+            return None
+        sys.exit(reason)
+
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "choir-k8s.sh")
-    run = [script, "up"]
-    if subprocess.run(run).returncode:
-        sys.exit("choir-k8s.sh up failed — is kubectl pointed at a cluster?")
+    if soft and not _cluster_answers():
+        return None
+    if subprocess.run([script, "up"]).returncode:
+        return refuse("choir-k8s.sh up failed — is kubectl pointed at a cluster?")
     if tree and subprocess.run([script, "ship", tree]).returncode:
-        sys.exit(f"could not ship {tree} to the pod")
+        return refuse(f"could not ship {tree} to the pod")
     shim = os.path.join(tempfile.mkdtemp(prefix="choir-k8s-"), "homr")
     if subprocess.run([script, "shim", shim]).returncode:
-        sys.exit("could not write the pod shim")
+        return refuse("could not write the pod shim")
     return shim
 
 
@@ -393,8 +416,11 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", help="worktree to test; omit to test the installed homr")
     ap.add_argument("--kubernetes", action="store_true",
-                    help="run homr in a pod instead of on this host "
+                    help="insist on the pod: refuse to read pages on this host "
                          "(see scripts/choir-k8s.sh)")
+    ap.add_argument("--local", action="store_true",
+                    help="read pages on this host, asking the cluster nothing "
+                         "(the default is the pod when it answers)")
     ap.add_argument("--all", action="store_true", help="every target")
     ap.add_argument("--pytest", action="store_true", help="the fork's unit tests")
     ap.add_argument("--benchmark", action="store_true", help="the benchmark pages")
@@ -422,12 +448,31 @@ def main() -> int:
     else:
         tree = None
 
+    if args.kubernetes and args.local:
+        ap.error("--kubernetes and --local contradict each other")
+
+    # The pod is the default and this host is the fallback, said out loud —
+    # a sweep is minutes of every core on a host that also runs the live app,
+    # and nobody is waiting for it. --kubernetes insists (a failure to reach
+    # the pod is an error), --local never asks the cluster anything.
+    on_pod = False
     if args.kubernetes:
+        binary = _kubernetes_shim(tree)
+        on_pod = True
+    elif not args.local and not os.environ.get("HOMR_BIN"):
+        # An explicit HOMR_BIN is somebody naming the engine; the pod must not
+        # override it any more than a --tree's own venv would.
+        binary = _kubernetes_shim(tree, soft=True)
+        on_pod = binary is not None
+        if not on_pod:
+            log("pod unreachable — reading pages on this host "
+                "(--kubernetes to insist, --local to stop asking)")
+
+    if on_pod:
         # The pod is reached the same way a worktree is: as an executable in
         # HOMR_BIN. Everything else here — the crops, the flattening, the
         # scoring — still runs on this host, because that is the choir app's
         # code and it is not what the sweep spends its cores on.
-        binary = _kubernetes_shim(tree)
         os.environ["HOMR_BIN"] = binary
         log(f"homr under test: pod {os.environ.get('CHOIR_K8S_POD', 'homr-bench')}"
             + (f" running {os.path.basename(tree)}" if tree else " running its own install"))
@@ -443,11 +488,11 @@ def main() -> int:
 
     if targets["pytest"] and not tree:
         sys.exit("--pytest needs --tree (the installed venv has no test suite).")
-    if targets["pytest"] and args.kubernetes:
-        # --kubernetes moves the page reading, which is what the sweep's cores
+    if targets["pytest"] and on_pod:
+        # The pod moves the page reading, which is what the sweep's cores
         # go on. The unit tests are the tree's own pytest and stay here; saying
         # so is better than appearing to have run them somewhere else.
-        log("note: --pytest runs on this host; --kubernetes moves only the page reading")
+        log("note: --pytest runs on this host; the pod moves only the page reading")
 
     results: dict = {"homr": os.environ.get("HOMR_BIN"), "dpi": omr_systems.SCAN_DPI}
     scratch = args.keep or tempfile.mkdtemp(prefix="choir-bench-")
@@ -463,7 +508,7 @@ def main() -> int:
         results["scan"] = run_scan(scratch)
 
     if targets["benchmark"]:
-        record_benchmark(results["benchmark"], tree, args.kubernetes)
+        record_benchmark(results["benchmark"], tree, on_pod)
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
