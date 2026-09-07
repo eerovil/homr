@@ -15,7 +15,15 @@ Most of what is pinned here is the refusals, because a rule that repairs an
 ambiguous bar is guessing at the music: one staff is never enough, a bar that
 opens a span is where an anacrusis is, a note sharing a stem with another is a
 chord and cannot be shortened on its own, and two alternatives that both make the
-bar add up are two readings with nothing to choose between them.
+bar add up are two readings the arithmetic has nothing to choose between.
+
+Where the arithmetic has run out, the **moments** are asked -- and that is the
+other half of what is pinned here. Bar 3 of the same fixture is a sixteenth
+short and four alternatives close it; only one of them leaves the two staves
+dating every moment they share alike, and it is the one the page prints. It is
+asked as a discriminator and never as a precondition: bar 2's staves disagree
+under the reading the page prints, and asking them first would take back the
+repair the file above exists for.
 """
 
 from fractions import Fraction
@@ -143,22 +151,21 @@ def test_a_note_with_no_stem_beside_another_is_never_shortened():
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_two_alternatives_that_both_fit_are_refused():
-    """Either half could be the quarter: two readings of the bar, and no choice."""
+def test_two_alternatives_the_moments_cannot_choose_between_are_refused():
+    """Either eighth could be the 16th, and both sit past the other staff's last
+    moment, so nothing about when they sound tells them apart."""
     voice = system(
-        even_bar(3),
+        even_bar(1),
         [
             moment(
-                note("note_2", "upper", stem="up", alternatives=("note_4",)),
+                note("note_16", "upper", stem="up"),
                 note("note_4", "lower", stem="up"),
             ),
-            moment(
-                note("note_2", "upper", stem="up", alternatives=("note_4",)),
-                note("note_2", "lower", stem="up"),
-            ),
+            moment(note("note_8", "upper", stem="up", alternatives=("note_16",))),
+            moment(note("note_8", "upper", stem="up", alternatives=("note_16",))),
             barline(),
         ],
-        even_bar(3),
+        even_bar(1),
     )
     assert repair_bar_arithmetic(voice) is voice
 
@@ -229,3 +236,121 @@ def test_the_repair_is_measured_against_the_meter_the_bars_agree_on():
         even_bar(3),
     )
     assert rhythms(repair_bar_arithmetic(voice))[3] == "note_2."
+
+
+# --- when more than one alternative fits, the moments are asked ---
+
+
+def hanget_soi_bar_3():
+    """Bar 3 of the same fixture, tokens, stems and alternatives as homr read it.
+
+    The bass sings a quarter and two beamed eighths over a dotted eighth, a 16th
+    and a quarter, and the first of the two eighths came back a 16th -- so that
+    staff measures a 16th short of the two quarters every other bar says a bar
+    is. Four of the decoder's own alternatives close it. Two are readings of the
+    other voice and one is not, and the two that are a reading of this one are
+    the page's (`note_8` on the first eighth) and a dotted eighth on the second.
+    """
+    return [
+        moment(
+            note("note_8.", "lower", stem="down", alternatives=("note_1", "note_2"), pitch="C3"),
+            note("note_8", "upper", stem="up", pitch="E5"),
+            note(
+                "note_4",
+                "lower",
+                stem="up",
+                alternatives=("note_8", "note_2", "note_16", "note_8.", "note_4."),
+                pitch="G3",
+            ),
+            note("note_2", "upper", stem="down", pitch="E5"),
+            note("note_2", "upper", stem="down", pitch="C5"),
+        ),
+        moment(note("note_16", "upper", stem="up", pitch="E5")),
+        moment(
+            note("note_16", "upper", stem="up", pitch="E5"),
+            note(
+                "note_16", "lower", stem="down",
+                alternatives=("note_4", "note_8..", "note_32"), pitch="B2",
+            ),
+        ),
+        moment(
+            note("note_8", "upper", stem="up", pitch="A5"),
+            note("note_4", "lower", stem="down", alternatives=("note_8",), pitch="A2"),
+            note(
+                "note_16", "lower", stem="up",
+                alternatives=("note_8", "note_16.", "note_4"), pitch="A3",
+            ),
+        ),
+        moment(
+            note(
+                "note_8", "lower", stem="up",
+                alternatives=("note_16", "note_8.", "note_32", "note_4", "note_8.."),
+                pitch="G3",
+            ),
+            note("note_16", "upper", stem="up", pitch="E5"),
+        ),
+        moment(note("note_16", "upper", stem="up", pitch="E5")),
+        barline(),
+    ]
+
+
+def test_the_moments_pick_the_eighth_the_page_prints():
+    """Four alternatives close the bar; only one leaves the two staves in step."""
+    voice = system(even_bar(), hanget_soi_bar_3(), even_bar())
+    assert rhythms(repair_bar_arithmetic(voice), "lower")[2:8] == [
+        "note_8.", "note_4", "note_16", "note_4", "note_8", "note_8",
+    ]
+
+
+def test_the_note_the_page_prints_lands_on_the_beat_the_other_staff_dates_it_at():
+    """The treble adds up and puts that moment at beat 1.5; so must the bass."""
+    repaired = repair_bar_arithmetic(system(even_bar(), hanget_soi_bar_3(), even_bar()))
+    assert _lower_beats(repaired[3:9]) == [Fraction(0), Fraction(3, 16), Fraction(4, 16),
+                                           Fraction(6, 16)]
+
+
+def _lower_beats(bar):
+    """Where each of the lower staff's moments starts, on its own cursor."""
+    beats, cursor = [], Fraction(0)
+    for chord in bar:
+        durations = [
+            symbol.get_duration().fraction
+            for symbol in chord.symbols
+            if symbol.position == "lower" and symbol.rhythm.startswith(("note", "rest"))
+        ]
+        if durations:
+            beats.append(cursor)
+            cursor += min(durations)
+    return beats
+
+
+def test_the_moments_are_only_asked_when_the_arithmetic_has_already_refused():
+    """Bar 2's staves disagree under the reading the page prints, and it still repairs.
+
+    A moment is only approximately a column of the page: here a 16th rest
+    printed at beat 1.5 shares one with a bass quarter printed at beat 1. Asking
+    the moments before the arithmetic has refused would take this repair back.
+    """
+    voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
+    assert rhythms(repair_bar_arithmetic(voice))[2] == "note_4."
+
+
+def test_a_candidate_that_moves_a_shared_moment_out_of_step_is_not_taken():
+    """Shortening the second note would leave the staves apart at the second moment."""
+    voice = system(
+        even_bar(3),
+        [
+            moment(
+                note("note_2", "upper", stem="up", alternatives=("note_4",)),
+                note("note_4", "lower", stem="up"),
+            ),
+            moment(
+                note("note_2", "upper", stem="up", alternatives=("note_4",)),
+                note("note_2", "lower", stem="up"),
+            ),
+            barline(),
+        ],
+        even_bar(3),
+    )
+    assert rhythms(repair_bar_arithmetic(voice)) == ["note_4"] * 3 + [
+        "note_4", "note_2"] + ["note_4"] * 3

@@ -167,12 +167,42 @@ the music rather than reading it:
   moment drawn with the same stem are one chord and share a value; only a note
   standing alone on its stem can have a value of its own, and a note whose stem
   nothing was matched to is no evidence either way.
-- **Never more than one way.** Two alternatives that both make the bar add up are
-  two readings of the page with nothing to choose between them, so the bar is
-  left as it was read.
+- **Never more than one way, on the arithmetic alone.** Two alternatives that
+  both make the bar add up are two readings of the page, and the sum of a staff
+  cannot choose between them. Where more than one fits, the moments are asked
+  (below); where they cannot choose either, the bar is left as it was read.
 - **Never a different kind of symbol.** A note stays a note and a rest a rest.
 
 It says what it did on stderr, naming the bar's note and both values.
+
+#### When more than one value fits, the other staff dates the moment
+
+This pull request proposes the second half of that rule, and it is a second
+reading of the page rather than a tie-break: nothing here compares two
+candidates' probabilities.
+
+The arithmetic sums a staff. It knows how much music is in the bar and nothing
+about *where* any of it falls, so two candidates that take the same amount off
+the same staff are identical to it. Bar 3 of the same fixture is the case: the
+bass sings a quarter and two beamed eighths, the first eighth came back a 16th,
+and four of the decoder's alternatives close the resulting gap -- among them the
+page's own value and a dotted eighth on the *second* of the two, which fits the
+bar just as well.
+
+homr has already read what tells them apart. The tokens are read across the
+page, so the symbols of one moment are printed above one another and sound
+together. The treble of that bar adds up, and it dates the moment the bass's
+last note stands in at beat 1.5. The page's reading puts it there; the dotted
+eighth puts it at 1.25, in a column the other staff says is 1.5. So exactly one
+of the four leaves the staves dating every moment they share alike, and it is
+the one printed.
+
+It is asked **only where the arithmetic has already refused**, and never as a
+precondition on a repair the arithmetic settled by itself. A moment is where
+homr thinks two symbols line up, and only approximately that -- in bar 2 of the
+same fixture a 16th rest printed at beat 1.5 shares a moment with a bass quarter
+printed at beat 1, so under the reading the page prints those staves disagree.
+Good enough to choose between readings; not good enough to refuse the only one.
 
 ## Example
 
