@@ -172,7 +172,9 @@ def build_measures(
         cursors.reset()
 
     measure_number = 1
-    groups = infer_meter_changes(add_tuplet_start_stop(group_into_chords(voice)))
+    groups = infer_meter_changes(
+        add_tuplet_start_stop(repair_bar_arithmetic(group_into_chords(voice)))
+    )
     division, nominator = find_division_and_time_signature_nominator(groups)
     state = ConversionState(division, nominator,
                             find_nominator_per_time_signature(groups, nominator))
@@ -1296,15 +1298,12 @@ def _bar_boundaries(voice: list[SymbolChord]) -> list[tuple[int, int]]:
     return bars
 
 
-def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fraction | None:
-    """How long this bar is, when every staff of the system agrees about it.
+def _staff_lengths(voice: list[SymbolChord], span: tuple[int, int]) -> dict[str, Fraction]:
+    """How long each staff of this bar measures, each on its own cursor.
 
-    Each staff is measured on its own timeline -- a moment costs that staff the
-    shortest of *its* notes there, so a staff holding a whole note against four
-    quarters still measures a whole. Agreement is the whole guard: a bar homr
-    misread is short in the staff it lost a note from and right in the other, and
-    a meter must not be invented off one staff's arithmetic. A single-staff
-    system has nothing to agree with and so never carries one.
+    A moment costs a staff the shortest of *its* notes there, which is what
+    `MeasureCursors` does when it writes the bar out, so a staff holding a whole
+    note against four quarters measures a whole.
     """
     by_position: dict[str, Fraction] = {}
     for chord in voice[span[0] : span[1]]:
@@ -1315,10 +1314,235 @@ def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fra
             sounding.setdefault(symbol.position, []).append(symbol.get_duration().fraction)
         for position, durations in sounding.items():
             by_position[position] = by_position.get(position, Fraction(0)) + min(durations)
+    return by_position
+
+
+def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fraction | None:
+    """How long this bar is, when every staff of the system agrees about it.
+
+    Agreement is the whole guard: a bar homr misread is short in the staff it
+    lost a note from and right in the other, and a meter must not be invented off
+    one staff's arithmetic. A single-staff system has nothing to agree with and
+    so never carries one.
+    """
+    by_position = _staff_lengths(voice, span)
     if len(by_position) < 2:
         return None
     lengths = set(by_position.values())
     return lengths.pop() if len(lengths) == 1 else None
+
+
+def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
+    """Take the decoder's second answer where its first one does not fit the bar.
+
+    A misread note value is not silent: the bar it is in stops adding up. On
+    `hanget-soi` bar 2 the page prints a dotted quarter, a 16th rest and a 16th
+    against a half chord; the model read the dotted quarter as a **half** at
+    88.2%, so that staff measures two and a half quarters of a bar every other
+    piece of evidence says is two, and the 16th the page prints at beat 1.75 is
+    written past the end of the bar and lost.
+
+    The value the page prints is not out of reach: the decoder scores every
+    rhythm token at every step, and `note_4.` is sitting there at 0.9%. What was
+    missing is a reason to prefer it, and the arithmetic is one -- it is the only
+    candidate that makes the bar add up. So this walks the bars that do not, and
+    where **exactly one** of the decoder's own alternatives fixes one, takes it.
+
+    Everything else here is a refusal, because a rule that repairs an ambiguous
+    bar is guessing at the music rather than reading it:
+
+    - **Never off one staff.** The target length is corroborated twice over: the
+      bars of this span that every staff agrees about say what a bar is, and in
+      the bar being repaired every staff but one must already measure it. A
+      system printing one staff is never repaired -- the same rule
+      `_corroborated_length` follows, and for the same reason.
+    - **Never the bar that opens a span**, which is where an anacrusis is.
+    - **Never a bar this cannot measure** -- a tuplet, a grace note or a
+      multi-measure rest anywhere in it, since its length would be arithmetic
+      this does not do.
+    - **Never a note the page may have drawn as part of a chord.** Two notes of
+      one moment drawn with the same stem are one chord and share a value;
+      shortening one of them would take a printed chord apart. Only a note
+      standing alone on its stem can have a value of its own, and a note whose
+      stem nothing was matched to has no evidence either way.
+    - **Never more than one way.** Two alternatives that both make the bar add up
+      are two readings of the page, and this has no way to choose between them.
+    - **Never a different kind of symbol.** A note stays a note and a rest a
+      rest: this is correcting a value, not deciding that something else was
+      printed.
+    """
+    bars = _bar_boundaries(voice)
+    repairs = {}
+    for span, target in zip(bars, _bar_targets(voice, bars), strict=True):
+        if target is None:
+            continue
+        repair = _repair_for_bar(voice, span, target)
+        if repair is not None:
+            chord_index, symbol_index, rhythm = repair
+            repairs[(chord_index, symbol_index)] = rhythm
+    if not repairs:
+        return voice
+    out = []
+    for chord_index, chord in enumerate(voice):
+        symbols = list(chord.symbols)
+        for symbol_index, symbol in enumerate(symbols):
+            rhythm = repairs.get((chord_index, symbol_index))
+            if rhythm is None:
+                continue
+            eprint(
+                f"Bar arithmetic: reading {symbol.pitch} as {rhythm} rather than "
+                f"{symbol.rhythm}, the only alternative that makes its bar add up"
+            )
+            symbols[symbol_index] = symbol.change_rhythm(rhythm)
+        out.append(SymbolChord(symbols, chord.tuplet_mark))
+    return out
+
+
+def _bar_targets(
+    voice: list[SymbolChord], bars: list[tuple[int, int]]
+) -> list[Fraction | None]:
+    """What each bar of the stream ought to measure, where anything says so.
+
+    Read off the bars themselves rather than off a time signature, because a
+    crop of one printed system usually declares none: the length that the most
+    consecutive bars **every staff agrees about** come to is what a bar is here.
+    At least two such bars have to agree, or a single clean bar beside a pickup
+    would be enough to call the pickup wrong.
+
+    Taken per span between signatures, so a page that changes meter is measured
+    against the meter it changed to, and never for the bar that opens a span.
+    """
+    spans: list[list[int]] = []
+    current: list[int] = []
+    for index, (start, end) in enumerate(bars):
+        opens = any(
+            chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature")
+            for chord in voice[start:end]
+        )
+        if opens and current:
+            spans.append(current)
+            current = []
+        current.append(index)
+    if current:
+        spans.append(current)
+
+    targets: list[Fraction | None] = [None] * len(bars)
+    for span in spans:
+        agreed = [
+            length
+            for length in (_corroborated_length(voice, bars[index]) for index in span)
+            if length is not None
+        ]
+        if not agreed:
+            continue
+        target = prevailing_length(agreed)
+        if agreed.count(target) < _REPAIR_WITNESS_BARS:
+            continue
+        for index in span[1:]:
+            targets[index] = target
+    return targets
+
+
+#: How many bars of a span must agree about their length before it is taken as
+#: what a bar of that span measures.
+_REPAIR_WITNESS_BARS = 2
+
+
+def _repair_for_bar(
+    voice: list[SymbolChord], span: tuple[int, int], target: Fraction
+) -> tuple[int, int, str] | None:
+    """The one alternative that makes this bar add up, where there is exactly one."""
+    lengths = _staff_lengths(voice, span)
+    if len(lengths) < 2:
+        return None
+    adrift = [position for position, length in lengths.items() if length != target]
+    if len(adrift) != 1:
+        return None
+    position = adrift[0]
+    for chord in voice[span[0] : span[1]]:
+        for symbol in chord.symbols:
+            if symbol.rhythm.startswith(("note", "rest")) and not _plain_value(symbol.rhythm):
+                return None
+    found = []
+    for chord_index in range(span[0], span[1]):
+        chord = voice[chord_index]
+        for symbol_index, symbol in enumerate(chord.symbols):
+            if symbol.position != position or not symbol.rhythm.startswith(("note", "rest")):
+                continue
+            if not _stands_alone(chord, symbol):
+                continue
+            for candidate in _rhythm_alternatives(symbol):
+                swapped = _length_with(voice, span, position, chord_index, symbol_index, candidate)
+                if swapped == target:
+                    found.append((chord_index, symbol_index, candidate))
+    return found[0] if len(found) == 1 else None
+
+
+def _plain_value(rhythm: str) -> bool:
+    """A note or rest written as a plain value: no tuplet, grace note or multirest."""
+    kern = rhythm.split("_", 1)[1] if "_" in rhythm else ""
+    if not kern or "G" in kern or kern.endswith("m"):
+        return False
+    return not EncodedSymbol(rhythm).is_tuplet()
+
+
+def _stands_alone(chord: SymbolChord, symbol: EncodedSymbol) -> bool:
+    """Whether this note can have a value of its own, or is a head of a chord.
+
+    Two notes of one moment on one staff drawn with the same stem are one chord
+    and are written as one. A note whose stem nothing was matched to is no
+    evidence, so it stands alone only when nothing shares its moment.
+    """
+    others = [
+        other
+        for other in chord.symbols
+        if other is not symbol
+        and other.position == symbol.position
+        and other.rhythm.startswith(("note", "rest"))
+    ]
+    if not others:
+        return True
+    if symbol.stem_direction is None:
+        return False
+    return all(other.stem_direction != symbol.stem_direction for other in others)
+
+
+def _rhythm_alternatives(symbol: EncodedSymbol) -> list[str]:
+    """The decoder's other readings of this symbol, of the same kind as the one it took."""
+    confidence = symbol.confidence or {}
+    alternatives = confidence.get("rhythm", {}).get("alternatives", [])
+    kind = "note" if symbol.rhythm.startswith("note") else "rest"
+    return [
+        alternative["value"]
+        for alternative in alternatives
+        if alternative["value"] != symbol.rhythm
+        and alternative["value"].startswith(kind)
+        and _plain_value(alternative["value"])
+    ]
+
+
+def _length_with(
+    voice: list[SymbolChord],
+    span: tuple[int, int],
+    position: str,
+    at_chord: int,
+    at_symbol: int,
+    rhythm: str,
+) -> Fraction:
+    """What that staff would measure with this one symbol read as `rhythm` instead."""
+    total = Fraction(0)
+    for chord_index in range(span[0], span[1]):
+        durations = []
+        for symbol_index, symbol in enumerate(voice[chord_index].symbols):
+            if symbol.position != position or not symbol.rhythm.startswith(("note", "rest")):
+                continue
+            if chord_index == at_chord and symbol_index == at_symbol:
+                durations.append(EncodedSymbol(rhythm).get_duration().fraction)
+            else:
+                durations.append(symbol.get_duration().fraction)
+        if durations:
+            total += min(durations)
+    return total
 
 
 def infer_meter_changes(voice: list[SymbolChord]) -> list[SymbolChord]:

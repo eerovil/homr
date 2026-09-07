@@ -340,6 +340,13 @@ class EncodedSymbol:
         result._duration = None
         return result
 
+    def change_rhythm(self, rhythm: str) -> "EncodedSymbol":
+        """The same symbol read as another value, keeping everything else it says."""
+        result = copy.copy(self)
+        result.rhythm = rhythm
+        result._duration = None
+        return result
+
     def change_lift(self, lift: str) -> "EncodedSymbol":
         result = copy.copy(self)
         result.lift = lift
