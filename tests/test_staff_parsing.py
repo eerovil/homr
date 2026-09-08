@@ -1,5 +1,6 @@
 import unittest
 
+from homr.errors import IncompleteRecognitionError
 from homr.model import MultiStaff, Staff, StaffPoint
 from homr.staff_parsing import _ensure_same_number_of_staffs, _get_number_of_voices
 
@@ -72,21 +73,18 @@ class TestStaffParsing(unittest.TestCase):
 
         self.assertEqual([[False, True]] * 4, _layouts(result))
 
-    def test_ensure_same_number_of_staffs_drops_leading_outlier(self) -> None:
-        # A single system at the very top that doesn't match the otherwise
-        # fully uniform rest of the page (e.g. the worst-detected staff).
+    def test_ensure_same_number_of_staffs_rejects_leading_omission(self) -> None:
+        # This could be a real introduction, not an expendable detection error.
         staffs = [make_row(0)] + [make_row(i, is_grandstaff=True) for i in range(1, 5)]
 
-        result = _ensure_same_number_of_staffs(staffs)
+        with self.assertRaisesRegex(IncompleteRecognitionError, "1 leading and 0 trailing"):
+            _ensure_same_number_of_staffs(staffs)
 
-        self.assertEqual([[True]] * 4, _layouts(result))
-
-    def test_ensure_same_number_of_staffs_drops_trailing_outlier(self) -> None:
+    def test_ensure_same_number_of_staffs_rejects_trailing_omission(self) -> None:
         staffs = [make_row(i, is_grandstaff=True) for i in range(4)] + [make_row(4)]
 
-        result = _ensure_same_number_of_staffs(staffs)
-
-        self.assertEqual([[True]] * 4, _layouts(result))
+        with self.assertRaisesRegex(IncompleteRecognitionError, "0 leading and 1 trailing"):
+            _ensure_same_number_of_staffs(staffs)
 
     def test_ensure_same_number_of_staffs_falls_back_to_break_apart(self) -> None:
         # No consistent per-system layout and no clean repeating pattern at

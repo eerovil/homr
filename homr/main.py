@@ -29,6 +29,7 @@ from homr.brace_dot_detection import (
     prepare_brace_dot_image,
 )
 from homr.debug import Debug
+from homr.errors import IncompleteRecognitionError
 from homr.model import InputPredictions, MultiStaff, Staff
 from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
 from homr.noise_filtering import filter_predictions
@@ -303,7 +304,9 @@ def _load_score_settings(path: str) -> RhythmSettings:
         with open(path) as file:
             data = json.load(file)
     except (OSError, json.JSONDecodeError) as error:
-        raise InvalidProgramArgumentException(f"Could not read score settings {path}: {error}") from error
+        raise InvalidProgramArgumentException(
+            f"Could not read score settings {path}: {error}"
+        ) from error
     if not isinstance(data, dict):
         raise InvalidProgramArgumentException("score settings must be a JSON object")
     try:
@@ -572,6 +575,9 @@ def main() -> None:
         except InvalidProgramArgumentException as e:
             eprint(str(e))
             sys.exit(2)
+        except IncompleteRecognitionError as e:
+            eprint(f"Incomplete recognition for {args.image}: {e}")
+            sys.exit(1)
     elif os.path.isdir(args.image):
         image_files = get_all_image_files_in_folder(args.image)
         eprint("Processing", len(image_files), "files:", image_files)
@@ -586,6 +592,7 @@ def main() -> None:
                 error_files.append(image_file)
         if len(error_files) > 0:
             eprint("Errors occurred while processing the following files:", error_files)
+            sys.exit(1)
     else:
         eprint(f"{args.image} is not a valid file or directory")
         sys.exit(2)

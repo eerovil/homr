@@ -211,9 +211,7 @@ def _splice_bar(upper: list[EncodedSymbol], lower: list[EncodedSymbol]) -> list[
     return out
 
 
-def splice(
-    upper: list[EncodedSymbol], lower: list[EncodedSymbol]
-) -> list[EncodedSymbol] | None:
+def splice(upper: list[EncodedSymbol], lower: list[EncodedSymbol]) -> list[EncodedSymbol] | None:
     """Two separately read staffs as the one stream a fused read would have given.
 
     None when the two cannot be lined up -- an empty reading, or a disagreement

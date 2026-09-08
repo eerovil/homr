@@ -10,6 +10,7 @@ finding.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
 
@@ -39,26 +40,28 @@ TWO_BARS = """<?xml version="1.0"?>
 """
 
 
-def score(tmp_path, text=TWO_BARS, name="s.musicxml"):
+def score(tmp_path: Path, text: str = TWO_BARS, name: str = "s.musicxml") -> Path:
     path = tmp_path / name
     path.write_text(text)
     return path
 
 
-def test_a_bar_can_be_cut_out_to_be_drawn_on_its_own(tmp_path):
+def test_a_bar_can_be_cut_out_to_be_drawn_on_its_own(tmp_path: Path) -> None:
     kept = bars.one_bar(score(tmp_path), "2", tmp_path / "one.musicxml")
+    assert kept is not None
     root = ET.parse(kept).getroot()
     numbers = [m.get("number") for m in root.findall("part/measure")]
     assert numbers == ["2"]
 
 
-def test_the_cut_bar_keeps_the_clef_and_meter_it_is_read_in(tmp_path):
+def test_the_cut_bar_keeps_the_clef_and_meter_it_is_read_in(tmp_path: Path) -> None:
     """A bar in the middle of a system declares none of them.
 
     Without this the two sides get engraved under whatever MuseScore assumes,
     and the point is to look at the same music spelled the same way.
     """
     kept = bars.one_bar(score(tmp_path), "2", tmp_path / "one.musicxml")
+    assert kept is not None
     attributes = ET.parse(kept).getroot().find("part/measure/attributes")
     assert attributes is not None
     assert attributes.findtext("clef/sign") == "G"
@@ -66,27 +69,31 @@ def test_the_cut_bar_keeps_the_clef_and_meter_it_is_read_in(tmp_path):
     assert attributes.findtext("divisions") == "2"
 
 
-def test_a_bar_that_is_not_there_is_not_invented(tmp_path):
+def test_a_bar_that_is_not_there_is_not_invented(tmp_path: Path) -> None:
     assert bars.one_bar(score(tmp_path), "7", tmp_path / "one.musicxml") is None
 
 
-def test_bars_are_listed_in_the_order_they_are_written(tmp_path):
+def test_bars_are_listed_in_the_order_they_are_written(tmp_path: Path) -> None:
     assert bars.bars_in(score(tmp_path)) == ["1", "2"]
 
 
-def _geo(lines, staves=1):
-    return {"bar_lines": lines,
-            "staves": [{"top": 0.1 * (i + 1), "bottom": 0.1 * (i + 1) + 0.05,
-                        "left": 0.05, "right": 0.98} for i in range(staves)]}
+def _geo(lines: list[float], staves: int = 1) -> dict:
+    return {
+        "bar_lines": lines,
+        "staves": [
+            {"top": 0.1 * (i + 1), "bottom": 0.1 * (i + 1) + 0.05, "left": 0.05, "right": 0.98}
+            for i in range(staves)
+        ],
+    }
 
 
-def test_the_same_line_seen_on_every_staff_is_one_line():
+def test_the_same_line_seen_on_every_staff_is_one_line() -> None:
     """Barlines are detected per staff; three staves give three of each."""
     geo = _geo([0.30, 0.3005, 0.301, 0.60, 0.6005, 0.90], staves=3)
     assert bars.boundaries_for(geo, 3) == [0.05, 0.30, 0.60, 0.90]
 
 
-def test_a_system_opening_line_is_added_back():
+def test_a_system_opening_line_is_added_back() -> None:
     """homr finds the internal lines and the final one, not the opening rule.
 
     So four bars come back as four lines, and the staff's own left edge is where
@@ -95,11 +102,11 @@ def test_a_system_opening_line_is_added_back():
     assert bars.boundaries_for(_geo([0.3, 0.5, 0.7, 0.95]), 4) == [0.05, 0.3, 0.5, 0.7, 0.95]
 
 
-def test_an_opening_line_that_was_detected_is_not_added_twice():
+def test_an_opening_line_that_was_detected_is_not_added_twice() -> None:
     assert bars.boundaries_for(_geo([0.05, 0.4, 0.95]), 2) == [0.05, 0.4, 0.95]
 
 
-def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out():
+def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out() -> None:
     """`sammon-ryosto`, and the reason the rule is not about counting.
 
     Its detection missed the system's opening rule *and* found one line that is
@@ -113,8 +120,10 @@ def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out():
     edge, so the opening is missing, and once it is added back the count no
     longer works out and the crop is refused.
     """
-    geo = {"bar_lines": [0.218, 0.332, 0.661, 0.710, 0.960],
-           "staves": [{"top": 0.2, "bottom": 0.33, "left": 0.042, "right": 0.958}]}
+    geo = {
+        "bar_lines": [0.218, 0.332, 0.661, 0.710, 0.960],
+        "staves": [{"top": 0.2, "bottom": 0.33, "left": 0.042, "right": 0.958}],
+    }
     # Both errors are corrected on their own evidence: the opening is added
     # back because the first line is nowhere near the staff's edge, and the
     # 0.049 gap is folded away because it is a fifth of a real bar here.
@@ -125,24 +134,28 @@ def test_a_missing_opening_line_and_a_spurious_one_do_not_cancel_out():
     assert box["left"] < 0.218 and 0.332 < box["right"] < 0.5
 
 
-def test_two_lines_too_close_to_be_a_bar_are_one_boundary():
+def test_two_lines_too_close_to_be_a_bar_are_one_boundary() -> None:
     """A double barline is two lines and one boundary, and so is a stray.
 
     Measured against the system's own median gap, because how wide a bar is
     depends on how many the system holds. The right-hand line is kept: at a
     thin-thick double bar the music ends at the thick one.
     """
-    geo = {"bar_lines": [0.05, 0.30, 0.55, 0.58, 0.80],
-           "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}]}
+    geo = {
+        "bar_lines": [0.05, 0.30, 0.55, 0.58, 0.80],
+        "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}],
+    }
     # Five lines, but 0.55 and 0.58 are one boundary — so three bars, not four.
     assert bars.boundaries_for(geo, 3) == [0.05, 0.30, 0.58, 0.80]
     assert bars.boundaries_for(geo, 4) is None
 
 
-def test_bars_that_are_merely_uneven_are_left_alone():
+def test_bars_that_are_merely_uneven_are_left_alone() -> None:
     """Real music has short bars; only implausible ones are folded away."""
-    geo = {"bar_lines": [0.05, 0.28, 0.42, 0.70, 0.95],
-           "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}]}
+    geo = {
+        "bar_lines": [0.05, 0.28, 0.42, 0.70, 0.95],
+        "staves": [{"top": 0.1, "bottom": 0.2, "left": 0.05, "right": 0.95}],
+    }
     assert bars.boundaries_for(geo, 4) == [0.05, 0.28, 0.42, 0.70, 0.95]
     """The numbering would be a guess, and a guessed crop is worse than none."""
     assert bars.boundaries_for(_geo([0.3, 0.9]), 4) is None
@@ -150,7 +163,7 @@ def test_bars_that_are_merely_uneven_are_left_alone():
     assert bars.boundaries_for({"bar_lines": [], "staves": []}, 3) is None
 
 
-def test_the_box_is_the_bar_and_the_staff_it_is_on():
+def test_the_box_is_the_bar_and_the_staff_it_is_on() -> None:
     geo = _geo([0.3, 0.6, 0.95], staves=2)
     box = bars.bar_box(geo, 2, 2, 3)
     assert box is not None
@@ -159,19 +172,22 @@ def test_the_box_is_the_bar_and_the_staff_it_is_on():
     assert box["top"] < 0.20 and box["bottom"] > 0.25
 
 
-def test_a_bar_or_staff_out_of_range_is_refused():
+def test_a_bar_or_staff_out_of_range_is_refused() -> None:
     geo = _geo([0.3, 0.6, 0.95], staves=2)
-    assert bars.bar_box(geo, 3, 1, 3) is None      # no third staff
-    assert bars.bar_box(geo, 1, 4, 3) is None      # no fourth bar
+    assert bars.bar_box(geo, 3, 1, 3) is None  # no third staff
+    assert bars.bar_box(geo, 1, 4, 3) is None  # no fourth bar
     assert bars.bar_box(geo, 1, 0, 3) is None
 
 
-def _mpos(count, width=3000.0, y=4650.79, sy=2637.07, page=0):
-    return [{"x": 1000.0 + i * width, "y": y, "sx": width, "sy": sy, "page": page}
-            for i in range(count)]
+def _mpos(
+    count: int, width: float = 3000.0, y: float = 4650.79, sy: float = 2637.07, page: int = 0
+) -> list[dict]:
+    return [
+        {"x": 1000.0 + i * width, "y": y, "sx": width, "sy": sy, "page": page} for i in range(count)
+    ]
 
 
-def test_musescore_says_where_a_bar_is_and_it_is_cut_out_by_that():
+def test_musescore_says_where_a_bar_is_and_it_is_cut_out_by_that() -> None:
     """The mapping, pinned. Measured on two scores at 220 and 150 dpi, with the
     crop landing on the barlines both times; see `bars.MPOS_UNITS_PER_INCH`."""
     boxes = _mpos(3)
@@ -188,36 +204,36 @@ def test_musescore_says_where_a_bar_is_and_it_is_cut_out_by_that():
     assert 0.0 <= box["top"] < box["bottom"] <= 1.0
 
 
-def test_a_crop_is_wider_than_the_bar_on_both_paths():
+def test_a_crop_is_wider_than_the_bar_on_both_paths() -> None:
     """The printed crop and the engraved ones widen alike, or the three
     pictures are three different shots of the same music."""
     printed = bars.bar_box(_geo([0.3, 0.6, 0.95], staves=2), 1, 2, 3)
     engraved = bars.engraved_box(_mpos(3), ["1", "2", "3"], "2", (1819, 2572))
-    for box in (printed, engraved):
-        assert box is not None
+    assert printed is not None
+    assert engraved is not None
     # Both come back wider than the bar they name; the tight width is recoverable.
     assert printed["right"] - printed["left"] > (0.6 - 0.3)
     assert bars.ZOOM_OUT == 0.30
 
 
-def test_a_bar_count_that_disagrees_is_refused():
+def test_a_bar_count_that_disagrees_is_refused() -> None:
     """MuseScore's boxes and the score have to be talking about the same bars."""
     assert bars.engraved_box(_mpos(3), ["1", "2"], "2", (1819, 2572)) is None
     assert bars.engraved_box(_mpos(2), ["1", "2"], "9", (1819, 2572)) is None
 
 
-def test_a_bar_on_a_later_page_is_refused():
+def test_a_bar_on_a_later_page_is_refused() -> None:
     """The render kept is page one; a box on page two would crop the wrong paper."""
     assert bars.engraved_box(_mpos(2, page=1), ["1", "2"], "1", (1819, 2572)) is None
 
 
-def test_a_box_that_falls_outside_the_picture_is_refused():
+def test_a_box_that_falls_outside_the_picture_is_refused() -> None:
     """Which is what a wrong resolution or paper size looks like from here."""
     wide = [{"x": 1000.0, "y": 100.0, "sx": 90000.0, "sy": 2637.07, "page": 0}]
     assert bars.engraved_box(wide, ["1"], "1", (1819, 2572)) is None
 
 
-def test_the_crops_are_written_to_one_common_scale(tmp_path):
+def test_the_crops_are_written_to_one_common_scale(tmp_path: Path) -> None:
     """A scan and two engravings are naturally at three different scales.
 
     Left alone they were shown at three more, because each was stretched to
@@ -246,7 +262,7 @@ def test_the_crops_are_written_to_one_common_scale(tmp_path):
         assert (out.width, out.height) == (400, 200)
 
 
-def test_an_absurd_staff_measurement_cannot_make_an_absurd_picture(tmp_path):
+def test_an_absurd_staff_measurement_cannot_make_an_absurd_picture(tmp_path: Path) -> None:
     Image = pytest.importorskip("PIL.Image")
     picture = tmp_path / "p.png"
     Image.new("RGB", (100, 100), "white").save(picture)
@@ -257,15 +273,14 @@ def test_an_absurd_staff_measurement_cannot_make_an_absurd_picture(tmp_path):
             assert 1 <= out.width <= 600 and 1 <= out.height <= 600
 
 
-def test_a_row_knows_which_bar_it_is_about():
+def test_a_row_knows_which_bar_it_is_about() -> None:
     """The report opens the bar named here; re-parsing `where` would be a second
     definition of the same fact."""
-    row = compare.Row("bar 3, staff 2, beat 1", "A", "B", "", "pitch",
-                      bar="3", staff=2)
+    row = compare.Row("bar 3, staff 2, beat 1", "A", "B", "", "pitch", bar="3", staff=2)
     assert (row.bar, row.staff) == ("3", 2)
 
 
-def test_a_bar_is_read_back_with_its_beats_and_positions(tmp_path):
+def test_a_bar_is_read_back_with_its_beats_and_positions(tmp_path: Path) -> None:
     """What a fault row cannot say: which beats, and which notes."""
     held = compare.bar_contents(score(tmp_path), "1", 1)
     assert [note["beat"] for note in held] == [0.0, 2.0]

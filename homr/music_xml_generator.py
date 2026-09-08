@@ -22,8 +22,9 @@ from homr.transformer.vocabulary import (
 
 
 class ConversionState:
-    def __init__(self, division: int, nominator: Fraction,
-                 nominators: list[Fraction] | None = None):
+    def __init__(
+        self, division: int, nominator: Fraction, nominators: list[Fraction] | None = None
+    ):
         self.beats = 4 * constants.duration_of_quarter
         self.division = division
         self.nominator = nominator
@@ -176,8 +177,9 @@ def build_measures(
         add_tuplet_start_stop(repair_bar_arithmetic(group_into_chords(voice)))
     )
     division, nominator = find_division_and_time_signature_nominator(groups)
-    state = ConversionState(division, nominator,
-                            find_nominator_per_time_signature(groups, nominator))
+    state = ConversionState(
+        division, nominator, find_nominator_per_time_signature(groups, nominator)
+    )
     cursors = MeasureCursors(state)
     measures: list[ET.Element] = []
     current_measure = ET.Element("measure", number=str(measure_number))
@@ -442,13 +444,19 @@ def split_mixed_chords(measure: ET.Element) -> int:
             continue
         group = [child]
         index += 1
-        while index < len(children) and children[index].tag == "note" \
-                and children[index].find("chord") is not None:
+        while (
+            index < len(children)
+            and children[index].tag == "note"
+            and children[index].find("chord") is not None
+        ):
             group.append(children[index])
             index += 1
         directions = [note.findtext("stem") for note in group]
-        if len(group) < 2 or any(d not in {"up", "down"} for d in directions) \
-                or len(set(directions)) < 2:
+        if (
+            len(group) < 2
+            or any(d not in {"up", "down"} for d in directions)
+            or len(set(directions)) < 2
+        ):
             rebuilt.extend(group)
             continue
         up = [note for note in group if note.findtext("stem") == "up"]
@@ -525,9 +533,7 @@ def rebalance_measure_voices(
     assignments: list[tuple[int, TimedNoteEvent, int]] = []
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
-        two_voices = _staff_carries_two_voices(
-            sorted_events, (clefs or {}).get(staff_num)
-        )
+        two_voices = _staff_carries_two_voices(sorted_events, (clefs or {}).get(staff_num))
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -700,9 +706,7 @@ def _shares_a_notehead(note: ET.Element) -> bool:
 def _direction(event: TimedNoteEvent) -> str | None:
     """The one stem direction this event is drawn with, if it has just one."""
     directions = {
-        direction
-        for note in event.notes
-        if (direction := note.findtext("stem")) in {"up", "down"}
+        direction for note in event.notes if (direction := note.findtext("stem")) in {"up", "down"}
     }
     return directions.pop() if len(directions) == 1 else None
 
@@ -1138,9 +1142,7 @@ class MeasureCursors:
             return self.at(lane)
         start, end = span
         beside = [
-            stood
-            for other, stood in self.moment.items()
-            if other != lane and start <= stood < end
+            stood for other, stood in self.moment.items() if other != lane and start <= stood < end
         ]
         if not beside:
             return self.at(lane)
@@ -1158,9 +1160,7 @@ class MeasureCursors:
         self.doc = target
         return step
 
-    def advance(
-        self, lane: tuple[str, ...], duration: Fraction, is_silence: bool = False
-    ) -> None:
+    def advance(self, lane: tuple[str, ...], duration: Fraction, is_silence: bool = False) -> None:
         """This lane has just written `duration` of music, and so has the document.
 
         `build_note_chord` is handed the same figure and comes out that much
@@ -1205,7 +1205,9 @@ def build_note_chord(
         for direction_index, direction_group in enumerate(direction_groups):
             is_first = True
             for note in direction_group:
-                result.append(build_note_or_rest(note, i, not is_first, state, note_chord.tuplet_mark))
+                result.append(
+                    build_note_or_rest(note, i, not is_first, state, note_chord.tuplet_mark)
+                )
                 is_first = False
             if direction_index != len(direction_groups) - 1:
                 result.append(build_backup(group_duration, state))
@@ -1396,10 +1398,10 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
     for chord_index, chord in enumerate(voice):
         symbols = list(chord.symbols)
         for symbol_index, symbol in enumerate(symbols):
-            repair = repairs.get((chord_index, symbol_index))
-            if repair is None:
+            accepted_repair = repairs.get((chord_index, symbol_index))
+            if accepted_repair is None:
                 continue
-            rhythm, why = repair
+            rhythm, why = accepted_repair
             eprint(
                 f"Bar arithmetic: reading {symbol.pitch} as {rhythm} rather than "
                 f"{symbol.rhythm}, {why}"
@@ -1409,9 +1411,7 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
     return out
 
 
-def _bar_targets(
-    voice: list[SymbolChord], bars: list[tuple[int, int]]
-) -> list[Fraction | None]:
+def _bar_targets(voice: list[SymbolChord], bars: list[tuple[int, int]]) -> list[Fraction | None]:
     """What each bar of the stream ought to measure, where anything says so.
 
     Read off the bars themselves rather than off a time signature, because a

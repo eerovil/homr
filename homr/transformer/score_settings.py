@@ -29,7 +29,9 @@ class RhythmSettings:
             try:
                 minimum = int(minimum)
             except (TypeError, ValueError) as error:
-                raise ValueError("minimum_duration must be a note denominator such as '16'") from error
+                raise ValueError(
+                    "minimum_duration must be a note denominator such as '16'"
+                ) from error
             if minimum not in {1, 2, 4, 8, 16, 32, 64, 128}:
                 raise ValueError("minimum_duration must be a power-of-two note denominator")
         for name in ("allow_tuplets", "allow_grace_notes"):

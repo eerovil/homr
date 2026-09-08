@@ -34,19 +34,25 @@ def score(staves: list[list[list[tuple]]], path: Path, name: str) -> Path:
         listing.append(f'<score-part id="P{index}"><part-name>V</part-name></score-part>')
         bars = []
         for number, notes in enumerate(measures, start=1):
-            attributes = ('<attributes><divisions>1</divisions>'
-                          '<clef><sign>G</sign><line>2</line></clef></attributes>'
-                          if number == 1 else "")
+            attributes = (
+                "<attributes><divisions>1</divisions>"
+                "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                if number == 1
+                else ""
+            )
             written = "".join(
                 f"<note><pitch><step>{step}</step><octave>{octave}</octave></pitch>"
                 f"<duration>{duration}</duration><voice>{voice}</voice></note>"
-                for step, octave, voice, duration in notes)
+                for step, octave, voice, duration in notes
+            )
             bars.append(f'<measure number="{number}">{attributes}{written}</measure>')
         parts.append(f'<part id="P{index}">{"".join(bars)}</part>')
     target = path / f"{name}.musicxml"
-    target.write_text(f'<?xml version="1.0"?><score-partwise>'
-                      f'<part-list>{"".join(listing)}</part-list>{"".join(parts)}'
-                      f'</score-partwise>')
+    target.write_text(
+        f'<?xml version="1.0"?><score-partwise>'
+        f'<part-list>{"".join(listing)}</part-list>{"".join(parts)}'
+        f"</score-partwise>"
+    )
     return target
 
 
@@ -63,7 +69,9 @@ def test_a_staff_count_nobody_has_checked_blames_nobody(tmp_path: Path) -> None:
     assert result.at_fault == ""
 
 
-def test_the_page_can_say_the_reference_is_the_wrong_one(tmp_path: Path, monkeypatch) -> None:
+def test_the_page_can_say_the_reference_is_the_wrong_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The failure this exists for: three systems blamed on homr, all the reference's."""
     reference = score(ONE_NOTE, tmp_path, "ref")
     parsed = score(ONE_NOTE * 2, tmp_path, "homr")
@@ -75,7 +83,9 @@ def test_the_page_can_say_the_reference_is_the_wrong_one(tmp_path: Path, monkeyp
     assert "REFERENCE is wrong" in result.rows[0].verdict
 
 
-def test_the_page_can_say_homr_is_the_wrong_one(tmp_path: Path, monkeypatch) -> None:
+def test_the_page_can_say_homr_is_the_wrong_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     reference = score(ONE_NOTE * 2, tmp_path, "ref")
     parsed = score(ONE_NOTE, tmp_path, "homr")
     monkeypatch.setattr("fixturecheck.compare.staves_a_person_counted", lambda case: 2)
@@ -86,7 +96,7 @@ def test_the_page_can_say_homr_is_the_wrong_one(tmp_path: Path, monkeypatch) -> 
     assert "HOMR is wrong" in result.rows[0].verdict
 
 
-def test_the_page_can_agree_with_neither(tmp_path: Path, monkeypatch) -> None:
+def test_the_page_can_agree_with_neither(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reference = score(ONE_NOTE, tmp_path, "ref")
     parsed = score(ONE_NOTE * 2, tmp_path, "homr")
     monkeypatch.setattr("fixturecheck.compare.staves_a_person_counted", lambda case: 3)
@@ -96,7 +106,9 @@ def test_the_page_can_agree_with_neither(tmp_path: Path, monkeypatch) -> None:
     assert result.at_fault == "both"
 
 
-def test_staves_that_agree_are_nobody_s_fault(tmp_path: Path, monkeypatch) -> None:
+def test_staves_that_agree_are_nobody_s_fault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     reference = score(ONE_NOTE, tmp_path, "ref")
     parsed = score(ONE_NOTE, tmp_path, "homr")
     monkeypatch.setattr("fixturecheck.compare.staves_a_person_counted", lambda case: 9)
@@ -144,8 +156,12 @@ def test_a_bar_holding_its_notes_at_other_beats_has_moved_them(tmp_path: Path) -
 
 
 def test_a_unison_is_one_printed_head_and_counts_once() -> None:
-    found = {("1", 1, 0.0): [{"position": 5, "voice": "1", "name": "C4", "stem": "", "chord": False},
-                             {"position": 5, "voice": "2", "name": "C4", "stem": "", "chord": False}]}
+    found = {
+        ("1", 1, 0.0): [
+            {"position": 5, "voice": "1", "name": "C4", "stem": "", "chord": False},
+            {"position": 5, "voice": "2", "name": "C4", "stem": "", "chord": False},
+        ]
+    }
 
     assert len(collapse_unisons(found)[("1", 1, 0.0)]) == 1
 
@@ -153,11 +169,13 @@ def test_a_unison_is_one_printed_head_and_counts_once() -> None:
 def test_a_resting_staff_still_counts_as_printed(tmp_path: Path) -> None:
     """Counted off the file, not off the notes: a staff that rests is still a row."""
     target = tmp_path / "s.musicxml"
-    target.write_text('<?xml version="1.0"?><score-partwise><part-list>'
-                      '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
-                      '<part id="P1"><measure number="1">'
-                      '<attributes><divisions>1</divisions><staves>2</staves></attributes>'
-                      '</measure></part></score-partwise>')
+    target.write_text(
+        '<?xml version="1.0"?><score-partwise><part-list>'
+        '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
+        '<part id="P1"><measure number="1">'
+        "<attributes><divisions>1</divisions><staves>2</staves></attributes>"
+        "</measure></part></score-partwise>"
+    )
 
     assert printed_staves(target) == 2
     assert read_score(target) == {}
@@ -176,14 +194,16 @@ def staff_of_two_voices(path: Path, name: str, notes: list[tuple]) -> Path:
             written.append("<backup><duration>1</duration></backup>")
         written.append(
             f"<note><pitch><step>{step}</step><octave>{octave}</octave></pitch>"
-            f"<duration>1</duration><voice>{voice}</voice></note>")
+            f"<duration>1</duration><voice>{voice}</voice></note>"
+        )
     target = path / f"{name}.musicxml"
     target.write_text(
         '<?xml version="1.0"?><score-partwise><part-list>'
         '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
         '<part id="P1"><measure number="1"><attributes><divisions>1</divisions>'
-        '<clef><sign>G</sign><line>2</line></clef></attributes>'
-        f'{"".join(written)}</measure></part></score-partwise>')
+        "<clef><sign>G</sign><line>2</line></clef></attributes>"
+        f'{"".join(written)}</measure></part></score-partwise>'
+    )
     return target
 
 
@@ -223,8 +243,7 @@ def test_a_head_doubled_where_one_part_sings_it_is_a_fault(tmp_path: Path) -> No
     assert (result.agree, result.unison, result.size) == (0, 0, 1)
 
 
-def voices_over_bars(path: Path, name: str,
-                     bars: list[list[tuple]]) -> Path:
+def voices_over_bars(path: Path, name: str, bars: list[list[tuple]]) -> Path:
     """One staff, bar by bar, each note `(beat, step, octave, voice)`.
 
     Beats rather than document order, because that is what the failure is made
@@ -235,30 +254,32 @@ def voices_over_bars(path: Path, name: str,
         written, at = [], 0.0
         for beat, step, octave, voice in notes:
             if beat < at:
-                written.append(f"<backup><duration>{int(at - beat)}"
-                               f"</duration></backup>")
+                written.append(f"<backup><duration>{int(at - beat)}" f"</duration></backup>")
             elif beat > at:
-                written.append(f"<forward><duration>{int(beat - at)}"
-                               f"</duration></forward>")
+                written.append(f"<forward><duration>{int(beat - at)}" f"</duration></forward>")
             written.append(
                 f"<note><pitch><step>{step}</step><octave>{octave}</octave>"
-                f"</pitch><duration>1</duration><voice>{voice}</voice></note>")
+                f"</pitch><duration>1</duration><voice>{voice}</voice></note>"
+            )
             at = beat + 1
-        attributes = ("<attributes><divisions>1</divisions><clef><sign>G</sign>"
-                      "<line>2</line></clef></attributes>" if number == 1 else "")
-        measures.append(f'<measure number="{number}">{attributes}'
-                        f'{"".join(written)}</measure>')
+        attributes = (
+            "<attributes><divisions>1</divisions><clef><sign>G</sign>"
+            "<line>2</line></clef></attributes>"
+            if number == 1
+            else ""
+        )
+        measures.append(f'<measure number="{number}">{attributes}' f'{"".join(written)}</measure>')
     target = path / f"{name}.musicxml"
     target.write_text(
         '<?xml version="1.0"?><score-partwise><part-list>'
         '<score-part id="P1"><part-name>V</part-name></score-part></part-list>'
-        f'<part id="P1">{"".join(measures)}</part></score-partwise>')
+        f'<part id="P1">{"".join(measures)}</part></score-partwise>'
+    )
     return target
 
 
 #: The staff both files agree about: the upper line above the lower one, twice.
-TOGETHER = [[(1.0, "G", 4, "1"), (1.0, "C", 4, "2")],
-            [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")]]
+TOGETHER = [[(1.0, "G", 4, "1"), (1.0, "C", 4, "2")], [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")]]
 
 
 def test_a_voice_entering_early_does_not_reverse_the_staff(tmp_path: Path) -> None:
@@ -275,8 +296,7 @@ def test_a_voice_entering_early_does_not_reverse_the_staff(tmp_path: Path) -> No
     measurement does not score.
     """
     reference = voices_over_bars(tmp_path, "ref", TOGETHER)
-    parsed = voices_over_bars(tmp_path, "homr",
-                              [[(0.0, "C", 4, "2")] + TOGETHER[0], TOGETHER[1]])
+    parsed = voices_over_bars(tmp_path, "homr", [[(0.0, "C", 4, "2")] + TOGETHER[0], TOGETHER[1]])
 
     result = compare_output(reference, parsed, "case")
 
@@ -292,17 +312,17 @@ def test_the_line_that_is_higher_in_more_bars_is_the_first_one(tmp_path: Path) -
     read as saying. `heraa-suomi-final-s10` is this, and a mean reports 6
     faults on a system read correctly.
     """
-    crossing = [[(0.0, "G", 5, "1"), (0.0, "C", 4, "2")],
-                [(0.0, "A", 5, "1"), (0.0, "D", 4, "2")],
-                [(0.0, "C", 1, "1"), (0.0, "E", 4, "2")]]
-    ranks = _voice_rank(collapse_unisons(read_score(
-        voices_over_bars(tmp_path, "ref", crossing))))
+    crossing = [
+        [(0.0, "G", 5, "1"), (0.0, "C", 4, "2")],
+        [(0.0, "A", 5, "1"), (0.0, "D", 4, "2")],
+        [(0.0, "C", 1, "1"), (0.0, "E", 4, "2")],
+    ]
+    ranks = _voice_rank(collapse_unisons(read_score(voices_over_bars(tmp_path, "ref", crossing))))
 
     assert ranks[1] == {"1": 1, "2": 2}
 
 
-def test_a_line_sung_in_one_bar_does_not_outrank_one_sung_throughout(
-        tmp_path: Path) -> None:
+def test_a_line_sung_in_one_bar_does_not_outrank_one_sung_throughout(tmp_path: Path) -> None:
     """A scrap of a voice high on the staff is one bar's evidence, not a page's.
 
     This is the other half of the same failure: on the pre-#153 parses of Heraa
@@ -310,14 +330,24 @@ def test_a_line_sung_in_one_bar_does_not_outrank_one_sung_throughout(
     rule that weighs them against a line sung all the way down gets the staff
     backwards.
     """
-    reference = voices_over_bars(tmp_path, "ref", [
-        [(0.0, "G", 4, "1"), (0.0, "C", 4, "2")],
-        [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
-        [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")]])
-    parsed = voices_over_bars(tmp_path, "homr", [
-        [(0.0, "G", 4, "1"), (0.0, "C", 4, "2"), (2.0, "C", 7, "2")],
-        [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
-        [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")]])
+    reference = voices_over_bars(
+        tmp_path,
+        "ref",
+        [
+            [(0.0, "G", 4, "1"), (0.0, "C", 4, "2")],
+            [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
+            [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")],
+        ],
+    )
+    parsed = voices_over_bars(
+        tmp_path,
+        "homr",
+        [
+            [(0.0, "G", 4, "1"), (0.0, "C", 4, "2"), (2.0, "C", 7, "2")],
+            [(0.0, "A", 4, "1"), (0.0, "D", 4, "2")],
+            [(0.0, "B", 4, "1"), (0.0, "E", 4, "2")],
+        ],
+    )
 
     result = compare_output(reference, parsed, "case")
 

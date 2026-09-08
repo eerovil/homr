@@ -1,7 +1,8 @@
 import xml.etree.ElementTree as ET
 from types import SimpleNamespace
+from typing import cast
 
-from homr.model import StemDirection
+from homr.model import Note, StemDirection
 from homr.music_xml_generator import (
     XmlGeneratorArguments,
     generate_xml,
@@ -16,8 +17,8 @@ from homr.stem_voice_hints import (
 from homr.transformer.vocabulary import EncodedSymbol, _remove_duplicated_piches
 
 
-def _note(x: float, y: float, directions: list[StemDirection]) -> SimpleNamespace:
-    return SimpleNamespace(center=(x, y), stem_directions=directions)
+def _note(x: float, y: float, directions: list[StemDirection]) -> Note:
+    return cast(Note, SimpleNamespace(center=(x, y), stem_directions=directions))
 
 
 def _symbol(x: float, y: float) -> EncodedSymbol:
@@ -85,14 +86,12 @@ def test_mixed_stem_chord_becomes_two_simultaneous_voices() -> None:
 
 def test_one_voice_keeps_its_voice_however_its_stems_point() -> None:
     """A staff with one voice stems by height, not by voice."""
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note><pitch><step>D</step><octave>5</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
              <note><pitch><step>E</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure)
 
@@ -100,15 +99,13 @@ def test_one_voice_keeps_its_voice_however_its_stems_point() -> None:
 
 
 def test_two_voices_sounding_together_are_told_apart_by_their_stems() -> None:
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note><pitch><step>D</step><octave>5</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
              <backup><duration>4</duration></backup>
              <note><pitch><step>F</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure)
 
@@ -146,14 +143,12 @@ def test_a_shared_head_still_says_the_staff_has_two_voices() -> None:
     The shared head is what settles it, so the stem is honoured -- and taking
     the mark further must not cost that.
     """
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note stem-shared="yes"><pitch><step>C</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><staff>1</staff></note>
              <note><pitch><step>E</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure, {1: ("G", 2, 0)})
 
@@ -162,15 +157,13 @@ def test_a_shared_head_still_says_the_staff_has_two_voices() -> None:
 
 def test_a_head_is_not_doubled_into_a_voice_already_sounding() -> None:
     """Then the second voice is in the bar under its own stem."""
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note stem-shared="yes"><pitch><step>D</step><octave>5</octave></pitch>
                <duration>4</duration><voice>1</voice><staff>1</staff></note>
              <backup><duration>4</duration></backup>
              <note><pitch><step>F</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure)
 
@@ -180,14 +173,12 @@ def test_a_head_is_not_doubled_into_a_voice_already_sounding() -> None:
 
 def test_only_the_shared_head_of_a_chord_is_doubled() -> None:
     """A chord tone under one stem is one voice's; the shared head is both."""
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note stem-shared="yes"><pitch><step>C</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><staff>1</staff></note>
              <note><chord/><pitch><step>E</step><octave>4</octave></pitch>
                <duration>4</duration><voice>1</voice><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure)
     notes = measure.findall("note")
@@ -198,12 +189,10 @@ def test_only_the_shared_head_of_a_chord_is_doubled() -> None:
 
 
 def test_a_grace_note_has_no_duration_to_double_behind() -> None:
-    measure = ET.fromstring(
-        """<measure number="1">
+    measure = ET.fromstring("""<measure number="1">
              <note stem-shared="yes"><grace/><pitch><step>C</step><octave>4</octave></pitch>
                <voice>1</voice><staff>1</staff></note>
-           </measure>"""
-    )
+           </measure>""")
 
     rebalance_measure_voices(measure)
 
@@ -211,8 +200,8 @@ def test_a_grace_note_has_no_duration_to_double_behind() -> None:
     assert not measure.findall("backup")
 
 
-def _head(x: float, y: float, position: int, directions: list[StemDirection]) -> SimpleNamespace:
-    return SimpleNamespace(center=(x, y), position=position, stem_directions=directions)
+def _head(x: float, y: float, position: int, directions: list[StemDirection]) -> Note:
+    return cast(Note, SimpleNamespace(center=(x, y), position=position, stem_directions=directions))
 
 
 def _unison(rhythms: tuple[str, str], xs: tuple[float, float]) -> list[EncodedSymbol]:
@@ -297,9 +286,7 @@ def test_the_rest_of_the_chord_does_not_hide_the_pair() -> None:
         _head(165.0, 78.0, 2, [StemDirection.DOWN]),
     ]
     symbols = _unison(("note_2", "note_8"), (166.0, 170.0))
-    symbols.append(
-        EncodedSymbol("note_2", pitch="F4", position="upper", coordinates=(167.0, 76.0))
-    )
+    symbols.append(EncodedSymbol("note_2", pitch="F4", position="upper", coordinates=(167.0, 76.0)))
 
     assert pair_unison_stems(symbols, heads) == 1
 
@@ -409,12 +396,18 @@ def _straddled(
     return [
         EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
         EncodedSymbol(
-            rhythms[0], pitch="B4", position="upper",
-            coordinates=(166.0, ys[0]), stem_direction=stems[0],
+            rhythms[0],
+            pitch="B4",
+            position="upper",
+            coordinates=(166.0, ys[0]),
+            stem_direction=stems[0],
         ),
         EncodedSymbol(
-            rhythms[1], pitch="B4", position="upper",
-            coordinates=(170.0, ys[1]), stem_direction=stems[1],
+            rhythms[1],
+            pitch="B4",
+            position="upper",
+            coordinates=(170.0, ys[1]),
+            stem_direction=stems[1],
         ),
     ]
 
@@ -511,3 +504,15 @@ def test_the_attention_read_pair_survives_the_duplicate_remover() -> None:
     pair_unison_by_attention(symbols, heads)
 
     assert len(_remove_duplicated_piches(symbols[1:])) == 2
+
+
+def test_unison_pairing_requires_coordinates_for_both_notes() -> None:
+    first = _symbol(20, 40)
+    missing = EncodedSymbol("note_4", pitch="C4", position="upper")
+    from homr.stem_voice_hints import _pair, _pair_by_attention
+
+    for left, right in ((first, missing), (missing, first)):
+        assert _pair(left, right, [], 1) == 0
+        assert _pair_by_attention(left, right, [], 1) == 0
+    assert first.stem_direction is None
+    assert missing.stem_direction is None

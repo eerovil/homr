@@ -10,6 +10,8 @@ moment would report the engraver's convention as a detector error.  Anything
 the alignment cannot pair is reported as missing or extra rather than dropped.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -32,7 +34,7 @@ class Head:
     voices: set[str] = field(default_factory=set)
     label: str = ""
     # The bar and beat this notehead sounds on, for a reference head.
-    moment: tuple | None = None
+    moment: tuple[int, float] | None = None
     # Where the notehead is in the scan, for a detected one.
     scan: tuple[float, float] | None = None
 
@@ -113,7 +115,7 @@ class Warp:
     extrapolating with the overall slope outside.
     """
 
-    def __init__(self, pairs: list[tuple[float, float]]):
+    def __init__(self, pairs: list[tuple[float, float]]) -> None:
         anchors: dict[float, list[float]] = {}
         for reference, detected in pairs:
             anchors.setdefault(reference, []).append(detected)
@@ -292,6 +294,7 @@ def align_columns(
     for column in range(1, columns + 1):
         best[0][column] = best[0][column - 1] + len(detected[column - 1].heads)
         came[0][column] = "detected"
+
     # A tie-break only: where two alignments explain the same noteheads, prefer
     # the one that also puts the moments in comparable places across the system.
     def place(columns_: list[Column], index: int) -> float:
@@ -318,9 +321,7 @@ def align_columns(
             came[row][column] = (
                 "paired"
                 if best[row][column] == paired
-                else "reference"
-                if best[row][column] == skip_reference
-                else "detected"
+                else "reference" if best[row][column] == skip_reference else "detected"
             )
 
     steps: list[tuple[int | None, int | None]] = []
@@ -347,13 +348,13 @@ def match(reference: list[Column], detected: list[Column]) -> list[tuple[Head | 
             pairs.extend(_heads_in_column(reference[row], detected[column]))
         elif row is not None:
             pairs.extend((head, None) for head in reference[row].heads)
-        else:
+        elif column is not None:
             pairs.extend((None, other) for other in detected[column].heads)
     return pairs
 
 
 def _cost(
-    head: Head, other: Head, warp: "Warp | Callable[[float], float]", tolerance: float
+    head: Head, other: Head, warp: Warp | Callable[[float], float], tolerance: float
 ) -> float:
     """What it costs to call one detected notehead this reference one.
 
@@ -435,7 +436,7 @@ def voice_failures(index: int, reference: list[dict], detected: list[dict]) -> l
         for head, other in match(reference_columns(reference), detected_columns(detected))
         if head is not None and other is not None
     ]
-    bars: dict[object, list[tuple[Head, Head]]] = {}
+    bars: dict[int, list[tuple[Head, Head]]] = {}
     for head, other in pairs:
         assert head.moment is not None
         bars.setdefault(head.moment[0], []).append((head, other))
@@ -459,9 +460,7 @@ def voice_failures(index: int, reference: list[dict], detected: list[dict]) -> l
                 contradicts = True
             if "down" in other.stems and other.position < MIDDLE_LINE:
                 contradicts = True
-        together = (
-            shared or contradicts or any(len(stems) > 1 for stems in moments.values())
-        )
+        together = shared or contradicts or any(len(stems) > 1 for stems in moments.values())
         printed = {voice for head, _ in found for voice in head.voices}
         if not together:
             if len(printed) > 1:

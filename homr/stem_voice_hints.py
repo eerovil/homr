@@ -61,9 +61,7 @@ def expected_position(pitch: str, clef: tuple[str, int]) -> int | None:
     step, _, octave = match.groups()
     sign, line = clef
     reference_step, reference_octave = _CLEF_REFERENCE[sign]
-    return (
-        2 * line - 1 + _diatonic(step, int(octave)) - _diatonic(reference_step, reference_octave)
-    )
+    return 2 * line - 1 + _diatonic(step, int(octave)) - _diatonic(reference_step, reference_octave)
 
 
 def _clefs_in_force(symbols: list[EncodedSymbol]) -> list[tuple[str, int] | None]:
@@ -149,9 +147,7 @@ def pitch_at(position: int, clef: tuple[str, int]) -> str | None:
     return f"{_STEPS[note % 7]}{note // 7}"
 
 
-def _columns(
-    symbols: list[EncodedSymbol], clefs: list[tuple[str, int] | None]
-) -> list[list[int]]:
+def _columns(symbols: list[EncodedSymbol], clefs: list[tuple[str, int] | None]) -> list[list[int]]:
     """The decoded notes of one staff, grouped into the moments they sound at.
 
     Grouped by how close the notes are, not by a grid: two notes of one moment
@@ -213,14 +209,19 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         first, second = (symbols[i] for i in members)
         if first.pitch != second.pitch:
             continue
-        x = _note_coordinates(first)[0]
+        first_coordinates = _note_coordinates(first)
+        second_coordinates = _note_coordinates(second)
         clef = clefs[members[0]]
+        if first_coordinates is None or second_coordinates is None or clef is None:
+            continue
+        x = first_coordinates[0]
         claimed = expected_position(first.pitch, clef)
         here = [
-            note for note in notes
+            note
+            for note in notes
             if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
-            and abs(note.center[1] - _note_coordinates(first)[1]) <= _COLUMN_REACH
-            and abs(note.center[1] - _note_coordinates(second)[1]) <= _COLUMN_REACH
+            and abs(note.center[1] - first_coordinates[1]) <= _COLUMN_REACH
+            and abs(note.center[1] - second_coordinates[1]) <= _COLUMN_REACH
         ]
         positions = sorted({note.position for note in here})
         if len(positions) != 2 or claimed not in positions:
@@ -231,8 +232,9 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
             continue
         # The lower head takes the lower pitch: re-pitch whichever of the two is
         # drawn on the side the free position sits.
-        target = second if (other < claimed) == (
-            _note_coordinates(second)[1] > _note_coordinates(first)[1]) else first
+        target = (
+            second if (other < claimed) == (second_coordinates[1] > first_coordinates[1]) else first
+        )
         target.pitch = spelled
         # And the stem the head carries. Without it the rescued note has nothing
         # to say which line it belongs to and lands in whichever voice the chord
@@ -240,8 +242,7 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         # first version of this produced.
         owner = next((note for note in here if note.position == other), None)
         if owner is not None and len(owner.stem_directions) == 1:
-            target.stem_direction = (
-                "up" if owner.stem_directions[0] == StemDirection.UP else "down")
+            target.stem_direction = "up" if owner.stem_directions[0] == StemDirection.UP else "down"
         rescued += 1
     return rescued
 
@@ -276,6 +277,8 @@ def pair_unison_stems(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
                 continue
             first, second = (symbols[i] for i in members)
             clef = clefs[members[0]]
+            if clef is None:
+                continue
             position = expected_position(first.pitch, clef)
             if position is None:
                 continue
@@ -283,11 +286,13 @@ def pair_unison_stems(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
     return paired
 
 
-def _pair(
-    first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], position: int
-) -> int:
+def _pair(first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], position: int) -> int:
     """Match the two notes to the two heads, left to right, and return 1 if done."""
-    x, y = _note_coordinates(first)
+    first_coordinates = _note_coordinates(first)
+    second_coordinates = _note_coordinates(second)
+    if first_coordinates is None or second_coordinates is None:
+        return 0
+    x, y = first_coordinates
     here = [
         note
         for note in notes
@@ -300,7 +305,7 @@ def _pair(
     if here[0].stem_directions[0] == here[1].stem_directions[0]:
         return 0
     heads = sorted(here, key=lambda note: note.center[0])
-    tokens = sorted((first, second), key=lambda s: _note_coordinates(s)[0])
+    tokens = (first, second) if first_coordinates[0] <= second_coordinates[0] else (second, first)
     for token, head in zip(tokens, heads, strict=True):
         token.stem_direction = "up" if head.stem_directions[0] == StemDirection.UP else "down"
     return 1
@@ -358,6 +363,8 @@ def pair_unison_by_attention(symbols: list[EncodedSymbol], notes: list[Note]) ->
             if first.rhythm != second.rhythm:
                 continue
             clef = clefs[members[0]]
+            if clef is None:
+                continue
             position = expected_position(first.pitch, clef)
             if position is None:
                 continue
@@ -391,11 +398,16 @@ def _pair_by_attention(
     first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], position: int
 ) -> int:
     """Give the higher attention point the up stem and the lower the down one."""
-    above, below = sorted((first, second), key=lambda s: _note_coordinates(s)[1])
-    top = _note_coordinates(above)[1]
-    bottom = _note_coordinates(below)[1]
+    first_coordinates = _note_coordinates(first)
+    second_coordinates = _note_coordinates(second)
+    if first_coordinates is None or second_coordinates is None:
+        return 0
+    above, below = (
+        (first, second) if first_coordinates[1] <= second_coordinates[1] else (second, first)
+    )
+    top, bottom = sorted((first_coordinates[1], second_coordinates[1]))
     middle = (top + bottom) / 2
-    x = (_note_coordinates(first)[0] + _note_coordinates(second)[0]) / 2
+    x = (first_coordinates[0] + second_coordinates[0]) / 2
     here = [
         note
         for note in notes

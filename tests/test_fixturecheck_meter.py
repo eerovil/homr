@@ -14,38 +14,42 @@ the system.
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from fixturecheck import compare, references, series
 
 
-def score(tmp_path, meters, name="s.musicxml"):
+def score(tmp_path: Path, meters: list[str | None], name: str = "s.musicxml") -> Path:
     """A one-part score whose bars declare the meters given, `None` for none."""
     bars = []
     for index, meter in enumerate(meters, start=1):
         attributes = ""
         if meter:
             beats, kind = meter.split("/")
-            attributes = (f"<attributes><divisions>1</divisions>"
-                          f"<time><beats>{beats}</beats>"
-                          f"<beat-type>{kind}</beat-type></time></attributes>")
+            attributes = (
+                f"<attributes><divisions>1</divisions>"
+                f"<time><beats>{beats}</beats>"
+                f"<beat-type>{kind}</beat-type></time></attributes>"
+            )
         bars.append(
             f'<measure number="{index}">{attributes}'
-            f'<note><pitch><step>C</step><octave>4</octave></pitch>'
-            f'<duration>1</duration><voice>1</voice></note></measure>')
+            f"<note><pitch><step>C</step><octave>4</octave></pitch>"
+            f"<duration>1</duration><voice>1</voice></note></measure>"
+        )
     path = tmp_path / name
     path.write_text(
         '<?xml version="1.0"?><score-partwise version="3.1">'
         '<part-list><score-part id="P1"><part-name>V</part-name></score-part></part-list>'
-        f'<part id="P1">{"".join(bars)}</part></score-partwise>')
+        f'<part id="P1">{"".join(bars)}</part></score-partwise>'
+    )
     return path
 
 
-def kinds(rows):
+def kinds(rows: list[compare.Row]) -> list[tuple[str, str, str]]:
     return [(row.bar, row.page, row.homr) for row in rows]
 
 
-def test_a_meter_change_homr_missed_is_a_fault(tmp_path):
+def test_a_meter_change_homr_missed_is_a_fault(tmp_path: Path) -> None:
     """`sammon-ryosto`'s bar 2: the page changes to 5/4 and homr carries on."""
     page = score(tmp_path, ["3/4", "5/4"], "page.musicxml")
     homr = score(tmp_path, ["3/4", None], "homr.musicxml")
@@ -55,7 +59,7 @@ def test_a_meter_change_homr_missed_is_a_fault(tmp_path):
     assert "did not make" in rows[0].verdict
 
 
-def test_a_meter_change_homr_invented_is_a_fault(tmp_path):
+def test_a_meter_change_homr_invented_is_a_fault(tmp_path: Path) -> None:
     page = score(tmp_path, ["4/4", None], "page.musicxml")
     homr = score(tmp_path, ["4/4", "7/8"], "homr.musicxml")
     rows = compare.compare_meter(page, homr)
@@ -63,7 +67,7 @@ def test_a_meter_change_homr_invented_is_a_fault(tmp_path):
     assert "does not make" in rows[0].verdict
 
 
-def test_both_changing_to_different_meters_is_a_fault(tmp_path):
+def test_both_changing_to_different_meters_is_a_fault(tmp_path: Path) -> None:
     """Comparing only *where* changes happen would call this agreement."""
     page = score(tmp_path, ["3/4", "5/2"], "page.musicxml")
     homr = score(tmp_path, ["3/4", "3/2"], "homr.musicxml")
@@ -72,20 +76,20 @@ def test_both_changing_to_different_meters_is_a_fault(tmp_path):
     assert "different meter" in rows[0].verdict
 
 
-def test_the_opening_meter_is_judged(tmp_path):
+def test_the_opening_meter_is_judged(tmp_path: Path) -> None:
     """Everything after it is read in it, and bar 1 is a change from nothing."""
     page = score(tmp_path, ["3/4"], "page.musicxml")
     homr = score(tmp_path, ["7/4"], "homr.musicxml")
     assert kinds(compare.compare_meter(page, homr)) == [("1", "3/4", "7/4")]
 
 
-def test_a_meter_both_sides_agree_on_is_silent(tmp_path):
+def test_a_meter_both_sides_agree_on_is_silent(tmp_path: Path) -> None:
     page = score(tmp_path, ["4/4", None, "3/4", None], "page.musicxml")
     homr = score(tmp_path, ["4/4", None, "3/4", None], "homr.musicxml")
     assert compare.compare_meter(page, homr) == []
 
 
-def test_bars_nobody_changed_are_never_judged(tmp_path):
+def test_bars_nobody_changed_are_never_judged(tmp_path: Path) -> None:
     """A wrong meter is reported once, where it was set — not on every bar after.
 
     Both sides carry their meter forward through bars 2, 3 and 4; only bar 1
@@ -98,24 +102,26 @@ def test_bars_nobody_changed_are_never_judged(tmp_path):
     assert [row.bar for row in rows] == ["1"]
 
 
-def test_a_signature_repeated_on_every_staff_is_one_change(tmp_path):
+def test_a_signature_repeated_on_every_staff_is_one_change(tmp_path: Path) -> None:
     """A system declares its meter once per staff; that is not four changes."""
     path = tmp_path / "many.musicxml"
-    part = ('<part id="P{n}"><measure number="1"><attributes><divisions>1</divisions>'
-            '<time><beats>3</beats><beat-type>4</beat-type></time></attributes>'
-            '<note><rest/><duration>1</duration></note></measure></part>')
+    part = (
+        '<part id="P{n}"><measure number="1"><attributes><divisions>1</divisions>'
+        "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+        "<note><rest/><duration>1</duration></note></measure></part>"
+    )
     path.write_text(
         '<?xml version="1.0"?><score-partwise version="3.1"><part-list>'
-        + "".join(f'<score-part id="P{n}"><part-name>V</part-name></score-part>'
-                  for n in range(4))
+        + "".join(f'<score-part id="P{n}"><part-name>V</part-name></score-part>' for n in range(4))
         + "</part-list>"
         + "".join(part.format(n=n) for n in range(4))
-        + "</score-partwise>")
+        + "</score-partwise>"
+    )
     force, changes = compare.meter_in_force(path)
     assert changes == ["1"] and force["1"] == "3/4"
 
 
-def test_a_misread_meter_is_still_a_fault_and_still_fails_the_gate(tmp_path):
+def test_a_misread_meter_is_still_a_fault_and_still_fails_the_gate(tmp_path: Path) -> None:
     """A parse that put the music in the wrong time signature is not correct,
     however well its noteheads line up.
 
@@ -137,15 +143,12 @@ def test_a_misread_meter_is_still_a_fault_and_still_fails_the_gate(tmp_path):
     counts = {k: getattr(wrong_meter, k) for k in series.COUNTS}
     was = references.marks({k: getattr(clean, k) for k in series.COUNTS})
     assert references.marks(counts)["score"] == was["score"]
-    assert references.worse(references.marks(counts), was) == [
-        "meter 1, against 0 accepted"]
+    assert references.worse(references.marks(counts), was) == ["meter 1, against 0 accepted"]
 
 
-def test_the_real_fixture_is_reported(tmp_path):
+def test_the_real_fixture_is_reported(tmp_path: Path) -> None:
     """`sammon-ryosto` as it actually is: all three shapes in one system."""
     page = score(tmp_path, ["3/4", "5/4", "5/2"], "page.musicxml")
     homr = score(tmp_path, ["7/4", None, "3/2"], "homr.musicxml")
     rows = compare.compare_meter(page, homr)
-    assert kinds(rows) == [("1", "3/4", "7/4"),
-                           ("2", "5/4", "7/4"),
-                           ("3", "5/2", "3/2")]
+    assert kinds(rows) == [("1", "3/4", "7/4"), ("2", "5/4", "7/4"), ("3", "5/2", "3/2")]

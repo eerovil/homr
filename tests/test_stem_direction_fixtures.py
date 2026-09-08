@@ -14,7 +14,6 @@ reason, so this file is a guard against losing ground rather than a wish.
 """
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -24,9 +23,15 @@ from homr.model import Note, Staff
 from homr.segmentation.config import segnet_path_onnx
 from tests.fixture_matching import check_fixture, voice_failures
 from tests.fixture_reference import reference_staffs
+from tests.model_requirements import require_model
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 MANIFEST = FIXTURES / "stem-direction-fixtures.json"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def require_segmentation_model() -> None:
+    require_model(Path(segnet_path_onnx))
 
 
 def fixture_names() -> list[str]:
@@ -35,7 +40,7 @@ def fixture_names() -> list[str]:
 
 def staff_notes(staff: Staff) -> list[dict]:
     """One printed staff's detected noteheads, left to right."""
-    notes = [
+    notes: list[dict] = [
         {
             "x": round(float(note.center[0]), 1),
             "y": round(float(note.center[1]), 1),
@@ -69,9 +74,6 @@ def detect(image: Path) -> list[list[dict]]:
     return [staff_notes(staff) for staff in sorted(staffs, key=lambda staff: staff.min_y)]
 
 
-@pytest.mark.skipif(
-    not os.path.exists(segnet_path_onnx), reason="the segmentation model is not installed"
-)
 @pytest.mark.parametrize("name", fixture_names())
 def test_stem_directions_match_the_reference_score(name: str) -> None:
     entry = json.loads(MANIFEST.read_text())["fixtures"][name]
@@ -79,9 +81,7 @@ def test_stem_directions_match_the_reference_score(name: str) -> None:
     detected = detect(FIXTURES / entry["image"])
     allowed = {gap["failure"] for gap in entry.get("known_gaps", [])}
     failures = [
-        failure
-        for result in check_fixture(reference, detected)
-        for failure in result.failures
+        failure for result in check_fixture(reference, detected) for failure in result.failures
     ]
     unexpected = [failure for failure in failures if failure not in allowed]
     fixed = allowed - set(failures)
@@ -91,9 +91,6 @@ def test_stem_directions_match_the_reference_score(name: str) -> None:
     )
 
 
-@pytest.mark.skipif(
-    not os.path.exists(segnet_path_onnx), reason="the segmentation model is not installed"
-)
 @pytest.mark.parametrize("name", fixture_names())
 def test_stems_put_the_notes_in_the_voices_the_page_prints(name: str) -> None:
     """The stems are only worth detecting if they say which voice a note is.
