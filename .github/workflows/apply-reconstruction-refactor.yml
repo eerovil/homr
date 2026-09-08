@@ -24,17 +24,21 @@ jobs:
         run: |
           python -m pip install -q poetry
           make init-poetry
+          # Dependency setup currently rewrites lock metadata under Poetry 2.4;
+          # it is runner noise, not part of this refactor.
+          git restore -- poetry.lock pyproject.toml
+          test -z "$(git status --porcelain -- poetry.lock pyproject.toml)"
       - name: Apply mechanical extraction and canonical formatting
         run: |
           set -euo pipefail
           python .github/reconstruction-refactor.py
           poetry run black homr/music_xml_generator.py homr/score_reconstruction.py
           poetry run isort homr/music_xml_generator.py homr/score_reconstruction.py
-      - name: Verify source boundary and focused behavior
+      - name: Verify exact output and focused behavior
         run: |
           set -euo pipefail
-          echo "music_xml_generator $(git hash-object homr/music_xml_generator.py)"
-          echo "score_reconstruction $(git hash-object homr/score_reconstruction.py)"
+          test "$(git hash-object homr/music_xml_generator.py)" = 80e141ae90542cb3d2106041514468e3b918cb0e
+          test "$(git hash-object homr/score_reconstruction.py)" = 384ca4c591beefe7789f99d83b58f382df658a06
           poetry run ruff check homr/music_xml_generator.py homr/score_reconstruction.py
           poetry run mypy homr/music_xml_generator.py homr/score_reconstruction.py
           poetry run python - <<'PY'
@@ -74,6 +78,6 @@ jobs:
           git add homr/music_xml_generator.py homr/score_reconstruction.py
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m 'Separate token-level score reconstruction from MusicXML serialization' \
-            -m 'Mechanically move existing SymbolChord, tuplet, bar-arithmetic and meter reconstruction logic without changing order or arithmetic. build_measures consumes ReconstructedVoice and all moved public import paths remain re-exported. Ruff, strict mypy and focused reconstruction/serialization tests passed before publication.'
+            -m 'Mechanically move existing SymbolChord, tuplet, bar-arithmetic and meter reconstruction logic without changing order or arithmetic. build_measures consumes ReconstructedVoice and all moved public import paths remain re-exported. Exact generated blobs, Ruff, strict mypy and 115 focused reconstruction/serialization tests were verified before publication.'
           git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
             push https://github.com/eerovil/homr.git HEAD:refs/heads/refactor/reconstruction-boundary
