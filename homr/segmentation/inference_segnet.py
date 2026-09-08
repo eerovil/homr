@@ -20,6 +20,7 @@ from homr.segmentation.config import (
     segnet_path_onnx,
     segnet_path_onnx_fp16,
 )
+from homr.segmentation.patches import merge_patches as merge_patches
 from homr.simple_logging import eprint
 from homr.type_definitions import NDArray
 
@@ -144,38 +145,6 @@ def extract_patch(image: NDArray, y: int, x: int, win_size: int) -> NDArray:
     return patch
 
 
-def merge_patches(
-    patches: list[NDArray], image_shape: tuple[int, int], win_size: int, step_size: int
-) -> NDArray:
-    reconstructed = np.zeros(image_shape, dtype=np.float32)
-    weight = np.zeros(image_shape, dtype=np.float32)
-
-    idx = 0
-    for iy in range(0, image_shape[0], step_size):
-        y = min(iy, image_shape[0] - win_size)
-        y0 = max(y, 0)
-        y1 = min(y + win_size, image_shape[0])
-
-        for ix in range(0, image_shape[1], step_size):
-            x = min(ix, image_shape[1] - win_size)
-            x0 = max(x, 0)
-            x1 = min(x + win_size, image_shape[1])
-
-            patch = patches[idx]
-            ph = y1 - y0
-            pw = x1 - x0
-
-            reconstructed[y0:y1, x0:x1] += patch[:ph, :pw]
-            weight[y0:y1, x0:x1] += 1
-            idx += 1
-
-    # Avoid division by zero
-    weight[weight == 0] = 1
-    reconstructed /= weight
-
-    return reconstructed.astype(patches[0].dtype)
-
-
 def inference(
     image_org: NDArray, use_gpu_inference: bool, batch_size: int, step_size: int, win_size: int
 ) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray]:
@@ -206,9 +175,10 @@ def inference(
     data: list[NDArray] = []
     batch: list[NDArray] = []
 
-    for y_loop in range(0, max(h, win_size), step_size):
+    # Padding changes tile size, not tile count; use the same grid as merge_patches.
+    for y_loop in range(0, h, step_size):
         y = min(y_loop, h - win_size)
-        for x_loop in range(0, max(w, win_size), step_size):
+        for x_loop in range(0, w, step_size):
             x = min(x_loop, w - win_size)
 
             hop = extract_patch(image, y, x, win_size)
@@ -253,6 +223,8 @@ def extract(
     img_path = Path(img_path_str)
     f_name = os.path.splitext(img_path.name)[0]
     npy_path = img_path.parent / f"{f_name}.npy"
+    # Old caches contain numerically averaged class IDs, not categorical votes.
+    cache_version = f"{segmentation_version}:categorical-vote-v1:{win_size}:{step_size}"
     loaded_from_cache = False
     if npy_path.exists() and use_cache:
         eprint("Found a cache")
@@ -269,8 +241,8 @@ def extract(
                 eprint("Cache is missing meta information, skipping cache")
             elif file_hash != cached_file_hash:
                 eprint("File hash mismatch, skipping cache")
-            elif model_name != segmentation_version:
-                eprint("Models have been updated, skipping cache")
+            elif model_name != cache_version:
+                eprint("Model or patch merging has changed, skipping cache")
             else:
                 loaded_from_cache = True
                 eprint("Loading from cache")
@@ -293,7 +265,7 @@ def extract(
                 np.save(f, stems_rests)
                 np.save(f, clefs_keys)
                 f.write((file_hash + "\n").encode())
-                f.write((segmentation_version + "\n").encode())
+                f.write((cache_version + "\n").encode())
 
     original_image = cv2.resize(original_image, (staff.shape[1], staff.shape[0]))
 
