@@ -63,15 +63,12 @@ jobs:
             tests/test_music_xml_generator.py \
             tests/test_reread.py \
             tests/test_stem_voice_hints.py
-          # Poetry/plugin commands can rewrite project metadata while resolving
-          # the disposable environment. Restore it again before enforcing the
-          # actual source boundary.
           git restore -- poetry.lock pyproject.toml
           git diff --check
           git diff --exit-code -- fixtures fixturecheck
-          echo 'Tracked changes after verification:'
-          git status --short
-          test "$(git diff --name-only | sort)" = $'homr/music_xml_generator.py\nhomr/score_reconstruction.py'
+          actual="$(git status --porcelain | sed 's/^...//' | sort)"
+          printf 'Tracked changes after verification:\n%s\n' "$actual"
+          test "$actual" = $'homr/music_xml_generator.py\nhomr/score_reconstruction.py'
       - name: Publish only the verified two-file refactor
         env:
           GH_TOKEN: ${{ github.token }}
