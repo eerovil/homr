@@ -1,7 +1,9 @@
 import hashlib
+import json
 import lzma
 import os
 from pathlib import Path
+from threading import Lock
 from time import perf_counter
 
 import cv2
@@ -120,7 +122,15 @@ class ExtractResult:
         self.clefs_keys = clefs_keys
 
 
+# One latest model, not an unbounded pool of expensive sessions.
 _segnet_inference: Segnet | None = None
+_segnet_key: tuple[bool, str, str] | None = None
+_segnet_lock = Lock()
+
+
+def _model_key(use_gpu_inference: bool) -> tuple[bool, str, str]:
+    # Key the request, not Segnet.use_gpu: a GPU request may legitimately fall back.
+    return use_gpu_inference, segnet_path_onnx, segnet_path_onnx_fp16
 
 
 def extract_patch(image: NDArray, y: int, x: int, win_size: int) -> NDArray:
@@ -164,10 +174,6 @@ def inference(
     if step_size < 0:
         step_size = win_size // 2
 
-    global _segnet_inference  # noqa: PLW0603
-    if _segnet_inference is None:
-        _segnet_inference = Segnet(use_gpu_inference)
-
     image_org = cv2.cvtColor(image_org, cv2.COLOR_GRAY2BGR)
     image = np.transpose(image_org, (2, 0, 1)).astype(np.float32)
 
@@ -175,26 +181,38 @@ def inference(
     data: list[NDArray] = []
     batch: list[NDArray] = []
 
-    # Padding changes tile size, not tile count; use the same grid as merge_patches.
-    for y_loop in range(0, h, step_size):
-        y = min(y_loop, h - win_size)
-        for x_loop in range(0, w, step_size):
-            x = min(x_loop, w - win_size)
+    global _segnet_inference, _segnet_key  # noqa: PLW0603
+    # The session's I/O binding is mutable. Hold the lock through all batches,
+    # including copying their argmax maps, so neither bindings nor models can
+    # change midway through an image. Exceptions still release the lock.
+    with _segnet_lock:
+        key = _model_key(use_gpu_inference)
+        if _segnet_inference is None or _segnet_key != key:
+            # Publish only after construction succeeds; retain the last usable
+            # session/key if loading the replacement fails.
+            _segnet_inference = Segnet(use_gpu_inference)
+            _segnet_key = key
 
-            hop = extract_patch(image, y, x, win_size)
+        # Padding changes tile size, not tile count; use the same grid as merge_patches.
+        for y_loop in range(0, h, step_size):
+            y = min(y_loop, h - win_size)
+            for x_loop in range(0, w, step_size):
+                x = min(x_loop, w - win_size)
 
-            batch.append(hop)
+                hop = extract_patch(image, y, x, win_size)
 
-            if len(batch) == batch_size:
-                batch_out = _segnet_inference.run(np.stack(batch, axis=0))
-                for out in batch_out:
-                    data.append(np.argmax(out, axis=0))
-                batch.clear()
+                batch.append(hop)
 
-    if batch:
-        batch_out = _segnet_inference.run(np.stack(batch, axis=0))
-        for out in batch_out:
-            data.append(np.argmax(out, axis=0))
+                if len(batch) == batch_size:
+                    batch_out = _segnet_inference.run(np.stack(batch, axis=0))
+                    for out in batch_out:
+                        data.append(np.argmax(out, axis=0))
+                    batch.clear()
+
+        if batch:
+            batch_out = _segnet_inference.run(np.stack(batch, axis=0))
+            for out in batch_out:
+                data.append(np.argmax(out, axis=0))
 
     eprint(f"Segnet Inference time: {perf_counter() - t0}; batch_size {batch_size}")
 
@@ -223,8 +241,20 @@ def extract(
     img_path = Path(img_path_str)
     f_name = os.path.splitext(img_path.name)[0]
     npy_path = img_path.parent / f"{f_name}.npy"
-    # Old caches contain numerically averaged class IDs, not categorical votes.
-    cache_version = f"{segmentation_version}:categorical-vote-v1:{win_size}:{step_size}"
+    # Persisted masks must identify the same model request as the live cache.
+    # Shape and dtype matter too: equal raw bytes need not describe equal images.
+    cache_version = json.dumps(
+        (
+            segmentation_version,
+            "categorical-vote-v1",
+            _model_key(use_gpu_inference),
+            batch_size,
+            win_size,
+            step_size,
+            original_image.shape,
+            original_image.dtype.str,
+        )
+    )
     loaded_from_cache = False
     if npy_path.exists() and use_cache:
         eprint("Found a cache")
