@@ -37,6 +37,23 @@ jobs:
           echo "score_reconstruction $(git hash-object homr/score_reconstruction.py)"
           poetry run ruff check homr/music_xml_generator.py homr/score_reconstruction.py
           poetry run mypy homr/music_xml_generator.py homr/score_reconstruction.py
+          poetry run python - <<'PY'
+          from homr.music_xml_generator import (
+              SymbolChord,
+              TupletParser,
+              add_tuplet_start_stop,
+              find_common_division,
+              find_division_and_time_signature_nominator,
+              find_nominator_per_time_signature,
+              group_into_chords,
+              infer_meter_changes,
+              prevailing_length,
+              repair_bar_arithmetic,
+          )
+          assert all((SymbolChord, TupletParser, add_tuplet_start_stop, find_common_division,
+                      find_division_and_time_signature_nominator, find_nominator_per_time_signature,
+                      group_into_chords, infer_meter_changes, prevailing_length, repair_bar_arithmetic))
+          PY
           poetry run pytest -q --tb=short -o log_cli=false \
             tests/test_bar_arithmetic_repair.py \
             tests/test_inferred_meter_changes.py \
@@ -57,6 +74,6 @@ jobs:
           git add homr/music_xml_generator.py homr/score_reconstruction.py
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m 'Separate token-level score reconstruction from MusicXML serialization' \
-            -m 'Mechanically move the existing SymbolChord, tuplet, bar-arithmetic and meter reconstruction logic without changing its order or arithmetic. build_measures consumes ReconstructedVoice and legacy imports remain re-exported. Ruff, strict mypy and the focused reconstruction/serialization suite passed before publication.'
+            -m 'Mechanically move existing SymbolChord, tuplet, bar-arithmetic and meter reconstruction logic without changing order or arithmetic. build_measures consumes ReconstructedVoice and all moved public import paths remain re-exported. Ruff, strict mypy and focused reconstruction/serialization tests passed before publication.'
           git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
             push https://github.com/eerovil/homr.git HEAD:refs/heads/refactor/reconstruction-boundary
