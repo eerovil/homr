@@ -40,9 +40,7 @@ def acceptance_context() -> dict:
     memory = references.accepted()
     assert set(memory) >= EXPECTED_CASES
     paths = Config().filepaths
-    models = [
-        Path(name) for name in (segnet_path_onnx, paths.encoder_path, paths.decoder_path)
-    ]
+    models = [Path(name) for name in (segnet_path_onnx, paths.encoder_path, paths.decoder_path)]
     for model in models:
         require_model(model)
     return {
@@ -95,8 +93,15 @@ def test_real_recognition_meets_frozen_acceptance(
     counts = {
         name: getattr(result, name)
         for name in (
-            "agree", "voice", "pitch", "size", "timing", "meter", "unison",
-            "staves_page", "staves_homr",
+            "agree",
+            "voice",
+            "pitch",
+            "size",
+            "timing",
+            "meter",
+            "unison",
+            "staves_page",
+            "staves_homr",
         )
     }
     marks = references.marks(counts)
@@ -113,7 +118,8 @@ def test_real_recognition_meets_frozen_acceptance(
         "failures": failures,
         "faults": [
             {"where": row.where, "page": row.page, "homr": row.homr, "kind": row.kind}
-            for row in result.rows if row.kind != "agree"
+            for row in result.rows
+            if row.kind != "agree"
         ],
     }
     (evidence / "result.json").write_text(json.dumps(record, indent=2) + "\n")
