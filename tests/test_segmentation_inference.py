@@ -30,7 +30,9 @@ def test_short_image_uses_the_same_grid_for_inference_and_merging(
             return output
 
     model = FakeSegnet()
-    monkeypatch.setattr(segnet, "_segnet_inference", model)
+    monkeypatch.setattr(segnet, "_segnet_inference", None)
+    monkeypatch.setattr(segnet, "_segnet_key", None)
+    monkeypatch.setattr(segnet, "Segnet", lambda use_gpu: model)
     staff, symbols, rests, heads, clefs = segnet.inference(
         np.full((1, 3), 255, dtype=np.uint8), False, batch_size, 1, 2
     )
