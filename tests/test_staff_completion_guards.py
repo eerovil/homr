@@ -68,9 +68,7 @@ def test_out_of_range_selected_staff_fails_before_inference(
         IncompleteRecognitionError,
         match="Selected staff 2 does not exist; page has 2 staff rows",
     ):
-        parsing.parse_staffs(
-            Mock(), rows(2), np.zeros((1, 1)), Mock(), selected_staff=2
-        )
+        parsing.parse_staffs(Mock(), rows(2), np.zeros((1, 1)), Mock(), selected_staff=2)
 
     read.assert_not_called()
 
@@ -82,9 +80,7 @@ def test_last_existing_selected_staff_is_still_valid(
     read = Mock(return_value=[EncodedSymbol("note_4", "C4")])
     monkeypatch.setattr(parsing, "parse_staff_image", read)
 
-    result = parsing.parse_staffs(
-        Mock(), rows(2), np.zeros((1, 1)), Mock(), selected_staff=1
-    )
+    result = parsing.parse_staffs(Mock(), rows(2), np.zeros((1, 1)), Mock(), selected_staff=1)
 
     read.assert_called_once()
     assert [symbol.rhythm for symbol in result[0]] == ["note_4", "newline"]
