@@ -39,6 +39,25 @@ jobs:
         run: >-
           poetry run python -m pytest -q -rA --tb=short -o log_cli=false
           tests/test_recognition_fixtures.py
+      # Temporary acceptance diagnostic: same tests/runtime/weights on original main.
+      - name: Compare original main without changing reference criteria
+        if: always()
+        env:
+          HOMR_FIXTURE_EVIDENCE: ${{ runner.temp }}/homr-fixture-evidence/baseline
+        run: |
+          set -euo pipefail
+          root="$PWD"
+          baseline="$RUNNER_TEMP/homr-baseline"
+          python="$root/.venv/bin/python"
+          git worktree add --detach "$baseline" 7612214795bc6205f5ef4860ea10981446849f41
+          trap 'cd "$root"; git worktree remove --force "$baseline"' EXIT
+          cp tests/test_recognition_fixtures.py tests/model_requirements.py "$baseline/tests/"
+          while IFS= read -r model; do
+            relative="${model#"$root/"}"
+            ln -s "$model" "$baseline/$relative"
+          done < <("$python" -c 'from homr.segmentation.config import segnet_path_onnx; from homr.transformer.configs import Config; c=Config().filepaths; print(segnet_path_onnx, c.encoder_path, c.decoder_path, sep="\n")')
+          cd "$baseline"
+          PYTHONPATH="$baseline" "$python" -m pytest -q -rA --tb=short -o log_cli=false tests/test_recognition_fixtures.py
       - name: Verify original inputs and acceptance criteria stayed unchanged
         if: always()
         run: git diff --exit-code -- fixtures fixturecheck/references.json
