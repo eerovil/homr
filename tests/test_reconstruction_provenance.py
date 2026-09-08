@@ -29,9 +29,7 @@ def note(
         confidence = {
             "rhythm": {
                 "value": rhythm,
-                "alternatives": [
-                    {"value": value, "probability": 0.01} for value in alternatives
-                ],
+                "alternatives": [{"value": value, "probability": 0.01} for value in alternatives],
             }
         }
     return EncodedSymbol(
@@ -52,10 +50,9 @@ def barline() -> SymbolChord:
 
 
 def even_bar(quarters: int = 2) -> list[SymbolChord]:
-    return [
-        moment(note("note_4", "upper"), note("note_4", "lower"))
-        for _ in range(quarters)
-    ] + [barline()]
+    return [moment(note("note_4", "upper"), note("note_4", "lower")) for _ in range(quarters)] + [
+        barline()
+    ]
 
 
 def broken_bar() -> list[SymbolChord]:

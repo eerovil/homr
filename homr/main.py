@@ -42,6 +42,7 @@ from homr.note_detection import (
 from homr.onnx_providers import coreml_available, cuda_available, rocm_available
 from homr.pdf_utils import render_pdf_to_image
 from homr.resize import resize_image
+from homr.score_reconstruction import ReconstructionChange
 from homr.segmentation.config import segnet_path_onnx, segnet_path_onnx_fp16
 from homr.segmentation.inference_segnet import extract
 from homr.simple_logging import eprint
@@ -241,11 +242,19 @@ def process_image(
         eprint("Found title:", title)
 
         eprint("Writing XML", result_staffs)
-        xml = generate_xml(xml_generator_args, result_staffs, title)
+        reconstruction_changes: list[list[ReconstructionChange]] | None = (
+            [] if config.write_confidence else None
+        )
+        xml = generate_xml(
+            xml_generator_args,
+            result_staffs,
+            title,
+            reconstruction_changes=reconstruction_changes,
+        )
         ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
         if config.write_confidence:
             confidence_file = replace_extension(image_path, ".confidence.json")
-            _write_confidence(confidence_file, result_staffs)
+            _write_confidence(confidence_file, result_staffs, reconstruction_changes or [])
             eprint("Confidence was written to", confidence_file)
 
         eprint("Finished parsing " + str(len(result_staffs)) + " staves")
@@ -266,7 +275,11 @@ def process_image(
             debug_cleanup.clean_debug_files_from_previous_runs()
 
 
-def _write_confidence(path: str, staffs: list[list[EncodedSymbol]]) -> None:
+def _write_confidence(
+    path: str,
+    staffs: list[list[EncodedSymbol]],
+    reconstruction_changes: list[list[ReconstructionChange]] | None = None,
+) -> None:
     """Write scores for the symbols that survived score post-processing."""
     records = []
     for staff_index, symbols in enumerate(staffs):
@@ -294,8 +307,32 @@ def _write_confidence(path: str, staffs: list[list[EncodedSymbol]]) -> None:
                     "confidence": symbol.confidence,
                 }
             )
+    changes = [
+        {
+            "staff": staff_index,
+            "kind": change.kind,
+            "bar": change.bar,
+            "group": change.group,
+            "symbol": change.symbol,
+            "position": change.staff,
+            "pitch": change.pitch,
+            "before": change.before,
+            "after": change.after,
+            "reason": change.reason,
+        }
+        for staff_index, staff_changes in enumerate(reconstruction_changes or [])
+        for change in staff_changes
+    ]
     with open(path, "w") as file:
-        json.dump({"version": 1, "symbols": records}, file, indent=2)
+        json.dump(
+            {
+                "version": 1,
+                "symbols": records,
+                "reconstruction": {"version": 1, "changes": changes},
+            },
+            file,
+            indent=2,
+        )
         file.write("\n")
 
 
