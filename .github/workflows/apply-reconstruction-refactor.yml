@@ -1,0 +1,62 @@
+name: Apply reconstruction refactor
+on:
+  push:
+    branches: [refactor/reconstruction-boundary]
+permissions:
+  contents: read
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, '[apply-reconstruction]')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the locked development environment
+        run: |
+          python -m pip install -q poetry
+          make init-poetry
+      - name: Apply mechanical extraction and canonical formatting
+        run: |
+          set -euo pipefail
+          python .github/reconstruction-refactor.py
+          poetry run black homr/music_xml_generator.py homr/score_reconstruction.py
+          poetry run isort homr/music_xml_generator.py homr/score_reconstruction.py
+      - name: Verify exact locally reviewed output and focused behavior
+        run: |
+          set -euo pipefail
+          test "$(git hash-object homr/music_xml_generator.py)" = 70542bd2bb26d4b2f926fc78e949a25caacac4bb
+          test "$(git hash-object homr/score_reconstruction.py)" = bfa29b3fc72a28e46f29f1b7ea4fdcbe2fd8c699
+          poetry run ruff check homr/music_xml_generator.py homr/score_reconstruction.py
+          poetry run mypy homr/music_xml_generator.py homr/score_reconstruction.py
+          poetry run pytest -q --tb=short -o log_cli=false \
+            tests/test_bar_arithmetic_repair.py \
+            tests/test_inferred_meter_changes.py \
+            tests/test_time_signature_nominator.py \
+            tests/test_music_xml_generator.py \
+            tests/test_reread.py \
+            tests/test_stem_voice_hints.py
+          git diff --check
+          git diff --exit-code -- fixtures fixturecheck
+          test "$(git diff --name-only | sort)" = $'homr/music_xml_generator.py\nhomr/score_reconstruction.py'
+      - name: Publish only the verified two-file refactor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote="$(gh api repos/eerovil/homr/git/ref/heads/refactor/reconstruction-boundary --jq .object.sha)"
+          test "$remote" = "$GITHUB_SHA"
+          git add homr/music_xml_generator.py homr/score_reconstruction.py
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m 'Separate token-level score reconstruction from MusicXML serialization' \
+            -m 'Move the existing SymbolChord, tuplet, bar-arithmetic and meter reconstruction logic without changing its order. build_measures consumes a ReconstructedVoice. Legacy imports remain re-exported. Exact locally reviewed blob hashes and 115 focused tests verified before this commit.'
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push https://github.com/eerovil/homr.git HEAD:refs/heads/refactor/reconstruction-boundary
