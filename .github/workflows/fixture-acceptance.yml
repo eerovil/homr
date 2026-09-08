@@ -16,7 +16,6 @@ jobs:
     env:
       HOMR_REQUIRE_MODELS: "1"
       PYTHONDONTWRITEBYTECODE: "1"
-      HOMR_FIXTURE_EVIDENCE: ${{ runner.temp }}/homr-fixture-evidence
     steps:
       - uses: actions/checkout@v6
         with:
@@ -35,6 +34,8 @@ jobs:
       - name: Initialize CPU recognition models
         run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
       - name: Read and judge all five fixtures
+        env:
+          HOMR_FIXTURE_EVIDENCE: ${{ runner.temp }}/homr-fixture-evidence
         run: >-
           poetry run python -m pytest -q -rA --tb=short -o log_cli=false
           tests/test_recognition_fixtures.py
