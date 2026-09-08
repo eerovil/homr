@@ -21,6 +21,21 @@ from homr.simple_logging import eprint
 from homr.transformer.vocabulary import EncodedSymbol, SymbolDuration, sort_token_chords
 
 
+@dataclass(frozen=True)
+class ReconstructionChange:
+    """One deliberate change made after decoding and before serialization."""
+
+    kind: str
+    bar: int
+    group: int
+    symbol: int | None
+    staff: str | None
+    pitch: str | None
+    before: str | None
+    after: str
+    reason: str
+
+
 class SymbolChord:
     def __init__(self, symbols: list[EncodedSymbol], tuplet_mark: str = "") -> None:
         self.symbols = symbols
@@ -135,7 +150,9 @@ def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fra
     return lengths.pop() if len(lengths) == 1 else None
 
 
-def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
+def repair_bar_arithmetic(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
     """Take the decoder's second answer where its first one does not fit the bar.
 
     A misread note value is not silent: the bar it is in stops adding up. On
@@ -186,13 +203,15 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
     """
     bars = _bar_boundaries(voice)
     repairs = {}
-    for span, target in zip(bars, _bar_targets(voice, bars), strict=True):
+    for bar_number, (span, target) in enumerate(
+        zip(bars, _bar_targets(voice, bars), strict=True), start=1
+    ):
         if target is None:
             continue
         repair = _repair_for_bar(voice, span, target)
         if repair is not None:
             chord_index, symbol_index, rhythm, why = repair
-            repairs[(chord_index, symbol_index)] = (rhythm, why)
+            repairs[(chord_index, symbol_index)] = (rhythm, why, bar_number)
     if not repairs:
         return voice
     out = []
@@ -202,7 +221,21 @@ def repair_bar_arithmetic(voice: list[SymbolChord]) -> list[SymbolChord]:
             accepted_repair = repairs.get((chord_index, symbol_index))
             if accepted_repair is None:
                 continue
-            rhythm, why = accepted_repair
+            rhythm, why, bar_number = accepted_repair
+            if changes is not None:
+                changes.append(
+                    ReconstructionChange(
+                        kind="rhythm_repair",
+                        bar=bar_number,
+                        group=chord_index,
+                        symbol=symbol_index,
+                        staff=symbol.position,
+                        pitch=symbol.pitch,
+                        before=symbol.rhythm,
+                        after=rhythm,
+                        reason=why,
+                    )
+                )
             eprint(
                 f"Bar arithmetic: reading {symbol.pitch} as {rhythm} rather than "
                 f"{symbol.rhythm}, {why}"
@@ -448,7 +481,9 @@ def _length_with(
     return total
 
 
-def infer_meter_changes(voice: list[SymbolChord]) -> list[SymbolChord]:
+def infer_meter_changes(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
     """Write the time signature at a bar that plainly changed meter and read none.
 
     The vocabulary holds only denominators, so a change of numerator alone -- 3/4
@@ -480,7 +515,7 @@ def infer_meter_changes(voice: list[SymbolChord]) -> list[SymbolChord]:
     span_no = -1
     opens_span = True
     inserted: dict[int, SymbolChord] = {}
-    for start, end in bars:
+    for bar_number, (start, end) in enumerate(bars, start=1):
         signatures = [
             chord.symbols[0]
             for chord in voice[start:end]
@@ -496,9 +531,26 @@ def infer_meter_changes(voice: list[SymbolChord]) -> list[SymbolChord]:
         length = _corroborated_length(voice, (start, end))
         if length is None or length == declared[span_no]:
             continue
+        before = f"{int(declared[span_no] * int(denominator))}/{denominator}"
+        after = f"{int(length * int(denominator))}/{denominator}"
+        reason = "every detected staff agrees on the bar length"
+        if changes is not None:
+            changes.append(
+                ReconstructionChange(
+                    kind="meter_inference",
+                    bar=bar_number,
+                    group=start,
+                    symbol=None,
+                    staff=None,
+                    pitch=None,
+                    before=before,
+                    after=after,
+                    reason=reason,
+                )
+            )
         eprint(
             f"Bar length {length} contradicts the {declared[span_no]} in force and every "
-            f"staff agrees on it: writing a {int(length * int(denominator))}/{denominator}"
+            f"staff agrees on it: writing a {after}"
         )
         inserted[start] = SymbolChord([EncodedSymbol(f"timeSignature/{denominator}")])
         declared[span_no] = length
@@ -695,17 +747,21 @@ class ReconstructedVoice:
     division: int
     nominator: Fraction
     nominators: list[Fraction]
+    changes: tuple[ReconstructionChange, ...]
 
 
 def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     """Apply homr's musical reconstruction passes in their established order."""
-    groups = infer_meter_changes(
-        add_tuplet_start_stop(repair_bar_arithmetic(group_into_chords(voice)))
-    )
+    changes: list[ReconstructionChange] = []
+    groups = group_into_chords(voice)
+    groups = repair_bar_arithmetic(groups, changes)
+    groups = add_tuplet_start_stop(groups)
+    groups = infer_meter_changes(groups, changes)
     division, nominator = find_division_and_time_signature_nominator(groups)
     return ReconstructedVoice(
         groups=groups,
         division=division,
         nominator=nominator,
         nominators=find_nominator_per_time_signature(groups, nominator),
+        changes=tuple(changes),
     )

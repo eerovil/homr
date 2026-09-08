@@ -418,6 +418,10 @@ def parse_staffs(
     the rhythm and pitch information.
     """
     staffs = _ensure_same_number_of_staffs(staffs)
+    if selected_staff >= len(staffs):
+        raise IncompleteRecognitionError(
+            f"Selected staff {selected_staff} does not exist; page has {len(staffs)} staff rows"
+        )
     # For simplicity we call every staff in a multi staff a voice,
     # even if it's part of a grand staff.
     number_of_voices = _get_number_of_voices(staffs)
@@ -436,6 +440,8 @@ def parse_staffs(
             result_staff = _reread_if_doubtful(debug, i, staff, result_staff, image, config)
             if len(result_staff) == 0:
                 raise IncompleteRecognitionError(f"Staff {i}: no symbols were recognized")
+            if not any(symbol.rhythm.startswith(("note", "rest")) for symbol in result_staff):
+                raise IncompleteRecognitionError(f"Staff {i}: no notes or rests were recognized")
             result_staff.append(EncodedSymbol("newline"))
             result_for_voice.extend(result_staff)
             i += 1
