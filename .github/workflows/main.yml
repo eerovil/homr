@@ -33,11 +33,13 @@ jobs:
       - name: Init
         run: make init-poetry
 
-      - name: CI
-        run: make ci
-
       - name: Downloads models CPU
         run: poetry run homr --init --gpu no
+
+      - name: CI
+        env:
+          HOMR_REQUIRE_MODELS: "1"
+        run: make ci
 
       - name: Downloads models GPU
         run: poetry run homr --init --gpu force
