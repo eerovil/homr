@@ -33,29 +33,6 @@ jobs:
           poetry run python -m pip install -q 'pytest==9.0.2'
       - name: Initialize CPU recognition models
         run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
-      - name: Export a bounded local diagnostic bundle
-        run: |
-          set -euo pipefail
-          out="$RUNNER_TEMP/homr-debug-export"
-          mkdir -p "$out/wheels" "$out/models"
-          paths=(homr fixturecheck tests pyproject.toml poetry.lock fixtures/stem-direction-fixtures.json)
-          for name in hanget-soi kolme-kakea laulun-aika-s2 sammon-ryosto system4; do
-            paths+=("fixtures/$name.png" "fixtures/$name.musicxml")
-          done
-          git archive HEAD "${paths[@]}" | gzip > "$out/candidate.tar.gz"
-          git archive 7612214795bc6205f5ef4860ea10981446849f41 "${paths[@]}" | gzip > "$out/baseline.tar.gz"
-          git rev-parse HEAD > "$out/candidate.sha"
-          poetry run python -c 'from pathlib import Path; import os, shutil; from homr.segmentation.config import segnet_path_onnx; from homr.transformer.configs import Config; c=Config().filepaths; target=Path(os.environ["RUNNER_TEMP"])/"homr-debug-export/models"; [shutil.copyfile(p,target/Path(p).name) for p in (segnet_path_onnx,c.encoder_path,c.decoder_path)]'
-          python -m pip download --disable-pip-version-check -q --no-deps --only-binary=:all: \
-            --python-version 3.13 --implementation cp --abi cp313 \
-            --platform manylinux_2_27_x86_64 --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 \
-            --dest "$out/wheels" onnxruntime==1.24.1 rapidocr==3.7.0 pyclipper==1.4.0 flatbuffers==25.12.19
-      - name: Preserve bounded diagnostic bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: homr-debug-export
-          path: ${{ runner.temp }}/homr-debug-export
-          retention-days: 1
       - name: Read and judge all five fixtures
         env:
           HOMR_FIXTURE_EVIDENCE: ${{ runner.temp }}/homr-fixture-evidence
@@ -70,7 +47,8 @@ jobs:
           tests/test_model_requirements.py tests/test_stem_direction_fixtures.py
           tests/test_decoder_completion.py tests/test_recognition_failures.py
           tests/test_staff_parsing.py tests/test_staff_layout_safety.py
-          tests/test_transformer_model_reuse.py
+          tests/test_transformer_model_reuse.py tests/test_note_detection.py
+          tests/test_stem_recovery_attachment.py
       - name: Verify original inputs and acceptance criteria stayed unchanged
         if: always()
         run: git diff --exit-code -- fixtures fixturecheck/references.json

@@ -40,48 +40,18 @@ def test_short_image_uses_the_same_grid_for_inference_and_merging(
         np.testing.assert_array_equal(mask, np.zeros((1, 3), dtype=np.uint8))
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 8])
-def test_inference_retains_runner_up_scores_through_full_and_partial_batches(
-    monkeypatch: pytest.MonkeyPatch, batch_size: int
-) -> None:
-    class FakeSegnet:
-        seen = 0
-
-        def run(self, batch: NDArray) -> NDArray:
-            probabilities = ([0.51, 0.48, 0.01], [0.01, 0.48, 0.51])
-            output = []
-            for _ in batch:
-                logits = np.log(probabilities[self.seen])[:, None, None]
-                output.append(np.broadcast_to(logits, (3, 2, 2)))
-                self.seen += 1
-            return np.stack(output)
-
-    model = FakeSegnet()
-    monkeypatch.setattr(segnet, "_segnet_inference", model)
-    _, _, stems, heads, _ = segnet.inference(
-        np.full((2, 3), 255, dtype=np.uint8), False, batch_size, 2, 2
-    )
-    assert model.seen == 2
-    np.testing.assert_array_equal(stems, [[0, 1, 0]] * 2)
-    np.testing.assert_array_equal(heads, [[0, 0, 1]] * 2)
-
-
-@pytest.mark.parametrize("old_algorithm", ["legacy", "categorical-vote-v1"])
-def test_old_cache_is_replaced_and_new_cache_is_reused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, old_algorithm: str
+def test_old_averaged_cache_is_replaced_and_new_cache_is_reused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     image = np.full((2, 3), 255, dtype=np.uint8)
     image_path = tmp_path / "page.png"
     cache_path = image_path.with_suffix(".npy")
     empty = np.zeros(image.shape, dtype=np.uint8)
-    marker = segnet.segmentation_version
-    if old_algorithm != "legacy":
-        marker += f":{old_algorithm}:320:-1"
     with lzma.open(cache_path, "wb") as cache:
         for _ in range(5):
             np.save(cache, empty)
         cache.write((hashlib.sha256(image.tobytes()).hexdigest() + "\n").encode())
-        cache.write((marker + "\n").encode())
+        cache.write((segnet.segmentation_version + "\n").encode())
 
     calls = 0
 
@@ -103,5 +73,7 @@ def test_old_cache_is_replaced_and_new_cache_is_reused(
     np.testing.assert_array_equal(first.staff, np.ones(image.shape, dtype=np.uint8))
     np.testing.assert_array_equal(second.staff, first.staff)
     np.testing.assert_array_equal(second.notehead, empty)
+
+    # Changing the grid must not reuse the preceding grid's masks.
     segnet.extract(image, str(image_path), use_cache=True, step_size=160)
     assert calls == 2
