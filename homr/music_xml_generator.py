@@ -8,6 +8,7 @@ from fractions import Fraction
 
 from homr import constants
 from homr.score_reconstruction import (
+    ReconstructionChange,
     SymbolChord,
     TupletParser,
     add_tuplet_start_stop,
@@ -97,7 +98,10 @@ def build_identification() -> ET.Element:
 
 
 def generate_xml(
-    args: XmlGeneratorArguments, staffs: list[list[EncodedSymbol]], title: str
+    args: XmlGeneratorArguments,
+    staffs: list[list[EncodedSymbol]],
+    title: str,
+    reconstruction_changes: list[list[ReconstructionChange]] | None = None,
 ) -> ET.Element:
     root = ET.Element("score-partwise", version="4.0")
     root.append(build_work(title))
@@ -106,7 +110,21 @@ def generate_xml(
     has_two_staves_by_part = [_voice_has_two_staves(staff) for staff in staffs]
     root.append(build_part_list(has_two_staves_by_part))
     for index, staff in enumerate(staffs):
-        root.append(build_part(args, staff, index, has_two_staves_by_part[index]))
+        changes: list[ReconstructionChange] | None = (
+            [] if reconstruction_changes is not None else None
+        )
+        root.append(
+            build_part(
+                args,
+                staff,
+                index,
+                has_two_staves_by_part[index],
+                reconstruction_changes=changes,
+            )
+        )
+        if reconstruction_changes is not None:
+            assert changes is not None
+            reconstruction_changes.append(changes)
     return root
 
 
@@ -120,11 +138,21 @@ def _voice_has_two_staves(voice: list[EncodedSymbol]) -> bool:
 
 
 def build_part(
-    args: XmlGeneratorArguments, voice: list[EncodedSymbol], index: int, has_two_staves: bool
+    args: XmlGeneratorArguments,
+    voice: list[EncodedSymbol],
+    index: int,
+    has_two_staves: bool,
+    reconstruction_changes: list[ReconstructionChange] | None = None,
 ) -> ET.Element:
     part = ET.Element("part", id=get_part_id(index))
     is_first_part = index == 0
-    for measure in build_measures(args, voice, is_first_part, has_two_staves):
+    for measure in build_measures(
+        args,
+        voice,
+        is_first_part,
+        has_two_staves,
+        reconstruction_changes=reconstruction_changes,
+    ):
         part.append(measure)
     convert_ties(part)
     return part
@@ -135,6 +163,7 @@ def build_measures(
     voice: list[EncodedSymbol],
     is_first_part: bool,
     has_two_staves: bool = False,
+    reconstruction_changes: list[ReconstructionChange] | None = None,
 ) -> list[ET.Element]:
     clefs: dict[int, tuple[str, int, int]] = {}
 
@@ -146,6 +175,8 @@ def build_measures(
 
     measure_number = 1
     reconstructed = reconstruct_voice(voice)
+    if reconstruction_changes is not None:
+        reconstruction_changes.extend(reconstructed.changes)
     groups = reconstructed.groups
     division = reconstructed.division
     state = ConversionState(division, reconstructed.nominator, reconstructed.nominators)
