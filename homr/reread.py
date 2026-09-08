@@ -272,7 +272,9 @@ def _coverage_loss(fused: list[EncodedSymbol], candidate: list[EncodedSymbol]) -
     if len(candidate_bars) != len(fused_bars):
         return f"bar count {len(candidate_bars)} against {len(fused_bars)}"
 
-    for bar_no, (before, after) in enumerate(zip(fused_bars, candidate_bars, strict=True), start=1):
+    for bar_no, (before, after) in enumerate(
+        zip(fused_bars, candidate_bars, strict=True), start=1
+    ):
         before_counts = _coverage(before)
         after_counts = _coverage(after)
         for staff, (before_timed, before_notes) in before_counts.items():
