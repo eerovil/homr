@@ -24,8 +24,6 @@ jobs:
         run: |
           python -m pip install -q poetry
           make init-poetry
-          # Dependency setup currently rewrites lock metadata under Poetry 2.4;
-          # it is runner noise, not part of this refactor.
           git restore -- poetry.lock pyproject.toml
           test -z "$(git status --porcelain -- poetry.lock pyproject.toml)"
       - name: Apply mechanical extraction and canonical formatting
@@ -65,8 +63,14 @@ jobs:
             tests/test_music_xml_generator.py \
             tests/test_reread.py \
             tests/test_stem_voice_hints.py
+          # Poetry/plugin commands can rewrite project metadata while resolving
+          # the disposable environment. Restore it again before enforcing the
+          # actual source boundary.
+          git restore -- poetry.lock pyproject.toml
           git diff --check
           git diff --exit-code -- fixtures fixturecheck
+          echo 'Tracked changes after verification:'
+          git status --short
           test "$(git diff --name-only | sort)" = $'homr/music_xml_generator.py\nhomr/score_reconstruction.py'
       - name: Publish only the verified two-file refactor
         env:
