@@ -1,0 +1,51 @@
+name: Five-fixture recognition
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recognition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOMR_REQUIRE_MODELS: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      HOMR_FIXTURE_EVIDENCE: ${{ runner.temp }}/homr-fixture-evidence
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked inference dependencies and pytest
+        run: |
+          python -m pip install poetry
+          poetry config virtualenvs.in-project true
+          poetry install --only main --extras cpu
+          poetry run python -m pip install 'pytest==9.0.2'
+      - name: Initialize CPU recognition models
+        run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
+      - name: Read and judge all five fixtures
+        run: >-
+          poetry run python -m pytest -q -rA --tb=short -o log_cli=false
+          tests/test_recognition_fixtures.py
+      - name: Verify original inputs and acceptance criteria stayed unchanged
+        if: always()
+        run: git diff --exit-code -- fixtures fixturecheck/references.json
+      - name: Preserve per-case logs, MusicXML and measured results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: five-fixture-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/homr-fixture-evidence
+          if-no-files-found: warn
+          retention-days: 14
