@@ -494,6 +494,10 @@ def _reach_towards_head(bridge: NDArray, column: int, near: int, edge: int, limi
     unanchored gap-joiner does, and it hands every stub of noise the length the
     floor below was keeping it short of.
     """
+    # Horizontal cleanup can shift a run sideways. Do not join its apparent
+    # endpoint to unrelated ink unless the source-backed bridge contains it.
+    if not bridge[near, column]:
+        return near
     step = 1 if edge > near else -1
     reached = near
     for offset in range(1, limit + 1):
@@ -516,6 +520,7 @@ def _longest_run(
     height = int(notehead.size[1])
     edge = y - height // 2 if direction == StemDirection.UP else y + height // 2
     best: tuple[int, int, int, int] | None = None
+    best_attached = False
     for column in columns:
         if not 0 <= column < ink.shape[1]:
             continue
@@ -534,7 +539,13 @@ def _longest_run(
                 return -max(2, height * 0.1) <= (edge - near) * towards <= height * 0.65
 
             near = bottom if direction == StemDirection.UP else top
-            if not reaches(near) and bridge is not None:
+            # A permissive run-search hit can still fail final attachment. On
+            # the last-resort pass, mend that gap too instead of disabling
+            # recovery when a predicted notehead grows by a couple of pixels.
+            attachment_gap = (notehead.center[1] - near) * towards - notehead.size[1] / 2
+            if bridge is not None and (
+                not reaches(near) or attachment_gap > notehead.size[1] * ATTACHMENT_SLACK
+            ):
                 # The gap may be the staff line this stem crosses rather than
                 # paper. Ask the mended ink, and only for a run that was going
                 # to be thrown away: a run already reaching its head is left
@@ -545,8 +556,21 @@ def _longest_run(
                 else:
                     top = near
             attached = reaches(near)
-            if attached and (best is None or length > best[0]):
+            head_attached = False
+            if attached and bridge is not None:
+                candidate = RotatedBoundingBox(
+                    ((column, (top + bottom) / 2), (3, bottom - top + 1), 0),
+                    np.empty((0, 2)),
+                )
+                head_attached = is_attached(notehead, candidate)
+            # Preserve the raw-length floor and ranking against short noise.
+            # For equally long recovery candidates, prefer the one that also
+            # passes final attachment instead of whichever was visited first.
+            if attached and (
+                best is None or (length, head_attached) > (best[0], best_attached)
+            ):
                 best = (length, column, top, bottom)
+                best_attached = head_attached
     if best is None or not height * 0.5 <= best[0] <= height * 5:
         return None
     _, column, top, bottom = best
@@ -660,8 +684,8 @@ def join_stem_fragments(
     """Put a stem back together where staff lines have cut it into pieces.
 
     The segmentation loses a stem's ink where a staff line crosses it, so a long
-    stem arrives as two or three short boxes in one column -- each too short to
-    be believed on its own.  Pieces that line up and nearly touch are one stem.
+    stem arrives as two or three short boxes in one column -- each too short or
+    too far from its notehead to be read as a stem.
     Joining is repeated until nothing more joins, since a piece can bridge two
     that were too far apart to reach each other.
     """
