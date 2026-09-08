@@ -48,7 +48,10 @@ for node in tree.body:
     if not isinstance(node, ast.Assign | ast.AnnAssign):
         continue
     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-    if not any(isinstance(target, ast.Name) and target.id == "_REPAIR_WITNESS_BARS" for target in targets):
+    if not any(
+        isinstance(target, ast.Name) and target.id == "_REPAIR_WITNESS_BARS"
+        for target in targets
+    ):
         continue
     assert node.end_lineno is not None
     segments.append((node.lineno, node.end_lineno, "".join(lines[node.lineno - 1 : node.end_lineno])))
@@ -69,7 +72,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import cast
 
 import numpy as np
 
@@ -79,10 +81,6 @@ from homr.transformer.vocabulary import EncodedSymbol, SymbolDuration, sort_toke
 '''
 BODY = "\n\n".join(segment.rstrip() for _, _, segment in sorted(segments)) + "\n\n"
 BODY = BODY.replace('list["SymbolChord"]', "list[SymbolChord]")
-BODY = BODY.replace(
-    "    nominator: Fraction = np.median(measure_duration)  # type: ignore\n",
-    "    nominator = cast(Fraction, np.median(measure_duration))\n",
-)
 FOOTER = '''@dataclass(frozen=True)
 class ReconstructedVoice:
     """The complete token-level musical structure ready for serialization."""
