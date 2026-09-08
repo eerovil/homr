@@ -1,0 +1,60 @@
+name: Apply reviewed CI cleanup
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: apply-reviewed-ci-cleanup-53
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: >-
+      github.repository == 'eerovil/homr' &&
+      github.event.pull_request.number == 53 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'fix/complete-architecture-ci'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned formatting tools on the disposable runner
+        run: python -m pip install -q black==26.1.0 isort==7.0.0 ruff==0.15.1
+      - name: Verify the recipe and original source
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git hash-object .github/ci-cleanup.py)" = c0f5239edd1bd2f59379dfd674929c05e4f764e0
+          git merge-base --is-ancestor 0919c24230200c485811866b29ee41c429063b14 HEAD
+          python - <<'PY'
+          import subprocess
+          expected = ['.github/ci-cleanup.py', '.github/workflows/apply-ci-cleanup.yml', '.github/workflows/ci-diagnosis.yml']
+          changed = subprocess.check_output(['git', 'diff', '--name-only', '0919c24230200c485811866b29ee41c429063b14', 'HEAD'], text=True).splitlines()
+          assert changed == expected, ('Source moved after local validation', changed)
+          PY
+          git diff --exit-code
+      - name: Reproduce and hash-verify the already tested cleanup
+        run: python .github/ci-cleanup.py
+      - name: Publish only the verified source files to this draft branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          remote="$(gh api repos/eerovil/homr/git/ref/heads/fix/complete-architecture-ci --jq .object.sha)"
+          test "$remote" = "$EXPECTED_HEAD"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m 'Restore strict lint and typing; repair polyphonic test setup' \
+            -m 'Exact 36-file source matches the locally tested SHA-256 3123df059998acda6201378643f1ae64d43832612ca0b883f4f5068bb7ef49c0. All 479 locally runnable tests passed, including five real recognition fixtures. Full locked CI remains required. No reference, known-gap, acceptance, model or production changes.'
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push https://github.com/eerovil/homr.git HEAD:refs/heads/fix/complete-architecture-ci
