@@ -34,7 +34,7 @@ def test_matching_tiles_reconstruct_every_pixel_without_padding(
     height, width = shape
     win_size = 4
     expected = (np.arange(height * width).reshape(shape) % 6).astype(np.uint8)
-    patches = []
+    patches: list[np.ndarray] = []
     for iy in range(0, height, step_size):
         y0 = max(0, min(iy, height - win_size))
         for ix in range(0, width, step_size):
@@ -50,7 +50,7 @@ def test_matching_tiles_reconstruct_every_pixel_without_padding(
 
 @pytest.mark.parametrize("dtype", [np.uint8, np.int64])
 def test_disjoint_tiles_preserve_labels_and_dtype(dtype: type) -> None:
-    patches = [np.full((2, 2), label, dtype=dtype) for label in (2, 4)]
+    patches: list[np.ndarray] = [np.full((2, 2), label, dtype=dtype) for label in (2, 4)]
     result = merge_patches(patches, (2, 4), win_size=2, step_size=2)
     np.testing.assert_array_equal(result, [[2, 2, 4, 4], [2, 2, 4, 4]])
     assert result.dtype == dtype

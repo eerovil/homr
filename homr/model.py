@@ -148,7 +148,9 @@ class Note(SymbolOnStaff):
         self.stem = stem
         self.circle_of_fifth = 0
         self.stem_direction = stem_direction
-        self.stem_directions = stem_directions or ([] if stem_direction is None else [stem_direction])
+        self.stem_directions = stem_directions or (
+            [] if stem_direction is None else [stem_direction]
+        )
         self.beams: list[RotatedBoundingBox] = []
         self.flags: list[RotatedBoundingBox] = []
 

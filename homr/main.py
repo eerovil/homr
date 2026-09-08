@@ -304,7 +304,9 @@ def _load_score_settings(path: str) -> RhythmSettings:
         with open(path) as file:
             data = json.load(file)
     except (OSError, json.JSONDecodeError) as error:
-        raise InvalidProgramArgumentException(f"Could not read score settings {path}: {error}") from error
+        raise InvalidProgramArgumentException(
+            f"Could not read score settings {path}: {error}"
+        ) from error
     if not isinstance(data, dict):
         raise InvalidProgramArgumentException("score settings must be a JSON object")
     try:

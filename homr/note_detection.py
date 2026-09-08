@@ -66,7 +66,9 @@ class NoteheadWithStem(DebugDrawable):
         self.notehead = notehead
         self.stem = stem
         self.stem_direction = stem_direction
-        self.stem_directions = stem_directions or ([] if stem_direction is None else [stem_direction])
+        self.stem_directions = stem_directions or (
+            [] if stem_direction is None else [stem_direction]
+        )
 
     def draw_onto_image(self, img: NDArray, color: tuple[int, int, int] = (255, 0, 0)) -> None:
         self.notehead.draw_onto_image(img, color)
@@ -175,7 +177,7 @@ def shed_staff_lines(noteheads: NDArray, staff: NDArray) -> NDArray:
     body = ((noteheads > 0) & (thickness >= space * BODY_SHARE)).astype(np.uint8)
     shed = noteheads.copy()
     count, clumps, stats, _ = cv2.connectedComponentsWithStats(
-        (noteheads > 0).astype(np.uint8), 8
+        (noteheads > 0).astype(np.uint8), connectivity=8
     )
     for label in range(1, count):
         left, top, width, height = stats[label][:4]
@@ -247,9 +249,11 @@ def shed_thin_ends(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> cvt.
 def check_bbox_size(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cvt.Rect]:
     """Split a clump of ink into noteheads, and rescue what is left too wide."""
     return [
-        box
-        if box[2] - box[0] <= MAX_NOTEHEAD_WIDTH * unit_size
-        else shed_thin_ends(box, noteheads, unit_size)
+        (
+            box
+            if box[2] - box[0] <= MAX_NOTEHEAD_WIDTH * unit_size
+            else shed_thin_ends(box, noteheads, unit_size)
+        )
         for box in _split_bbox(bbox, noteheads, unit_size)
     ]
 
@@ -258,7 +262,6 @@ def _split_bbox(bbox: cvt.Rect, noteheads: NDArray, unit_size: float) -> list[cv
     note_w = constants.NOTEHEAD_SIZE_RATIO * unit_size
     note_h = unit_size
     w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
 
     new_bbox: list[cvt.Rect] = []
     region = noteheads[bbox[1] : bbox[3], bbox[0] : bbox[2]]
@@ -390,17 +393,11 @@ def split_notehead_ellipse(
     for box in split_boxes:
         center = get_center(box)
         size = (box[2] - box[0], box[3] - box[1])
-        result.append(
-            BoundingEllipse(
-                (center, size, 0), notehead.contours, notehead.debug_id
-            )
-        )
+        result.append(BoundingEllipse((center, size, 0), notehead.contours, notehead.debug_id))
     return result
 
 
-def stem_direction(
-    notehead: BoundingEllipse, stem: RotatedBoundingBox
-) -> StemDirection | None:
+def stem_direction(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> StemDirection | None:
     """Which way a stem points, by the side of the notehead it is drawn on.
 
     Standard engraving puts an up stem on the right of the head and a down stem
@@ -457,7 +454,7 @@ def _without_horizontal_ink(source_image: NDArray) -> tuple[NDArray, NDArray]:
     """The scan's ink, and the same with its long horizontal runs taken out."""
     ink = (source_image < 180).astype(np.uint8)
     horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 12), np.uint8))
-    return ink, ink & (1 - horizontal)
+    return ink, ink & (1 - horizontal.astype(np.uint8))
 
 
 def vertical_ink(source_image: NDArray) -> NDArray:
@@ -566,9 +563,7 @@ def _longest_run(
             # Preserve the raw-length floor and ranking against short noise.
             # For equally long recovery candidates, prefer the one that also
             # passes final attachment instead of whichever was visited first.
-            if attached and (
-                best is None or (length, head_attached) > (best[0], best_attached)
-            ):
+            if attached and (best is None or (length, head_attached) > (best[0], best_attached)):
                 best = (length, column, top, bottom)
                 best_attached = head_attached
     if best is None or not height * 0.5 <= best[0] <= height * 5:
@@ -678,9 +673,7 @@ def belongs_to_another_notehead(
     )
 
 
-def join_stem_fragments(
-    stems: list[RotatedBoundingBox], unit: float
-) -> list[RotatedBoundingBox]:
+def join_stem_fragments(stems: list[RotatedBoundingBox], unit: float) -> list[RotatedBoundingBox]:
     """Put a stem back together where staff lines have cut it into pieces.
 
     The segmentation loses a stem's ink where a staff line crosses it, so a long
@@ -783,7 +776,7 @@ def stems_of_notehead(
         )
         for direction in StemDirection
     }
-    return [longest[direction] for direction in StemDirection if longest[direction] is not None]
+    return [stem for stem in longest.values() if stem is not None]
 
 
 def combine_noteheads_with_stems(
@@ -805,7 +798,9 @@ def combine_noteheads_with_stems(
         if not found:
             result.append(NoteheadWithStem(notehead, None, None))
             continue
-        directions = [stem_direction(notehead, stem) for stem in found]
+        directions = [
+            direction for stem in found if (direction := stem_direction(notehead, stem)) is not None
+        ]
         stem = max(found, key=lambda candidate: candidate.size[1])
         direction = directions[0] if len(directions) == 1 else None
         result.append(NoteheadWithStem(notehead, stem, direction, directions))

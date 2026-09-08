@@ -265,9 +265,7 @@ barline . . . . ."""
 
         # The rest keeps its own length and its own place, so the two overlap --
         # which is how they come out as the two voices the page prints.
-        voices = {
-            _pitch(note): _voice(note) for note in _notes(measure) if _staff(note) == "1"
-        }
+        voices = {_pitch(note): _voice(note) for note in _notes(measure) if _staff(note) == "1"}
         self.assertNotEqual(voices["rest"], voices["E"])
 
     def test_a_whole_bar_rest_does_not_swallow_them_either(self) -> None:
@@ -418,9 +416,22 @@ barline . . . . ."""
         ET.SubElement(first, "stem").text = "down"
         second = self._build_test_note(duration=4, staff=1, voice=1)
         ET.SubElement(second, "stem").text = "down"
-        measure.extend([first, self._build_test_backup(duration=4), second])
+        # Stem direction identifies a voice only on a polyphonic staff.
+        up = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(up, "stem").text = "up"
+        measure.extend(
+            [
+                up,
+                self._build_test_backup(duration=4),
+                first,
+                self._build_test_backup(duration=4),
+                second,
+            ]
+        )
 
         rebalance_measure_voices(measure)
+
+        self.assertEqual(self._read_note_voice(up), "1")
 
         self.assertEqual(self._read_note_voice(first), "2")
         self.assertEqual(self._read_note_voice(second), "2")
@@ -430,12 +441,27 @@ barline . . . . ."""
         first = self._build_test_note(duration=4, staff=1, voice=1)
         ET.SubElement(first, "stem").text = "down"
         second = self._build_test_note(duration=4, staff=1, voice=1, is_chord=True)
-        measure.extend([first, second])
+        up = self._build_test_note(duration=4, staff=1, voice=1)
+        ET.SubElement(up, "stem").text = "up"
+        measure.extend([up, self._build_test_backup(duration=4), first, second])
 
         rebalance_measure_voices(measure)
 
+        self.assertEqual(self._read_note_voice(up), "1")
+
         self.assertEqual(self._read_note_voice(first), "2")
         self.assertEqual(self._read_note_voice(second), "2")
+
+    def test_rebalance_measure_voices_keeps_a_lone_down_stem_in_voice_one(self) -> None:
+        measure = ET.Element("measure")
+        note = self._build_test_note(duration=4, staff=1, voice=2)
+        ET.SubElement(note, "stem").text = "down"
+        measure.append(note)
+
+        rebalance_measure_voices(measure)
+
+        self.assertEqual(self._read_note_voice(note), "1")
+        self.assertEqual(note.findtext("stem"), "down")
 
     def _build_test_note(
         self, duration: int, staff: int, voice: int, is_chord: bool = False

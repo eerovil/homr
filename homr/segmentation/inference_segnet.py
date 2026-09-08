@@ -20,7 +20,7 @@ from homr.segmentation.config import (
     segnet_path_onnx,
     segnet_path_onnx_fp16,
 )
-from homr.segmentation.patches import merge_patches as merge_patches
+from homr.segmentation.patches import merge_patches as merge_patches  # noqa: PLC0414
 from homr.simple_logging import eprint
 from homr.type_definitions import NDArray
 

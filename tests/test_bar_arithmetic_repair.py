@@ -29,13 +29,21 @@ silence of the stream it stands in, so the column it sits in is one the tokens
 are known not to line up.
 """
 
+from __future__ import annotations
+
 from fractions import Fraction
 
 from homr.music_xml_generator import SymbolChord, repair_bar_arithmetic
 from homr.transformer.vocabulary import EncodedSymbol
 
 
-def note(rhythm, position="upper", stem=None, alternatives=(), pitch="C4"):
+def note(
+    rhythm: str,
+    position: str = "upper",
+    stem: str | None = None,
+    alternatives: tuple[str, ...] = (),
+    pitch: str = "C4",
+) -> EncodedSymbol:
     """One decoded note, carrying the readings the decoder ranked under it."""
     confidence = None
     if alternatives:
@@ -54,15 +62,17 @@ def note(rhythm, position="upper", stem=None, alternatives=(), pitch="C4"):
     )
 
 
-def moment(*symbols):
+def moment(*symbols: EncodedSymbol) -> SymbolChord:
     return SymbolChord(list(symbols))
 
 
-def barline():
+def barline() -> SymbolChord:
     return SymbolChord([EncodedSymbol("barline")])
 
 
-def even_bar(quarters=2, positions=("upper", "lower")):
+def even_bar(
+    quarters: int = 2, positions: tuple[str, ...] = ("upper", "lower")
+) -> list[SymbolChord]:
     """A bar of plain quarter notes on each staff, and its barline."""
     return [
         moment(*[note("note_4", position, stem="up") for position in positions])
@@ -70,7 +80,7 @@ def even_bar(quarters=2, positions=("upper", "lower")):
     ] + [barline()]
 
 
-def rhythms(voice, position="upper"):
+def rhythms(voice: list[SymbolChord], position: str = "upper") -> list[str]:
     return [
         symbol.rhythm
         for chord in voice
@@ -79,7 +89,9 @@ def rhythms(voice, position="upper"):
     ]
 
 
-def hanget_soi_bar_2(alternatives=("note_4.", "note_4", "note_2.")):
+def hanget_soi_bar_2(
+    alternatives: tuple[str, ...] = ("note_4.", "note_4", "note_2.")
+) -> list[SymbolChord]:
     """The shape of the bar this exists for, tokens and stems as homr read it.
 
     Voice 1 is a dotted quarter, a 16th rest and a 16th; voice 2 is a half chord
@@ -102,7 +114,7 @@ def hanget_soi_bar_2(alternatives=("note_4.", "note_4", "note_2.")):
     ]
 
 
-def system(*bars):
+def system(*bars: list[SymbolChord]) -> list[SymbolChord]:
     """A system of bars, the first two of them read cleanly so a bar has a length."""
     voice = []
     for bar in bars:
@@ -113,13 +125,13 @@ def system(*bars):
 # --- the bar this exists for ---
 
 
-def test_the_half_the_page_prints_as_a_dotted_quarter_is_corrected():
+def test_the_half_the_page_prints_as_a_dotted_quarter_is_corrected() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
     repaired = repair_bar_arithmetic(voice)
     assert rhythms(repaired)[2:5] == ["note_4.", "note_2", "note_2"]
 
 
-def test_the_corrected_bar_then_adds_up():
+def test_the_corrected_bar_then_adds_up() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
     repaired = repair_bar_arithmetic(voice)
     upper = sum(
@@ -133,7 +145,7 @@ def test_the_corrected_bar_then_adds_up():
     assert upper == Fraction(1, 2)
 
 
-def test_a_bar_that_already_adds_up_is_left_alone():
+def test_a_bar_that_already_adds_up_is_left_alone() -> None:
     voice = system(even_bar(), even_bar(), even_bar())
     assert repair_bar_arithmetic(voice) is voice
 
@@ -141,20 +153,20 @@ def test_a_bar_that_already_adds_up_is_left_alone():
 # --- the refusals ---
 
 
-def test_a_chord_head_is_never_shortened_on_its_own():
+def test_a_chord_head_is_never_shortened_on_its_own() -> None:
     """The two stems are the same, so the two notes are one chord the page drew."""
     voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
     voice[3].symbols[0].stem_direction = "down"
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_a_note_with_no_stem_beside_another_is_never_shortened():
+def test_a_note_with_no_stem_beside_another_is_never_shortened() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
     voice[3].symbols[0].stem_direction = None
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_two_alternatives_the_moments_cannot_choose_between_are_refused():
+def test_two_alternatives_the_moments_cannot_choose_between_are_refused() -> None:
     """Either eighth could be the 16th, and both sit past the other staff's last
     moment, so nothing about when they sound tells them apart."""
     voice = system(
@@ -173,21 +185,21 @@ def test_two_alternatives_the_moments_cannot_choose_between_are_refused():
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_the_value_the_page_prints_has_to_be_one_the_decoder_offered():
+def test_the_value_the_page_prints_has_to_be_one_the_decoder_offered() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(alternatives=("note_4", "note_1")), even_bar())
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_a_rest_is_never_read_as_a_note():
+def test_a_rest_is_never_read_as_a_note() -> None:
     """Only the rest could fix this bar, and only by becoming something it is not."""
     voice = system(even_bar(), hanget_soi_bar_2(alternatives=()), even_bar())
-    voice[4].symbols[0].confidence["rhythm"]["alternatives"] = [
-        {"value": "note_2", "probability": 0.01}
-    ]
+    confidence = voice[4].symbols[0].confidence
+    assert confidence is not None
+    confidence["rhythm"]["alternatives"] = [{"value": "note_2", "probability": 0.01}]
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_one_staff_is_never_enough():
+def test_one_staff_is_never_enough() -> None:
     """A system printing one staff has nothing in the bar to disagree with it."""
     voice = system(
         even_bar(positions=("upper",)),
@@ -202,29 +214,29 @@ def test_one_staff_is_never_enough():
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_the_bar_that_opens_a_system_is_never_repaired():
+def test_the_bar_that_opens_a_system_is_never_repaired() -> None:
     """That is where an anacrusis is, and a pickup is a bar short of its meter."""
     voice = system(hanget_soi_bar_2(), even_bar(), even_bar())
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_one_clean_bar_is_not_a_meter():
+def test_one_clean_bar_is_not_a_meter() -> None:
     voice = system(even_bar(), hanget_soi_bar_2())
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_a_bar_holding_a_tuplet_is_left_alone():
+def test_a_bar_holding_a_tuplet_is_left_alone() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(), even_bar())
     voice[5].symbols[0].rhythm = "note_12"
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_a_staff_two_notes_adrift_is_left_alone_when_nothing_single_fixes_it():
+def test_a_staff_two_notes_adrift_is_left_alone_when_nothing_single_fixes_it() -> None:
     voice = system(even_bar(), hanget_soi_bar_2(alternatives=("note_4",)), even_bar())
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_the_repair_is_measured_against_the_meter_the_bars_agree_on():
+def test_the_repair_is_measured_against_the_meter_the_bars_agree_on() -> None:
     """Three-quarter bars around it, so the target is three and not two."""
     voice = system(
         even_bar(3),
@@ -244,7 +256,7 @@ def test_the_repair_is_measured_against_the_meter_the_bars_agree_on():
 # --- when more than one alternative fits, the moments are asked ---
 
 
-def hanget_soi_bar_3():
+def hanget_soi_bar_3() -> list[SymbolChord]:
     """Bar 3 of the same fixture, tokens, stems and alternatives as homr read it.
 
     The bass sings a quarter and two beamed eighths over a dotted eighth, a 16th
@@ -272,21 +284,29 @@ def hanget_soi_bar_3():
         moment(
             note("note_16", "upper", stem="up", pitch="E5"),
             note(
-                "note_16", "lower", stem="down",
-                alternatives=("note_4", "note_8..", "note_32"), pitch="B2",
+                "note_16",
+                "lower",
+                stem="down",
+                alternatives=("note_4", "note_8..", "note_32"),
+                pitch="B2",
             ),
         ),
         moment(
             note("note_8", "upper", stem="up", pitch="A5"),
             note("note_4", "lower", stem="down", alternatives=("note_8",), pitch="A2"),
             note(
-                "note_16", "lower", stem="up",
-                alternatives=("note_8", "note_16.", "note_4"), pitch="A3",
+                "note_16",
+                "lower",
+                stem="up",
+                alternatives=("note_8", "note_16.", "note_4"),
+                pitch="A3",
             ),
         ),
         moment(
             note(
-                "note_8", "lower", stem="up",
+                "note_8",
+                "lower",
+                stem="up",
                 alternatives=("note_16", "note_8.", "note_32", "note_4", "note_8.."),
                 pitch="G3",
             ),
@@ -297,22 +317,31 @@ def hanget_soi_bar_3():
     ]
 
 
-def test_the_moments_pick_the_eighth_the_page_prints():
+def test_the_moments_pick_the_eighth_the_page_prints() -> None:
     """Four alternatives close the bar; only one leaves the two staves in step."""
     voice = system(even_bar(), hanget_soi_bar_3(), even_bar())
     assert rhythms(repair_bar_arithmetic(voice), "lower")[2:8] == [
-        "note_8.", "note_4", "note_16", "note_4", "note_8", "note_8",
+        "note_8.",
+        "note_4",
+        "note_16",
+        "note_4",
+        "note_8",
+        "note_8",
     ]
 
 
-def test_the_note_the_page_prints_lands_on_the_beat_the_other_staff_dates_it_at():
+def test_the_note_the_page_prints_lands_on_the_beat_the_other_staff_dates_it_at() -> None:
     """The treble adds up and puts that moment at beat 1.5; so must the bass."""
     repaired = repair_bar_arithmetic(system(even_bar(), hanget_soi_bar_3(), even_bar()))
-    assert _lower_beats(repaired[3:9]) == [Fraction(0), Fraction(3, 16), Fraction(4, 16),
-                                           Fraction(6, 16)]
+    assert _lower_beats(repaired[3:9]) == [
+        Fraction(0),
+        Fraction(3, 16),
+        Fraction(4, 16),
+        Fraction(6, 16),
+    ]
 
 
-def _lower_beats(bar):
+def _lower_beats(bar: list[SymbolChord]) -> list[Fraction]:
     """Where each of the lower staff's moments starts, on its own cursor."""
     beats, cursor = [], Fraction(0)
     for chord in bar:
@@ -327,7 +356,7 @@ def _lower_beats(bar):
     return beats
 
 
-def test_the_moments_are_only_asked_when_the_arithmetic_has_already_refused():
+def test_the_moments_are_only_asked_when_the_arithmetic_has_already_refused() -> None:
     """Bar 2's staves disagree under the reading the page prints, and it still repairs.
 
     A moment is only approximately a column of the page: here a 16th rest
@@ -338,7 +367,7 @@ def test_the_moments_are_only_asked_when_the_arithmetic_has_already_refused():
     assert rhythms(repair_bar_arithmetic(voice))[2] == "note_4."
 
 
-def test_a_candidate_that_moves_a_shared_moment_out_of_step_is_not_taken():
+def test_a_candidate_that_moves_a_shared_moment_out_of_step_is_not_taken() -> None:
     """Shortening the second note would leave the staves apart at the second moment."""
     voice = system(
         even_bar(3),
@@ -355,11 +384,13 @@ def test_a_candidate_that_moves_a_shared_moment_out_of_step_is_not_taken():
         ],
         even_bar(3),
     )
-    assert rhythms(repair_bar_arithmetic(voice)) == ["note_4"] * 3 + [
-        "note_4", "note_2"] + ["note_4"] * 3
+    assert (
+        rhythms(repair_bar_arithmetic(voice))
+        == ["note_4"] * 3 + ["note_4", "note_2"] + ["note_4"] * 3
+    )
 
 
-def test_the_moments_never_decide_a_bar_holding_a_rest():
+def test_the_moments_never_decide_a_bar_holding_a_rest() -> None:
     """A rest may not be the silence of the stream it stands in, so the column
     it sits in is one the tokens are known not to line up."""
     voice = system(even_bar(), hanget_soi_bar_3(), even_bar())

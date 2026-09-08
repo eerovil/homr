@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from homr.segmentation import inference_segnet as segnet
+from homr.segmentation.config import segmentation_version
 from homr.type_definitions import NDArray
 
 
@@ -51,7 +52,7 @@ def test_old_averaged_cache_is_replaced_and_new_cache_is_reused(
         for _ in range(5):
             np.save(cache, empty)
         cache.write((hashlib.sha256(image.tobytes()).hexdigest() + "\n").encode())
-        cache.write((segnet.segmentation_version + "\n").encode())
+        cache.write((segmentation_version + "\n").encode())
 
     calls = 0
 

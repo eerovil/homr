@@ -217,9 +217,7 @@ def detokenize(tokens: NDArray, vocab: dict[int, str]) -> list[str]:
     return toks
 
 
-def confidence_for_logits(
-    logits: NDArray, vocab: dict[int, str], top_k: int = 3
-) -> dict[str, Any]:
+def confidence_for_logits(logits: NDArray, vocab: dict[int, str], top_k: int = 3) -> dict[str, Any]:
     """Return the selected token and its closest alternatives for one decoder head."""
     scores = np.asarray(logits, dtype=np.float64).reshape(-1)
     shifted = scores - np.max(scores)
@@ -233,9 +231,11 @@ def confidence_for_logits(
             {"value": vocab[int(choice)], "probability": float(probabilities[choice])}
             for choice in choices
         ],
-        "margin": float(probabilities[choices[0]] - probabilities[choices[1]])
-        if len(choices) > 1
-        else None,
+        "margin": (
+            float(probabilities[choices[0]] - probabilities[choices[1]])
+            if len(choices) > 1
+            else None
+        ),
     }
 
 
@@ -263,9 +263,7 @@ def rhythm_confidence(
 ) -> dict[str, Any]:
     report = confidence_for_logits(constrained_logits, vocab, top_k=RHYTHM_CANDIDATES)
     if not np.array_equal(raw_logits, constrained_logits):
-        report["unconstrained"] = confidence_for_logits(
-            raw_logits, vocab, top_k=RHYTHM_CANDIDATES
-        )
+        report["unconstrained"] = confidence_for_logits(raw_logits, vocab, top_k=RHYTHM_CANDIDATES)
     return report
 
 

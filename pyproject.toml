@@ -127,6 +127,12 @@ ignore = [
 
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Pytest assertions are executable checks, not production input validation.
+# These modules parse only committed or test-built XML. Local imports allow
+# fixtures to install monkeypatches before importing the component under test.
+"tests/**/*.py" = ["S101", "S314", "PLC0415"]
+
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 

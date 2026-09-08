@@ -55,7 +55,7 @@ def test_paper_gaps_are_not_repaired_as_staff_line_crossings(direction: StemDire
 def test_equally_long_recovery_runs_prefer_final_attachment(
     direction: StemDirection,
 ) -> None:
-    ink = np.zeros((80, 80), dtype=np.uint8)
+    ink: np.ndarray = np.zeros((80, 80), dtype=np.uint8)
     far_column, near_column = (48, 49) if direction == StemDirection.UP else (49, 48)
     ink[34:45, far_column] = 1  # Visited first; coarse search accepts the gap.
     ink[43:54, near_column] = 1  # Same raw length, but actually attached.
@@ -75,7 +75,8 @@ def test_equally_long_recovery_runs_prefer_final_attachment(
 @pytest.mark.parametrize("towards", [-1, 1])
 @pytest.mark.parametrize("endpoint_has_ink", [False, True])
 def test_bridge_requires_a_source_backed_starting_endpoint(
-    towards: int, endpoint_has_ink: bool,
+    towards: int,
+    endpoint_has_ink: bool,
 ) -> None:
     bridge = np.zeros((12, 1), dtype=np.uint8)
     near, edge = 5, 5 + towards * 3

@@ -14,6 +14,9 @@ reads worse says by how much rather than flipping a light.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -21,18 +24,20 @@ from fixturecheck import cases, references, series
 from fixturecheck.__main__ import gate_over, ratchet
 from fixturecheck.compare import Result
 
+Harness = tuple[ModuleType, Path, Callable[..., None]]
 
-def _counts(**over):
-    full = {k: 0 for k in series.COUNTS}
+
+def _counts(**over: int) -> dict[str, int]:
+    full = dict.fromkeys(series.COUNTS, 0)
     full.update(over)
     return full
 
 
-def record(name, **over):
+def record(name: str, **over: int) -> series.CaseRecord:
     return series.CaseRecord(name, counts=_counts(**over))
 
 
-def manifest(tmp_path, **memories):
+def manifest(tmp_path: Path, **memories: dict) -> Path:
     """A manifest holding a fingerprint and a memory for each named case."""
     path = tmp_path / "references.json"
     held = {}
@@ -42,14 +47,14 @@ def manifest(tmp_path, **memories):
     return path
 
 
-def reading(score, structure=0, meter=0):
+def reading(score: float, structure: int = 0, meter: int = 0) -> dict[str, float]:
     return {"score": score, "structure": structure, "meter": meter}
 
 
 # --- what a case is remembered by ----------------------------------------
 
 
-def test_the_remembered_score_is_the_score_the_report_shows():
+def test_the_remembered_score_is_the_score_the_report_shows() -> None:
     """Two spellings of one number is how they come to disagree.
 
     `marks` reads the counts as the series records them, because the gate has to
@@ -63,7 +68,7 @@ def test_the_remembered_score_is_the_score_the_report_shows():
     assert references.marks(counts)["score"] == 90.0
 
 
-def test_a_case_is_remembered_by_three_things_not_one():
+def test_a_case_is_remembered_by_three_things_not_one() -> None:
     """Structure and meter are counted as cases, not as notes.
 
     Neither is in the notes-right percentage — that is deliberate and predates
@@ -78,7 +83,7 @@ def test_a_case_is_remembered_by_three_things_not_one():
     assert not references.worse(reading(99.5), was)
 
 
-def test_what_fell_is_said_with_its_numbers_in_it():
+def test_what_fell_is_said_with_its_numbers_in_it() -> None:
     """An alarm reading "below its memory" is one people learn to click through."""
     said = references.worse(reading(91.25), reading(97.5))
     assert said == ["91.25% of notes right, against 97.50% accepted"]
@@ -90,7 +95,7 @@ def test_what_fell_is_said_with_its_numbers_in_it():
 # --- the alarm -----------------------------------------------------------
 
 
-def test_a_case_that_falls_fails_and_one_that_holds_does_not(tmp_path):
+def test_a_case_that_falls_fails_and_one_that_holds_does_not(tmp_path: Path) -> None:
     path = manifest(tmp_path, a=reading(90.0), b=reading(90.0))
 
     held = references.judge({"a": reading(90.0), "b": reading(95.0)}, [], path=path)
@@ -101,7 +106,7 @@ def test_a_case_that_falls_fails_and_one_that_holds_does_not(tmp_path):
     assert list(fell["below"]) == ["a"]
 
 
-def test_a_win_on_one_case_does_not_pay_for_a_loss_on_another(tmp_path):
+def test_a_win_on_one_case_does_not_pay_for_a_loss_on_another(tmp_path: Path) -> None:
     """Why the memory is per case and not one figure for the run.
 
     Across the run these two average better than they were accepted at. That is
@@ -116,7 +121,7 @@ def test_a_win_on_one_case_does_not_pay_for_a_loss_on_another(tmp_path):
     assert list(gate["below"]) == ["b"]
 
 
-def test_a_case_homr_can_no_longer_read_at_all_fails(tmp_path):
+def test_a_case_homr_can_no_longer_read_at_all_fails(tmp_path: Path) -> None:
     """The loudest regression there is, and a score cannot express it."""
     path = manifest(tmp_path, a=reading(90.0))
 
@@ -125,7 +130,7 @@ def test_a_case_homr_can_no_longer_read_at_all_fails(tmp_path):
     assert not gate["passed"] and gate["unreadable"] == ["a"]
 
 
-def test_a_case_nobody_has_accepted_is_neither_pass_nor_fail(tmp_path):
+def test_a_case_nobody_has_accepted_is_neither_pass_nor_fail(tmp_path: Path) -> None:
     """A first sighting has nothing to be compared against."""
     path = manifest(tmp_path, a=reading(90.0))
 
@@ -135,7 +140,7 @@ def test_a_case_nobody_has_accepted_is_neither_pass_nor_fail(tmp_path):
     assert gate["judged"] == ["a"] and gate["unremembered"] == ["new"]
 
 
-def test_a_case_whose_reference_moved_is_held_out_of_the_gate(tmp_path):
+def test_a_case_whose_reference_moved_is_held_out_of_the_gate(tmp_path: Path) -> None:
     """Its memory is a number about music that has since been edited.
 
     Failing a run for that would blame homr for somebody correcting a score,
@@ -144,44 +149,52 @@ def test_a_case_whose_reference_moved_is_held_out_of_the_gate(tmp_path):
     """
     path = manifest(tmp_path, a=reading(90.0), b=reading(90.0))
 
-    gate = references.judge({"a": reading(10.0), "b": reading(90.0)},
-                            [], adrift=["a"], path=path)
+    gate = references.judge({"a": reading(10.0), "b": reading(90.0)}, [], adrift=["a"], path=path)
 
     assert gate["passed"]
     assert gate["adrift"] == ["a"] and gate["judged"] == ["b"]
 
 
-def test_every_tier_is_judged_by_the_same_rule(monkeypatch, tmp_path):
+def test_every_tier_is_judged_by_the_same_rule(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A pin, a fixture and a song system are one object with one rule.
 
     The old gate looked only at the five committed fixtures, so a change that
     lifted them while costing the corpus passed. Nothing in `gate_over` knows
     which tier a case belongs to.
     """
-    path = manifest(tmp_path, pinned=reading(50.0), system4=reading(100.0),
-                    **{"song-s3": reading(95.0)})
+    path = manifest(
+        tmp_path, pinned=reading(50.0), system4=reading(100.0), **{"song-s3": reading(95.0)}
+    )
     monkeypatch.setattr(references, "accepted", lambda *a, **k: json_memory(path))
 
-    gate = gate_over([record("pinned", agree=1),          # 100%, up from 50
-                      record("system4", agree=10),        # 100%, holding
-                      record("song-s3", agree=9, pitch=1)],   # 90%, down from 95
-                     [])
+    gate = gate_over(
+        [
+            record("pinned", agree=1),  # 100%, up from 50
+            record("system4", agree=10),  # 100%, holding
+            record("song-s3", agree=9, pitch=1),
+        ],  # 90%, down from 95
+        [],
+    )
 
     assert not gate["passed"]
     assert list(gate["below"]) == ["song-s3"]
 
 
-def json_memory(path):
+def json_memory(path: Path) -> dict:
     held = json.loads(path.read_text())["cases"]
-    return {name: {f: entry[f] for f in references.MEMORY}
-            for name, entry in held.items()
-            if all(f in entry for f in references.MEMORY)}
+    return {
+        name: {f: entry[f] for f in references.MEMORY}
+        for name, entry in held.items()
+        if all(f in entry for f in references.MEMORY)
+    }
 
 
 # --- the ratchet ---------------------------------------------------------
 
 
-def test_an_improvement_moves_the_memory_up_and_a_fall_never_does(tmp_path):
+def test_an_improvement_moves_the_memory_up_and_a_fall_never_does(tmp_path: Path) -> None:
     """The ratchet turns one way on its own.
 
     An improvement is written into a committed file, so the next run has to hold
@@ -192,8 +205,7 @@ def test_an_improvement_moves_the_memory_up_and_a_fall_never_does(tmp_path):
     path = manifest(tmp_path, a=reading(90.0), b=reading(90.0))
     memory = json_memory(path)
 
-    raised = references.remember(
-        {"a": reading(96.0)}, path=path)          # only what the caller offers
+    raised = references.remember({"a": reading(96.0)}, path=path)  # only what the caller offers
     assert raised == ["a"]
     assert json_memory(path)["a"]["score"] == 96.0
     assert json_memory(path)["b"]["score"] == 90.0
@@ -204,7 +216,9 @@ def test_an_improvement_moves_the_memory_up_and_a_fall_never_does(tmp_path):
     assert json_memory(path)["a"]["score"] == 96.0
 
 
-def test_a_person_can_accept_a_fall_and_the_gate_then_passes(harness, capsys):
+def test_a_person_can_accept_a_fall_and_the_gate_then_passes(
+    harness: Harness, capsys: pytest.CaptureFixture[str]
+) -> None:
     """The escape hatch, walked end to end in the order it is actually used.
 
     Remember a higher score, read a lower one, watch the gate fail — then accept
@@ -239,7 +253,7 @@ def test_a_person_can_accept_a_fall_and_the_gate_then_passes(harness, capsys):
     assert json_memory(manifest_path)["c"]["score"] == 70.0
 
 
-def test_accepting_does_not_make_ordinary_runs_two_way(harness):
+def test_accepting_does_not_make_ordinary_runs_two_way(harness: Harness) -> None:
     """The one-way rule has to survive the escape hatch existing.
 
     Accepting once must not leave the ratchet willing to write falls by itself,
@@ -260,7 +274,9 @@ def test_accepting_does_not_make_ordinary_runs_two_way(harness):
     assert json_memory(manifest_path)["c"]["score"] == 70.0
 
 
-def test_accepting_an_improvement_is_allowed_and_says_which_way(harness, capsys):
+def test_accepting_an_improvement_is_allowed_and_says_which_way(
+    harness: Harness, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`accept` writes what the case reads, and does not only mean "lower"."""
     main, manifest_path, score_it = harness
 
@@ -274,7 +290,7 @@ def test_accepting_an_improvement_is_allowed_and_says_which_way(harness, capsys)
     assert "up from 70.00% to 100.00%" in capsys.readouterr().out
 
 
-def test_accepting_nothing_is_refused_rather_than_meaning_everything(harness):
+def test_accepting_nothing_is_refused_rather_than_meaning_everything(harness: Harness) -> None:
     """An `accept` with no cases would be a button for making the alarm stop.
 
     The whole value of this path is that somebody chose the case and meant it,
@@ -296,7 +312,9 @@ def test_accepting_nothing_is_refused_rather_than_meaning_everything(harness):
     assert json_memory(manifest_path)["c"]["score"] == 100.0
 
 
-def test_a_case_homr_cannot_read_has_no_reading_to_accept(harness, monkeypatch):
+def test_a_case_homr_cannot_read_has_no_reading_to_accept(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Writing a zero would retire the case: nothing can ever fall below it."""
     main, manifest_path, score_it = harness
 
@@ -308,13 +326,13 @@ def test_a_case_homr_cannot_read_has_no_reading_to_accept(harness, monkeypatch):
     assert json_memory(manifest_path)["c"]["score"] == 100.0
 
 
-def test_a_first_sighting_is_recorded_so_adding_a_case_costs_one_run(tmp_path):
+def test_a_first_sighting_is_recorded_so_adding_a_case_costs_one_run(tmp_path: Path) -> None:
     path = manifest(tmp_path)
     assert references.remember({"fresh": reading(73.5)}, path=path) == ["fresh"]
     assert json_memory(path)["fresh"]["score"] == 73.5
 
 
-def test_a_case_whose_reference_moved_is_not_ratcheted(tmp_path):
+def test_a_case_whose_reference_moved_is_not_ratcheted(tmp_path: Path) -> None:
     """Its new reading has not been looked at by the person who moved it."""
     path = manifest(tmp_path, a=reading(90.0))
     memory = json_memory(path)
@@ -322,7 +340,9 @@ def test_a_case_whose_reference_moved_is_not_ratcheted(tmp_path):
     assert ratchet([record("a", agree=10)], memory, adrift=["a"]) == []
 
 
-def test_the_gate_is_judged_before_the_ratchet_writes(tmp_path, monkeypatch):
+def test_the_gate_is_judged_before_the_ratchet_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A ratchet that ran first would find every case standing at its memory.
 
     This is the ordering bug the run loop is written around, pinned here because
@@ -344,19 +364,16 @@ def test_the_gate_is_judged_before_the_ratchet_writes(tmp_path, monkeypatch):
 # --- freezing ------------------------------------------------------------
 
 
-class Fake:
-    def __init__(self, name, image, reference):
-        self.name, self.image, self.reference = name, image, reference
-
-
-def _case(tmp_path, name, image=b"pixels", reference=b"<score/>"):
+def _case(
+    tmp_path: Path, name: str, image: bytes = b"pixels", reference: bytes = b"<score/>"
+) -> cases.Case:
     picture, score = tmp_path / f"{name}.png", tmp_path / f"{name}.musicxml"
     picture.write_bytes(image)
     score.write_bytes(reference)
-    return Fake(name, picture, score)
+    return cases.Case(name, picture, score, "fixture")
 
 
-def test_freezing_a_case_whose_files_moved_forgets_its_score(tmp_path):
+def test_freezing_a_case_whose_files_moved_forgets_its_score(tmp_path: Path) -> None:
     """The score was about the picture and reference that have just been replaced.
 
     Carrying it over would gate a new case against an old case's number, and do
@@ -375,7 +392,7 @@ def test_freezing_a_case_whose_files_moved_forgets_its_score(tmp_path):
     assert "a" not in json_memory(path)
 
 
-def test_freezing_an_unchanged_case_keeps_its_score(tmp_path):
+def test_freezing_an_unchanged_case_keeps_its_score(tmp_path: Path) -> None:
     path = tmp_path / "references.json"
     case = _case(tmp_path, "a")
     references.write([case], path)
@@ -387,7 +404,7 @@ def test_freezing_an_unchanged_case_keeps_its_score(tmp_path):
     assert json_memory(path)["a"]["score"] == 90.0
 
 
-def test_a_memory_does_not_change_the_digest_a_run_is_keyed_by(tmp_path):
+def test_a_memory_does_not_change_the_digest_a_run_is_keyed_by(tmp_path: Path) -> None:
     """Or every improvement would start a fresh identity.
 
     Under a new identity every case is `unevaluated`, so the ratchet would erase
@@ -405,7 +422,7 @@ def test_a_memory_does_not_change_the_digest_a_run_is_keyed_by(tmp_path):
     assert references.drift([case], path) == {"changed": [], "unfrozen": []}
 
 
-def test_a_memory_for_a_case_nobody_froze_is_not_a_drifted_reference(tmp_path):
+def test_a_memory_for_a_case_nobody_froze_is_not_a_drifted_reference(tmp_path: Path) -> None:
     """An entry can hold a score and no fingerprint, and that is not a change.
 
     Read as a fingerprint of nothing it looks like a reference that has been
@@ -446,7 +463,7 @@ PAGE = """<?xml version="1.0"?>
 """
 
 
-def _source(tmp_path):
+def _source(tmp_path: Path) -> cases.Case:
     from PIL import Image
 
     picture = tmp_path / "src.png"
@@ -456,7 +473,9 @@ def _source(tmp_path):
     return cases.Case("src", picture, score, "fixture")
 
 
-def test_a_pin_cuts_both_sides_the_same_way(tmp_path, monkeypatch):
+def test_a_pin_cuts_both_sides_the_same_way(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Which is what makes it a case rather than two pictures.
 
     A pin is tier 1: the exact bars an error was found on, committed so the fix
@@ -467,12 +486,24 @@ def test_a_pin_cuts_both_sides_the_same_way(tmp_path, monkeypatch):
     from fixturecheck import bars
 
     source = _source(tmp_path)
-    monkeypatch.setattr(bars, "geometry", lambda *a, **k: {
-        "staves": [{"top": 0.2, "bottom": 0.4}],
-        "bar_lines": [0.0, 0.33, 0.66, 1.0]})
+    monkeypatch.setattr(
+        bars,
+        "geometry",
+        lambda *a, **k: {
+            "staves": [{"top": 0.2, "bottom": 0.4}],
+            "bar_lines": [0.0, 0.33, 0.66, 1.0],
+        },
+    )
 
-    pinned = cases.pin("m2-beats", source, 2, 2, "the beats walked",
-                       register=tmp_path / "pins.json", into=tmp_path / "pins")
+    pinned = cases.pin(
+        "m2-beats",
+        source,
+        2,
+        2,
+        "the beats walked",
+        register=tmp_path / "pins.json",
+        into=tmp_path / "pins",
+    )
 
     assert pinned.image.exists() and pinned.reference.exists()
     assert pinned.committed and pinned.why == "the beats walked"
@@ -483,17 +514,25 @@ def test_a_pin_cuts_both_sides_the_same_way(tmp_path, monkeypatch):
     assert "<divisions>1</divisions>" in pinned.reference.read_text()
     # ...and the crop is narrower than the page it came from.
     from PIL import Image
+
     with Image.open(pinned.image) as cut, Image.open(source.image) as whole:
         assert cut.width < whole.width
 
 
-def test_a_pin_is_registered_so_it_runs_with_every_tier(tmp_path, monkeypatch):
+def test_a_pin_is_registered_so_it_runs_with_every_tier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     pytest.importorskip("PIL")
     from fixturecheck import bars
 
-    monkeypatch.setattr(bars, "geometry", lambda *a, **k: {
-        "staves": [{"top": 0.2, "bottom": 0.4}],
-        "bar_lines": [0.0, 0.33, 0.66, 1.0]})
+    monkeypatch.setattr(
+        bars,
+        "geometry",
+        lambda *a, **k: {
+            "staves": [{"top": 0.2, "bottom": 0.4}],
+            "bar_lines": [0.0, 0.33, 0.66, 1.0],
+        },
+    )
     register, into = tmp_path / "pins.json", tmp_path / "pins"
     cases.pin("m2-beats", _source(tmp_path), 2, 2, "why", register, into)
 
@@ -507,7 +546,9 @@ def test_a_pin_is_registered_so_it_runs_with_every_tier(tmp_path, monkeypatch):
     assert json.loads(register.read_text())["pins"]["m2-beats"]["from"] == "src"
 
 
-def test_a_pin_refuses_rather_than_cutting_the_wrong_bars(tmp_path, monkeypatch):
+def test_a_pin_refuses_rather_than_cutting_the_wrong_bars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A crop of the wrong bars is worse than no crop.
 
     The detected barlines have to imply the bars the reference says the system
@@ -522,21 +563,19 @@ def test_a_pin_refuses_rather_than_cutting_the_wrong_bars(tmp_path, monkeypatch)
     monkeypatch.setattr(bars, "geometry", lambda *a, **k: None)
 
     with pytest.raises(cases.CannotPin):
-        cases.pin("nope", source, 2, 2, "why",
-                  tmp_path / "pins.json", tmp_path / "pins")
+        cases.pin("nope", source, 2, 2, "why", tmp_path / "pins.json", tmp_path / "pins")
 
     # And nothing is left behind on disk for a later run to pick up.
     assert not (tmp_path / "pins" / "nope.musicxml").exists()
     assert not (tmp_path / "pins.json").exists()
 
 
-def test_a_pin_outside_the_case_is_refused(tmp_path, monkeypatch):
+def test_a_pin_outside_the_case_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("PIL")
     source = _source(tmp_path)
 
     with pytest.raises(cases.CannotPin) as refused:
-        cases.pin("nope", source, 2, 9, "why",
-                  tmp_path / "pins.json", tmp_path / "pins")
+        cases.pin("nope", source, 2, 9, "why", tmp_path / "pins.json", tmp_path / "pins")
 
     assert "3 bar(s)" in str(refused.value)
 
@@ -545,7 +584,7 @@ def test_a_pin_outside_the_case_is_refused(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def harness(tmp_path, monkeypatch):
+def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harness:
     """The whole run with homr and the comparison stubbed out.
 
     What is under test is the loop's own arithmetic — the order the gate and the
@@ -566,8 +605,7 @@ def harness(tmp_path, monkeypatch):
     # and a sabotage of the real one passed too. That is only possible because
     # the module resolves `MANIFEST` at call time — see `references.load`.
     monkeypatch.setattr(references, "MANIFEST", manifest_path)
-    monkeypatch.setattr(references, "drift", lambda *a, **k: {"changed": [],
-                                                             "unfrozen": []})
+    monkeypatch.setattr(references, "drift", lambda *a, **k: {"changed": [], "unfrozen": []})
     monkeypatch.setattr(references, "stamp", lambda *a, **k: "refX")
     monkeypatch.setattr(series, "SERIES", tmp_path / "series.jsonl")
     monkeypatch.setattr(quality, "QUALITY", tmp_path / "QUALITY.md")
@@ -590,16 +628,14 @@ def harness(tmp_path, monkeypatch):
 
     scores = {}
 
-    def score_it(agree, pitch):
-        scores["result"] = Result(agree=agree, pitch=pitch, staves_page=1,
-                                  staves_homr=1)
-        monkeypatch.setattr(main, "compare_output",
-                            lambda *a, **k: scores["result"])
+    def score_it(agree: int, pitch: int) -> None:
+        scores["result"] = Result(agree=agree, pitch=pitch, staves_page=1, staves_homr=1)
+        monkeypatch.setattr(main, "compare_output", lambda *a, **k: scores["result"])
 
     return main, manifest_path, score_it
 
 
-def test_a_run_records_a_first_sighting_then_gates_against_it(harness):
+def test_a_run_records_a_first_sighting_then_gates_against_it(harness: Harness) -> None:
     """The migration path, and the two runs it takes.
 
     A case nobody has accepted is recorded as it stands and the run passes,
@@ -616,7 +652,9 @@ def test_a_run_records_a_first_sighting_then_gates_against_it(harness):
     assert json_memory(manifest_path)["c"]["score"] == 90.0
 
 
-def test_a_run_that_reads_worse_exits_non_zero_and_writes_nothing(harness, capsys):
+def test_a_run_that_reads_worse_exits_non_zero_and_writes_nothing(
+    harness: Harness, capsys: pytest.CaptureFixture[str]
+) -> None:
     """The alarm, and the thing that makes it an alarm rather than a shrug.
 
     A fall must not be recorded, or the gate would re-arm itself one notch lower
@@ -639,7 +677,9 @@ def test_a_run_that_reads_worse_exits_non_zero_and_writes_nothing(harness, capsy
     assert main.run_cases(["c"], "fixtures") == 1
 
 
-def test_an_improvement_is_written_where_the_next_run_will_hold_it(harness, capsys):
+def test_an_improvement_is_written_where_the_next_run_will_hold_it(
+    harness: Harness, capsys: pytest.CaptureFixture[str]
+) -> None:
     main, manifest_path, score_it = harness
 
     score_it(agree=7, pitch=3)
@@ -654,7 +694,9 @@ def test_an_improvement_is_written_where_the_next_run_will_hold_it(harness, caps
     assert main.run_cases(["c"], "fixtures") == 1
 
 
-def test_a_redirected_run_does_not_write_to_the_real_series(harness, tmp_path):
+def test_a_redirected_run_does_not_write_to_the_real_series(
+    harness: Harness, tmp_path: Path
+) -> None:
     """It did, while this file was being written, and committed nine runs.
 
     `series.runs` reads `SERIES` at call time and says in its own docstring why.
@@ -674,7 +716,8 @@ def test_a_redirected_run_does_not_write_to_the_real_series(harness, tmp_path):
 
 
 def test_the_series_path_is_read_when_it_is_used_not_when_it_is_defined(
-        tmp_path, monkeypatch):
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The mechanism behind the test above, checked on its own.
 
     A default bound at import cannot be redirected at all, so this is what makes
@@ -692,7 +735,7 @@ def test_the_series_path_is_read_when_it_is_used_not_when_it_is_defined(
     assert (tmp_path / "ELSEWHERE.md").exists()
 
 
-def test_the_case_page_lists_what_is_still_wrong_and_names_no_perfection(harness):
+def test_the_case_page_lists_what_is_still_wrong_and_names_no_perfection(harness: Harness) -> None:
     """The stage-1 error list, where the operator actually reads it."""
     main, manifest_path, score_it = harness
     from fixturecheck import report

@@ -18,9 +18,12 @@ meter change reads every pickup wrong. Those cases are pinned here beside the
 one this exists to fix.
 """
 
+from __future__ import annotations
+
 from fractions import Fraction
 
 from homr.music_xml_generator import (
+    SymbolChord,
     XmlGeneratorArguments,
     find_nominator_per_time_signature,
     generate_xml,
@@ -31,25 +34,24 @@ from homr.music_xml_generator import (
 from homr.transformer.vocabulary import EncodedSymbol
 
 
-def chord(rhythm, *positions):
+def chord(rhythm: str, *positions: str) -> SymbolChord:
     from homr.music_xml_generator import SymbolChord
 
-    return SymbolChord(
-        [EncodedSymbol(rhythm=rhythm, position=p) for p in (positions or ("upper",))]
-    )
+    return SymbolChord([EncodedSymbol(rhythm=rhythm, position=p) for p in positions or ("upper",)])
 
 
-def bar(quarters, staves=("upper", "lower")):
+def bar(quarters: int, staves: tuple[str, ...] = ("upper", "lower")) -> list[SymbolChord]:
     """One bar of that many quarter notes on each staff, then its barline."""
     return [chord("note-C4_quarter", *staves) for _ in range(quarters)] + [chord("barline")]
 
 
-def signatures_of(voice):
+def signatures_of(voice: list[SymbolChord]) -> list[int]:
     return [
         int(n * int(c.symbols[0].rhythm.split("/")[1]))
         for n, c in zip(
             find_nominator_per_time_signature(voice, Fraction(1)),
             [c for c in voice if c.symbols[0].rhythm.startswith("timeSignature")],
+            strict=True,
         )
     ]
 
@@ -57,17 +59,17 @@ def signatures_of(voice):
 # --- what a span's numerator is ---
 
 
-def test_the_length_the_most_consecutive_bars_agree_on():
+def test_the_length_the_most_consecutive_bars_agree_on() -> None:
     assert prevailing_length([Fraction(1)] * 3 + [Fraction(3, 4)]) == Fraction(1)
 
 
-def test_an_odd_bar_at_the_front_does_not_become_the_meter():
+def test_an_odd_bar_at_the_front_does_not_become_the_meter() -> None:
     """An anacrusis: one short bar, then the meter."""
     lengths = [Fraction(1, 4)] + [Fraction(1)] * 3
     assert prevailing_length(lengths) == Fraction(1)
 
 
-def test_a_tie_takes_the_earliest_run():
+def test_a_tie_takes_the_earliest_run() -> None:
     """`3/4, 5/4` has no majority; the printed signature opens the first of them.
 
     A median says a whole note, which is neither bar. The other bar is left to
@@ -76,14 +78,14 @@ def test_a_tie_takes_the_earliest_run():
     assert prevailing_length([Fraction(3, 4), Fraction(5, 4)]) == Fraction(3, 4)
 
 
-def test_one_bar_is_its_own_meter():
+def test_one_bar_is_its_own_meter() -> None:
     assert prevailing_length([Fraction(5, 4)]) == Fraction(5, 4)
 
 
 # --- where a signature gets written that nobody read ---
 
 
-def test_a_bar_that_changed_meter_and_read_no_signature_gets_one():
+def test_a_bar_that_changed_meter_and_read_no_signature_gets_one() -> None:
     """sammon-ryosto's opening span: 3/4 printed, then 5/4 printed and not read."""
     voice = [chord("timeSignature/4")] + bar(3) + bar(5)
 
@@ -93,7 +95,7 @@ def test_a_bar_that_changed_meter_and_read_no_signature_gets_one():
     assert signatures_of(out) == [3, 5]
 
 
-def test_an_anacrusis_is_not_a_meter_change():
+def test_an_anacrusis_is_not_a_meter_change() -> None:
     """The first bar of a span is where a printed signature stands, short or not.
 
     Read the pickup as the meter and the meter becomes a change: the score would
@@ -105,7 +107,7 @@ def test_an_anacrusis_is_not_a_meter_change():
     assert signatures_of(voice) == [4]
 
 
-def test_a_bar_the_staffs_disagree_about_is_left_alone():
+def test_a_bar_the_staffs_disagree_about_is_left_alone() -> None:
     """A bar homr lost a note from is short in one staff and right in the other.
 
     That is the shape of a misread bar, not of a meter change, and it is the
@@ -117,20 +119,20 @@ def test_a_bar_the_staffs_disagree_about_is_left_alone():
     assert infer_meter_changes(voice) is voice
 
 
-def test_a_single_staff_system_never_gets_one():
+def test_a_single_staff_system_never_gets_one() -> None:
     """Nothing to agree with, so nothing corroborates the length."""
     voice = [chord("timeSignature/4")] + bar(4, ("upper",)) + bar(5, ("upper",))
 
     assert infer_meter_changes(voice) is voice
 
 
-def test_the_first_bar_after_a_read_signature_is_never_given_one():
+def test_the_first_bar_after_a_read_signature_is_never_given_one() -> None:
     voice = [chord("timeSignature/4")] + bar(4) + bar(4) + [chord("timeSignature/2")] + bar(3)
 
     assert infer_meter_changes(voice) is voice
 
 
-def test_the_denominator_in_force_is_carried():
+def test_the_denominator_in_force_is_carried() -> None:
     """A bar length settles a numerator; a denominator is a spelling it cannot pick."""
     voice = [chord("timeSignature/2")] + bar(10) + bar(6)
 
@@ -141,13 +143,13 @@ def test_the_denominator_in_force_is_carried():
     assert signatures_of(out) == [5, 3]
 
 
-def test_a_voice_with_nothing_to_change_comes_back_unchanged():
+def test_a_voice_with_nothing_to_change_comes_back_unchanged() -> None:
     voice = [chord("timeSignature/4")] + bar(4) + bar(4) + bar(4)
 
     assert infer_meter_changes(voice) is voice
 
 
-def test_a_voice_with_no_signature_at_all_is_left_alone():
+def test_a_voice_with_no_signature_at_all_is_left_alone() -> None:
     """There is no meter in force to contradict, and none to carry a denominator."""
     voice = bar(4) + bar(5)
 
@@ -157,7 +159,7 @@ def test_a_voice_with_no_signature_at_all_is_left_alone():
 # --- and what the score then says ---
 
 
-def tokens(voice):
+def tokens(voice: list[SymbolChord]) -> list[EncodedSymbol]:
     """The chords back as one token stream, `chord` separators and all.
 
     `generate_xml` regroups the stream itself, and without the separators each
@@ -172,7 +174,7 @@ def tokens(voice):
     return out
 
 
-def test_the_score_declares_both_meters_the_page_prints():
+def test_the_score_declares_both_meters_the_page_prints() -> None:
     voice = [chord("clef_G2"), chord("timeSignature/4")] + bar(3) + bar(5)
 
     xml = xml_to_string(generate_xml(XmlGeneratorArguments(), [tokens(voice)], "test"))

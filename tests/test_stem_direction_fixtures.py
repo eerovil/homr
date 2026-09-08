@@ -40,7 +40,7 @@ def fixture_names() -> list[str]:
 
 def staff_notes(staff: Staff) -> list[dict]:
     """One printed staff's detected noteheads, left to right."""
-    notes = [
+    notes: list[dict] = [
         {
             "x": round(float(note.center[0]), 1),
             "y": round(float(note.center[1]), 1),
@@ -81,9 +81,7 @@ def test_stem_directions_match_the_reference_score(name: str) -> None:
     detected = detect(FIXTURES / entry["image"])
     allowed = {gap["failure"] for gap in entry.get("known_gaps", [])}
     failures = [
-        failure
-        for result in check_fixture(reference, detected)
-        for failure in result.failures
+        failure for result in check_fixture(reference, detected) for failure in result.failures
     ]
     unexpected = [failure for failure in failures if failure not in allowed]
     fixed = allowed - set(failures)

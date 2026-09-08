@@ -56,9 +56,7 @@ def reference_staffs(path: Path) -> list[dict]:
     root = ET.parse(path).getroot()
     staffs: list[dict] = []
     for part in root.findall("part"):
-        by_staff: dict[int, list[dict]] = {
-            index: [] for index in range(1, _staff_count(part) + 1)
-        }
+        by_staff: dict[int, list[dict]] = {index: [] for index in range(1, _staff_count(part) + 1)}
         origin = 0.0
         divisions = 1.0
         clefs: dict[int, tuple[str, int, int]] = {}

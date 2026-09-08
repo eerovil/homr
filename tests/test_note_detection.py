@@ -3,17 +3,16 @@ import numpy as np
 
 from homr.bounding_boxes import BoundingEllipse, RotatedBoundingBox
 from homr.model import StemDirection
-from homr.type_definitions import NDArray
 from homr.note_detection import (
     bridged_ink,
-    shed_staff_lines,
-    staff_space,
     combine_noteheads_with_stems,
+    shed_staff_lines,
     split_notehead_ellipse,
+    staff_space,
     stems_of_notehead,
     vertical_ink,
 )
-
+from homr.type_definitions import NDArray
 
 empty = np.array([])
 

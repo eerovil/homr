@@ -15,8 +15,8 @@ from __future__ import annotations
 from fixturecheck import references, report
 from fixturecheck.compare import Result, unison_note
 
-
 # --- what a warning is worth ---------------------------------------------
+
 
 def test_a_unison_is_counted_as_a_warning() -> None:
     assert Result(agree=10, unison=3).warnings == 3
@@ -48,6 +48,7 @@ def test_the_sentence_says_both_halves() -> None:
 
 # --- and everything it must not move -------------------------------------
 
+
 def test_a_warning_stays_out_of_the_score() -> None:
     """Every figure quoted since 2026-09-05 has to keep meaning what it meant."""
     without = Result(agree=10)
@@ -58,8 +59,16 @@ def test_a_warning_stays_out_of_the_score() -> None:
 
 
 def test_a_warning_is_not_in_the_numbers_a_case_is_remembered_by() -> None:
-    counts = {"agree": 10, "voice": 0, "pitch": 0, "size": 0, "timing": 0,
-              "staves_page": 2, "staves_homr": 2, "meter": 0}
+    counts = {
+        "agree": 10,
+        "voice": 0,
+        "pitch": 0,
+        "size": 0,
+        "timing": 0,
+        "staves_page": 2,
+        "staves_homr": 2,
+        "meter": 0,
+    }
 
     assert references.marks(counts) == references.marks({**counts, "unison": 4})
 
@@ -67,8 +76,7 @@ def test_a_warning_is_not_in_the_numbers_a_case_is_remembered_by() -> None:
 def test_a_case_that_gained_unisons_does_not_fall_below_its_memory() -> None:
     """The card asked for the operator's eye, not for a gate — see `MEMORY`."""
     was = references.marks({"agree": 10, "staves_page": 2, "staves_homr": 2})
-    now = references.marks({"agree": 10, "unison": 4,
-                            "staves_page": 2, "staves_homr": 2})
+    now = references.marks({"agree": 10, "unison": 4, "staves_page": 2, "staves_homr": 2})
 
     assert references.worse(now, was) == []
 
@@ -78,6 +86,7 @@ def test_unison_is_not_one_of_the_remembered_numbers() -> None:
 
 
 # --- and what the page shows ---------------------------------------------
+
 
 def test_a_unison_row_is_amber_rather_than_green() -> None:
     """It was green, which is what made a missing part read as nothing to see."""

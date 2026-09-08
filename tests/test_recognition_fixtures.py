@@ -44,14 +44,14 @@ def acceptance_context() -> dict:
     for model in models:
         require_model(model)
     return {
-        "sha": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=cases.ROOT, text=True  # noqa: S607
-        ).strip(),
+        "sha": (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=cases.ROOT, text=True  # noqa: S607
+            ).strip()
+        ),
         "memory": memory,
         "manifest": references.MANIFEST.read_bytes(),
-        "models": {
-            model.name: hashlib.sha256(model.read_bytes()).hexdigest() for model in models
-        },
+        "models": {model.name: hashlib.sha256(model.read_bytes()).hexdigest() for model in models},
     }
 
 

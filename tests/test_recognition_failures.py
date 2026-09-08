@@ -5,15 +5,19 @@
 No weights are loaded: inference, geometry preparation, and downloads are mocked.
 """
 
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
+import onnxruntime as ort
 import pytest
 
 from homr import main as cli
+from homr import reread
 from homr import staff_parsing as parsing
 from homr.errors import IncompleteRecognitionError
+from homr.model import MultiStaff
 from homr.transformer.vocabulary import EncodedSymbol
 
 
@@ -21,7 +25,7 @@ from homr.transformer.vocabulary import EncodedSymbol
 def test_an_empty_requested_staff_is_not_silently_omitted(
     monkeypatch: pytest.MonkeyPatch, empty_index: int
 ) -> None:
-    rows = [Mock(staffs=[Mock()]), Mock(staffs=[Mock()])]
+    rows: list[MultiStaff] = [Mock(staffs=[Mock()]), Mock(staffs=[Mock()])]
     monkeypatch.setattr(parsing, "_ensure_same_number_of_staffs", lambda value: value)
     monkeypatch.setattr(parsing, "StaffRegions", Mock())
     readings = [[EncodedSymbol("note_4", "C4")], [EncodedSymbol("note_4", "D4")]]
@@ -36,7 +40,7 @@ def test_an_empty_requested_staff_is_not_silently_omitted(
 
 
 def test_explicitly_unselected_staffs_are_still_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = [Mock(staffs=[Mock()]), Mock(staffs=[Mock()])]
+    rows: list[MultiStaff] = [Mock(staffs=[Mock()]), Mock(staffs=[Mock()])]
     monkeypatch.setattr(parsing, "_ensure_same_number_of_staffs", lambda value: value)
     monkeypatch.setattr(parsing, "StaffRegions", Mock())
     read = Mock(return_value=[EncodedSymbol("note_4", "C4")])
@@ -68,13 +72,13 @@ def test_incomplete_optional_reread_keeps_the_complete_fused_reading(
     fused = [EncodedSymbol("note_4", "C4")]
     monkeypatch.setattr(parsing, "StaffRegions", Mock())
     monkeypatch.setattr(parsing, "MultiStaff", Mock())
-    monkeypatch.setattr(parsing.reread, "doubtful", Mock(return_value=True))
+    monkeypatch.setattr(reread, "doubtful", Mock(return_value=True))
     attempts: list[object] = [fused] * failed_half
     attempts.append(IncompleteRecognitionError("decoder exhausted"))
     read = Mock(side_effect=attempts)
     monkeypatch.setattr(parsing, "parse_staff_image", read)
     splice = Mock()
-    monkeypatch.setattr(parsing.reread, "splice", splice)
+    monkeypatch.setattr(reread, "splice", splice)
     result = parsing._reread_if_doubtful(Mock(), 0, staff, fused, np.zeros((1, 1)), Mock())
     assert result is fused
     assert read.call_count == failed_half + 1
@@ -85,7 +89,7 @@ def test_incomplete_optional_reread_keeps_the_complete_fused_reading(
 def test_optional_reread_does_not_swallow_unrelated_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(parsing, "StaffRegions", Mock())
     monkeypatch.setattr(parsing, "MultiStaff", Mock())
-    monkeypatch.setattr(parsing.reread, "doubtful", Mock(return_value=True))
+    monkeypatch.setattr(reread, "doubtful", Mock(return_value=True))
     monkeypatch.setattr(parsing, "parse_staff_image", Mock(side_effect=ValueError("unrelated")))
     with pytest.raises(ValueError, match="unrelated"):
         parsing._reread_if_doubtful(
@@ -94,14 +98,17 @@ def test_optional_reread_does_not_swallow_unrelated_errors(monkeypatch: pytest.M
 
 
 def test_complete_rereads_still_use_the_existing_selection(monkeypatch: pytest.MonkeyPatch) -> None:
-    upper, lower, fused, chosen = [Mock()], [Mock()], [Mock()], [Mock()]
+    upper: list[EncodedSymbol] = [Mock()]
+    lower: list[EncodedSymbol] = [Mock()]
+    fused: list[EncodedSymbol] = [Mock()]
+    chosen: list[EncodedSymbol] = [Mock()]
     monkeypatch.setattr(parsing, "StaffRegions", Mock())
     monkeypatch.setattr(parsing, "MultiStaff", Mock())
-    monkeypatch.setattr(parsing.reread, "doubtful", Mock(return_value=True))
+    monkeypatch.setattr(reread, "doubtful", Mock(return_value=True))
     monkeypatch.setattr(parsing, "parse_staff_image", Mock(side_effect=[upper, lower]))
     splice, better = Mock(return_value=chosen), Mock(return_value=(chosen, True))
-    monkeypatch.setattr(parsing.reread, "splice", splice)
-    monkeypatch.setattr(parsing.reread, "better_of", better)
+    monkeypatch.setattr(reread, "splice", splice)
+    monkeypatch.setattr(reread, "better_of", better)
     result = parsing._reread_if_doubtful(
         Mock(), 0, Mock(merged_from=(Mock(), Mock())), fused, np.zeros((1, 1)), Mock()
     )
@@ -119,7 +126,7 @@ def test_incomplete_page_never_reaches_xml_generation(
     if previous_output:
         output.write_text("old output")
     debug = Mock()
-    detection = ([], np.zeros((1, 1)), debug, Mock(), [])
+    detection: tuple = ([], np.zeros((1, 1)), debug, Mock(), [])
     monkeypatch.setattr(cli, "detect_staffs_in_image", Mock(return_value=detection))
     monkeypatch.setattr(
         cli, "parse_staffs", Mock(side_effect=IncompleteRecognitionError("partial"))
@@ -138,7 +145,7 @@ def test_incomplete_page_never_reaches_xml_generation(
 def no_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "download_weights", Mock())
     monkeypatch.setattr(cli, "download_ocr_weights", Mock())
-    monkeypatch.setattr(cli.ort, "set_default_logger_severity", Mock())
+    monkeypatch.setattr(ort, "set_default_logger_severity", Mock())
 
 
 def test_single_file_incompleteness_exits_nonzero_with_context(
@@ -149,7 +156,7 @@ def test_single_file_incompleteness_exits_nonzero_with_context(
 ) -> None:
     image = tmp_path / "page.png"
     image.touch()
-    monkeypatch.setattr(cli.sys, "argv", ["homr", str(image), "--gpu", "no"])
+    monkeypatch.setattr(sys, "argv", ["homr", str(image), "--gpu", "no"])
     monkeypatch.setattr(
         cli, "process_image", Mock(side_effect=IncompleteRecognitionError("partial"))
     )
@@ -173,7 +180,7 @@ def test_batch_attempts_remaining_files_but_exits_nonzero_after_any_failure(
     bad, good = tmp_path / "a.png", tmp_path / "b.png"
     bad.touch()
     good.touch()
-    monkeypatch.setattr(cli.sys, "argv", ["homr", str(tmp_path), "--gpu", "no"])
+    monkeypatch.setattr(sys, "argv", ["homr", str(tmp_path), "--gpu", "no"])
     process = Mock(side_effect=[error_type("failed reading"), None])
     monkeypatch.setattr(cli, "process_image", process)
     with pytest.raises(SystemExit) as exit_info:
@@ -190,10 +197,10 @@ def test_successful_cli_runs_still_succeed(
     image = tmp_path / "page.png"
     image.touch()
     path = tmp_path if directory else image
-    monkeypatch.setattr(cli.sys, "argv", ["homr", str(path), "--gpu", "no"])
+    monkeypatch.setattr(sys, "argv", ["homr", str(path), "--gpu", "no"])
     process = Mock()
     monkeypatch.setattr(cli, "process_image", process)
-    assert cli.main() is None
+    cli.main()  # Success returns normally; failures raise SystemExit.
     process.assert_called_once()
 
 
@@ -202,7 +209,7 @@ def test_invalid_input_keeps_its_existing_exit_code(
 ) -> None:
     image = tmp_path / "page.png"
     image.touch()
-    monkeypatch.setattr(cli.sys, "argv", ["homr", str(image), "--gpu", "no"])
+    monkeypatch.setattr(sys, "argv", ["homr", str(image), "--gpu", "no"])
     monkeypatch.setattr(
         cli, "process_image", Mock(side_effect=cli.InvalidProgramArgumentException())
     )
