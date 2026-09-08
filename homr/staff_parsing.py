@@ -5,6 +5,7 @@ import numpy as np
 
 from homr import constants, reread
 from homr.debug import Debug
+from homr.errors import IncompleteRecognitionError
 from homr.image_utils import crop_image_and_return_new_top
 from homr.model import MultiStaff, Note, Staff
 from homr.simple_logging import eprint
@@ -333,7 +334,10 @@ def parse_staff_image(
         debug, index, staff, image, regions=regions
     )
     eprint("Running TrOmr inference on staff image", index)
-    result = parse_staff_tromr(staff_image=staff_image, staff=transformed_staff, config=config)
+    try:
+        result = parse_staff_tromr(staff_image=staff_image, staff=transformed_staff, config=config)
+    except IncompleteRecognitionError as error:
+        raise IncompleteRecognitionError(f"Staff {index}: {error}") from error
     if config.use_stem_voice_hints:
         noteheads = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]
         hinted = add_stem_voice_hints(result, noteheads)
@@ -406,8 +410,13 @@ def _reread_if_doubtful(
     upper, lower = staff.merged_from
     eprint("Reading staff", index, "again, one staff at a time: a note was read unsurely")
     halves = StaffRegions([MultiStaff([upper], []), MultiStaff([lower], [])])
-    upper_symbols = parse_staff_image(debug, index, upper, image, halves, config)
-    lower_symbols = parse_staff_image(debug, index, lower, image, halves, config)
+    try:
+        upper_symbols = parse_staff_image(debug, index, upper, image, halves, config)
+        lower_symbols = parse_staff_image(debug, index, lower, image, halves, config)
+    except IncompleteRecognitionError as error:
+        # An incomplete alternative must neither replace nor invalidate a complete read.
+        eprint("Keeping the fused reading; optional re-read was incomplete:", error)
+        return fused
     result, _ = reread.better_of(fused, reread.splice(upper_symbols, lower_symbols))
     return result
 
@@ -437,9 +446,7 @@ def parse_staffs(
             result_staff = parse_staff_image(debug, i, staff, image, regions, config)
             result_staff = _reread_if_doubtful(debug, i, staff, result_staff, image, config)
             if len(result_staff) == 0:
-                eprint("Skipping empty staff", i)
-                i += 1
-                continue
+                raise IncompleteRecognitionError(f"Staff {i}: no symbols were recognized")
             result_staff.append(EncodedSymbol("newline"))
             result_for_voice.extend(result_staff)
             i += 1
