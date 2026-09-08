@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 import onnxruntime as ort
 
+from homr.errors import IncompleteRecognitionError
 from homr.onnx_providers import gpu_providers
 from homr.simple_logging import eprint
 from homr.transformer.configs import Config
@@ -173,6 +174,12 @@ class ScoreDecoder:
             out_rhythm = np.concatenate((out_rhythm, rhythm_sample), axis=-1)
             out_articulations = np.concatenate((out_articulations, articulation_sample), axis=-1)
             out_slurs = np.concatenate((out_slurs, slur_sample), axis=-1)
+        else:
+            # Only an EOS, including on the last allowed step, completes a read.
+            raise IncompleteRecognitionError(
+                f"Decoder reached its {self.max_seq_len}-step limit without an "
+                f"end-of-sequence token; refusing to return {len(symbols)} partial symbols."
+            )
 
         return symbols
 
