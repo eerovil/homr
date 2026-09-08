@@ -1,0 +1,86 @@
+name: CI diagnosis
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.head_ref == 'fix/complete-architecture-ci'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      HOMR_REQUIRE_MODELS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the existing locked CI environment
+        run: |
+          python -m pip install -q poetry
+          poetry config virtualenvs.in-project true
+          poetry install --extras cpu
+          poetry run homr --init --gpu no
+      - name: Collect bounded source and local checker tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-diagnosis/wheels"
+          git bundle create "$RUNNER_TEMP/ci-diagnosis/source.bundle" HEAD refs/remotes/origin/main
+          python -m pip download --disable-pip-version-check -q --only-binary=:all: \
+            --python-version 3.13 --implementation cp --abi cp313 \
+            --platform manylinux_2_27_x86_64 --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 \
+            --dest "$RUNNER_TEMP/ci-diagnosis/wheels" \
+            black==26.1.0 isort==7.0.0 ruff==0.15.1 mypy==1.19.1
+      - name: Compare candidate and original main checks independently
+        run: |
+          poetry run python - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          from homr.segmentation.config import segnet_path_onnx
+          from homr.transformer.configs import Config
+          root = Path.cwd()
+          out = Path(os.environ['RUNNER_TEMP']) / 'ci-diagnosis'
+          baseline = out.parent / 'homr-ci-baseline'
+          subprocess.run(['git', 'worktree', 'add', '--detach', str(baseline), '7612214795bc6205f5ef4860ea10981446849f41'], check=True)
+          c = Config().filepaths
+          for name in (segnet_path_onnx, c.encoder_path, c.decoder_path):
+              model = Path(name)
+              (baseline / model.relative_to(root)).symlink_to(model)
+          targets = ['homr', 'training', 'tests', 'validation']
+          checks = {
+              'black': ['black', '--check', *targets],
+              'isort': ['isort', '--check-only', *targets],
+              'ruff': ['ruff', 'check', '--output-format=json', *targets],
+              **{f'mypy-{name}': ['mypy', name] for name in targets},
+              'pytest': ['pytest', '-q', '--tb=short', '--show-capture=no', '-o', 'log_cli=false', 'tests'],
+          }
+          summary = {}
+          for label, tree in [('candidate', root), ('baseline', baseline)]:
+              dest = out / label
+              dest.mkdir(exist_ok=True)
+              env = {**os.environ, 'PYTHONPATH': str(tree), 'CHOIR_REPO': str(out/'no-songs'), 'FIXTURECHECK_REPORT': str(dest/'report'), 'HOMR_FIXTURE_EVIDENCE': str(dest/'recognition')}
+              results = {}
+              for name, args in checks.items():
+                  with (dest / (name + '.log')).open('w') as log:
+                      try:
+                          result = subprocess.run([sys.executable, '-m', *args], cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=600)
+                          results[name] = result.returncode
+                      except subprocess.TimeoutExpired:
+                          results[name] = 124
+                  print(label, name, results[name], flush=True)
+              summary[label] = results
+          (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+          subprocess.run(['git', 'worktree', 'remove', '--force', str(baseline)], check=True)
+          raise SystemExit(int(any(summary['candidate'].values())))
+          PY
+      - name: Preserve exact diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnosis
+          path: ${{ runner.temp }}/ci-diagnosis
+          retention-days: 3
