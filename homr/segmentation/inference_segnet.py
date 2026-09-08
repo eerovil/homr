@@ -188,13 +188,13 @@ def inference(
             if len(batch) == batch_size:
                 batch_out = _segnet_inference.run(np.stack(batch, axis=0))
                 for out in batch_out:
-                    data.append(out)
+                    data.append(np.argmax(out, axis=0))
                 batch.clear()
 
     if batch:
         batch_out = _segnet_inference.run(np.stack(batch, axis=0))
         for out in batch_out:
-            data.append(out)
+            data.append(np.argmax(out, axis=0))
 
     eprint(f"Segnet Inference time: {perf_counter() - t0}; batch_size {batch_size}")
 
@@ -223,8 +223,8 @@ def extract(
     img_path = Path(img_path_str)
     f_name = os.path.splitext(img_path.name)[0]
     npy_path = img_path.parent / f"{f_name}.npy"
-    # Reject masks made by either label averaging or winner-only voting.
-    cache_version = f"{segmentation_version}:probability-blend-v1:{win_size}:{step_size}"
+    # Old caches contain numerically averaged class IDs, not categorical votes.
+    cache_version = f"{segmentation_version}:categorical-vote-v1:{win_size}:{step_size}"
     loaded_from_cache = False
     if npy_path.exists() and use_cache:
         eprint("Found a cache")

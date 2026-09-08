@@ -454,7 +454,6 @@ def is_plausible_stem(notehead: BoundingEllipse, stem: RotatedBoundingBox) -> bo
 
 
 def _without_horizontal_ink(source_image: NDArray) -> tuple[NDArray, NDArray]:
-    """The scan's ink, and the same with its long horizontal runs taken out."""
     ink = (source_image < 180).astype(np.uint8)
     horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 12), np.uint8))
     return ink, ink & (1 - horizontal)
@@ -534,7 +533,13 @@ def _longest_run(
                 return -max(2, height * 0.1) <= (edge - near) * towards <= height * 0.65
 
             near = bottom if direction == StemDirection.UP else top
-            if not reaches(near) and bridge is not None:
+            # A permissive run-search hit can still fail final attachment. On
+            # the last-resort pass, mend that gap too instead of disabling
+            # recovery when a predicted notehead grows by a couple of pixels.
+            attachment_gap = (notehead.center[1] - near) * towards - notehead.size[1] / 2
+            if bridge is not None and (
+                not reaches(near) or attachment_gap > notehead.size[1] * ATTACHMENT_SLACK
+            ):
                 # The gap may be the staff line this stem crosses rather than
                 # paper. Ask the mended ink, and only for a run that was going
                 # to be thrown away: a run already reaching its head is left
