@@ -27,11 +27,8 @@ def _flatten_staffs(staffs: list[MultiStaff]) -> list[Staff]:
     return [s for multi_staff in staffs for s in multi_staff.staffs]
 
 
-def _regroup_by_period(
-    flat_staffs: list[Staff], period: int, front_trim: int, back_trim: int
-) -> list[MultiStaff]:
-    core = flat_staffs[front_trim : len(flat_staffs) - back_trim]
-    return [MultiStaff(core[i : i + period], []) for i in range(0, len(core), period)]
+def _regroup_by_period(flat_staffs: list[Staff], period: int) -> list[MultiStaff]:
+    return [MultiStaff(flat_staffs[i : i + period], []) for i in range(0, len(flat_staffs), period)]
 
 
 def _find_periodic_core(flat_staffs: list[Staff]) -> tuple[int, int, int] | None:
@@ -50,19 +47,15 @@ def _find_periodic_core(flat_staffs: list[Staff]) -> tuple[int, int, int] | None
     different "shapes" for what is structurally the same repeating pattern.
     Working on individual staffs sidesteps that inconsistency entirely.
 
-    A system right at the start or end of the page can break the pattern on
-    its own without invalidating it: an introduction or coda system with a
-    genuinely different layout, or simply the most poorly detected staff on
-    the page. We therefore allow trimming up to one period's worth of staffs
-    from either edge before requiring the remainder to tile exactly. We
-    never trim from the middle of the page: a mismatch there is a detection
-    problem to fix upstream, not something to paper over here.
+    A system at either edge can have a genuinely different layout, such as
+    an introduction or coda. Search edge omissions only to diagnose that
+    mismatch, not to authorize deleting those staves. The caller rejects a
+    candidate that needs any omission rather than exporting a shorter score.
 
     Returns (period, front_trim, back_trim) for the smallest total trim and,
-    among ties, the smallest period -- so an already-uniform page (period 1,
-    no trim) is always preferred when it fits, and we never discard more of
-    the page than necessary. Returns None if no repeating core of at least
-    two full cycles can be found.
+    among ties, the smallest period. A zero-trim candidate always wins when
+    one fits. Returns None if no repeating core of at least two full cycles
+    can be found. This function does not modify the input.
     """
     layout = [s.is_grandstaff for s in flat_staffs]
     n = len(layout)
@@ -112,15 +105,11 @@ def _ensure_same_number_of_staffs(staffs: list[MultiStaff]) -> list[MultiStaff]:
     core = _find_periodic_core(flat_staffs)
     if core is not None:
         period, front_trim, back_trim = core
-        if front_trim > 0:
-            eprint(
-                f"Removing the first {front_trim} staff(s), as they don't fit "
-                "the staff layout the rest of the page repeats"
-            )
-        if back_trim > 0:
-            eprint(
-                f"Removing the last {back_trim} staff(s), as they don't fit "
-                "the staff layout the rest of the page repeats"
+        if front_trim or back_trim:
+            raise IncompleteRecognitionError(
+                f"Staff layout would discard {front_trim} leading and {back_trim} trailing "
+                f"staff group(s) out of {len(flat_staffs)} to fit a period of {period}. "
+                "Refusing to omit music; check the detected layout or scan each system separately."
             )
         if period > 1:
             eprint(
@@ -128,7 +117,7 @@ def _ensure_same_number_of_staffs(staffs: list[MultiStaff]) -> list[MultiStaff]:
                 period,
                 "staffs with a different layout each time, combining them into one row",
             )
-        return _regroup_by_period(flat_staffs, period, front_trim, back_trim)
+        return _regroup_by_period(flat_staffs, period)
     result: list[MultiStaff] = []
     for staff in staffs:
         result.extend(staff.break_apart())
