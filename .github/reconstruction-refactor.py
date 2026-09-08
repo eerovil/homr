@@ -116,8 +116,12 @@ text = text.replace("    sort_token_chords,\n", "")
 needle = "from homr import constants\n"
 imports = '''from homr.score_reconstruction import (
     SymbolChord,
+    TupletParser,
+    add_tuplet_start_stop,
+    find_common_division,
     find_division_and_time_signature_nominator,
     find_nominator_per_time_signature,
+    group_into_chords,
     infer_meter_changes,
     prevailing_length,
     reconstruct_voice,
@@ -158,8 +162,12 @@ exports = '''from homr.transformer.vocabulary import (
 
 __all__ = [
     "SymbolChord",
+    "TupletParser",
+    "add_tuplet_start_stop",
+    "find_common_division",
     "find_division_and_time_signature_nominator",
     "find_nominator_per_time_signature",
+    "group_into_chords",
     "infer_meter_changes",
     "prevailing_length",
     "repair_bar_arithmetic",
