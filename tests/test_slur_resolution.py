@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from homr import music_xml_generator
 from homr.slur_resolution import resolve_slurs
 
@@ -135,7 +137,7 @@ def test_slur_numbers_are_paired_independently() -> None:
     assert slur_pairs(part) == [(1, 2, "1"), (2, 3, "2")]
 
 
-def test_build_part_resolves_slurs_after_tie_conversion(monkeypatch) -> None:
+def test_build_part_resolves_slurs_after_tie_conversion(monkeypatch: pytest.MonkeyPatch) -> None:
     part_source = slurred_part("1( 3)", bars=3)
     measures = [ET.fromstring(ET.tostring(measure)) for measure in part_source.findall("measure")]
     calls: list[str] = []
