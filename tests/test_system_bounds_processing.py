@@ -138,6 +138,8 @@ def test_failed_system_leaves_no_stale_or_partial_published_set(
         if index == 5:
             raise RuntimeError("system failed")
         Path(main.replace_extension(path, ".musicxml")).write_text("temporary")
+        if config.write_confidence:
+            Path(main.replace_extension(path, ".confidence.json")).write_text("temporary")
 
     monkeypatch.setattr(main, "process_image", process)
     with pytest.raises(RuntimeError, match="system failed"):
