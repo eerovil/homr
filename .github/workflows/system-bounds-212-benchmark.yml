@@ -14,7 +14,6 @@ jobs:
     timeout-minutes: 30
     env:
       CHOIR_REPO: ${{ github.workspace }}/choir
-      BENCHMARK_OUT: ${{ runner.temp }}/system-bounds-212
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v6
@@ -41,6 +40,8 @@ jobs:
       - name: Initialize CPU recognition models
         run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
       - name: Compare Poppler and pypdfium system crops through recognition
+        env:
+          BENCHMARK_OUT: ${{ runner.temp }}/system-bounds-212
         run: poetry run python .github/system-bounds-212-benchmark.py
       - name: Preserve renderer and MusicXML evidence
         if: always()
