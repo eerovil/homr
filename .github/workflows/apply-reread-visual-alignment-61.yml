@@ -11,7 +11,7 @@ jobs:
   apply:
     if: github.event.head_commit.message != 'Generate reread visual alignment for issue 61'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
@@ -21,11 +21,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Install locked development environment
+      - name: Install runtime plus pinned focused test tools
         run: |
           python -m pip install -q poetry
           poetry config virtualenvs.in-project true
-          poetry install --extras cpu
+          poetry install --only main --extras cpu
+          poetry run python -m pip install -q \
+            black==26.1.0 isort==7.0.0 ruff==0.15.1 mypy==1.19.1 pytest==9.0.2
       - name: Apply and format exact source transform
         run: |
           set -euo pipefail
