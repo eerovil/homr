@@ -41,7 +41,6 @@ jobs:
           git diff --check
           printf '%s\n' \
             homr/main.py \
-            homr/system_crops.py \
             tests/test_system_bounds_processing.py \
             tests/test_system_crops.py > /tmp/expected-files
           git diff --name-only > /tmp/actual-files
@@ -51,7 +50,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git add homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
+          git add homr/main.py tests/test_system_crops.py tests/test_system_bounds_processing.py
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit -m 'Wire explicit system bounds into the homr CLI'
