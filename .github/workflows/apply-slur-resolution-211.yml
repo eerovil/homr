@@ -1,0 +1,41 @@
+name: Apply slur resolution 211
+
+on:
+  push:
+    branches: [fix/slur-resolution-211]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message != 'Wire slur resolution into MusicXML generation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Apply exact transform
+        run: |
+          set -euo pipefail
+          python .github/apply-slur-resolution-211.py
+          python -m compileall -q homr
+          git diff --check
+      - name: Publish source change
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add homr/music_xml_generator.py
+          test "$(git diff --cached --name-only)" = "homr/music_xml_generator.py"
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'Wire slur resolution into MusicXML generation'
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+              push https://github.com/eerovil/homr.git HEAD:refs/heads/fix/slur-resolution-211
