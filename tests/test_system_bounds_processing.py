@@ -40,9 +40,7 @@ def _bounds(path: Path) -> None:
     )
 
 
-def _fake_crops(
-    monkeypatch: pytest.MonkeyPatch, seen: list[tuple[list[int], float]]
-) -> None:
+def _fake_crops(monkeypatch: pytest.MonkeyPatch, seen: list[tuple[list[int], float]]) -> None:
     def render(
         pdf: str,
         bounds: list[SystemBounds],
@@ -168,7 +166,11 @@ def test_confidence_sidecars_follow_their_system_outputs(
 
     monkeypatch.setattr(main, "process_image", process)
     outputs = main.process_system_bounds(
-        str(pdf), str(bounds), _config(write_confidence=True), XmlGeneratorArguments(), system_index=2
+        str(pdf),
+        str(bounds),
+        _config(write_confidence=True),
+        XmlGeneratorArguments(),
+        system_index=2,
     )
 
     assert len(outputs) == 1

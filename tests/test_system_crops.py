@@ -121,9 +121,7 @@ def test_default_padding_expands_the_printed_band_at_both_edges(tmp_path: Path) 
     _pdf(pdf)
     bounds = [SystemBounds(1, 2, 0.25, 0.75)]
 
-    tight = render_system_crops(
-        str(pdf), bounds, str(tmp_path / "tight"), dpi=72, pad=0
-    )[0]
+    tight = render_system_crops(str(pdf), bounds, str(tmp_path / "tight"), dpi=72, pad=0)[0]
     padded = render_system_crops(str(pdf), bounds, str(tmp_path / "padded"), dpi=72)[0]
 
     tight_image = cv2.imread(tight.path)
@@ -148,9 +146,7 @@ def test_missing_pdf_page_is_an_error_not_a_skipped_system(tmp_path: Path) -> No
     pdf = tmp_path / "two-pages.pdf"
     _pdf(pdf)
     with pytest.raises(ValueError, match="does not exist"):
-        render_system_crops(
-            str(pdf), [SystemBounds(1, 3, 0.1, 0.2)], str(tmp_path / "out"), dpi=72
-        )
+        render_system_crops(str(pdf), [SystemBounds(1, 3, 0.1, 0.2)], str(tmp_path / "out"), dpi=72)
 
 
 def test_validate_does_not_sort_a_misordered_page() -> None:
