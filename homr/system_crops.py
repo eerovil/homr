@@ -1,17 +1,17 @@
 """Crop explicitly supplied printed systems from a PDF, in stable score order.
 
 Choral pages are not rectangular tables: a voice that rests through a system may
-simply not be printed.  Homr's normal whole-page parser has to reconcile staff
-row N across every system, which is therefore the wrong question for such a
-page.  This module does not guess the missing logical voice.  It accepts the
-system bands already known by the caller and makes each band an independent
-image, so the ordinary one-system recognition path can answer only what the
-pixels actually contain.
+simply not be printed. Homr's normal whole-page parser has to reconcile staff row
+N across every system, which is therefore the wrong question for such a page.
+This module does not guess the missing logical voice. It accepts the system bands
+already known by the caller and makes each band an independent image, so the
+ordinary one-system recognition path can answer only what the pixels contain.
 
 The JSON schema intentionally matches musescore-choir-plugins' ``.systems.json``:
 ``top`` and ``bottom`` are fractions of the original PDF page height and ``page``
-and ``index`` are one-based.  Measure ranges are accepted as provenance but are
-not used by recognition.
+and ``index`` are one-based. Measure ranges are accepted as provenance but are
+not used by recognition. The default 2% padding on each edge is also the choir
+scan stage's measured value: tight B5 crops lost a printed staff and slur ink.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ import pypdfium2 as pdfium
 from homr.type_definitions import NDArray
 
 DEFAULT_SYSTEM_DPI = 200
+DEFAULT_SYSTEM_PAD = 0.02
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class SystemBounds:
 
 @dataclass(frozen=True)
 class SystemCrop:
-    """A rendered system image and the bounds it came from."""
+    """A rendered system image and the original bounds it came from."""
 
     bounds: SystemBounds
     path: str
@@ -58,7 +59,7 @@ class SystemCrop:
 def _as_int(value: object, field: str) -> int:
     if type(value) is not int:  # bool is not a valid index
         raise ValueError(f"system {field} must be an integer")
-    return value
+    return int(value)
 
 
 def _as_fraction(value: object, field: str) -> float:
@@ -137,6 +138,13 @@ def select_system(bounds: list[SystemBounds], index: int | None) -> list[SystemB
     return selected
 
 
+def _validated_pad(pad: float) -> float:
+    result = float(pad)
+    if not math.isfinite(result) or result < 0:
+        raise ValueError("system padding must be a finite number >= 0")
+    return result
+
+
 def _render_page(page: object, dpi: int) -> NDArray:
     # pypdfium2's page object is intentionally kept out of the public type
     # surface: its concrete wrapper type has changed between releases.
@@ -145,11 +153,13 @@ def _render_page(page: object, dpi: int) -> NDArray:
     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
 
-def _crop(page: NDArray, bound: SystemBounds) -> NDArray:
-    """Use the same fractional-to-pixel rounding as the choir app."""
+def _crop(page: NDArray, bound: SystemBounds, pad: float) -> NDArray:
+    """Use the choir scan's fractional padding and pixel-rounding semantics."""
     height = page.shape[0]
-    top = max(0, min(height - 1, int(height * bound.top)))
-    band = max(1, min(height - top, int(height * bound.bottom) - top))
+    top_fraction = max(0.0, bound.top - pad)
+    bottom_fraction = min(1.0, bound.bottom + pad)
+    top = max(0, min(height - 1, int(height * top_fraction)))
+    band = max(1, min(height - top, int(height * bottom_fraction) - top))
     return page[top : top + band, :]
 
 
@@ -158,10 +168,12 @@ def render_system_crops(
     bounds: list[SystemBounds],
     out_dir: str,
     dpi: int = DEFAULT_SYSTEM_DPI,
+    pad: float = DEFAULT_SYSTEM_PAD,
 ) -> list[SystemCrop]:
-    """Render only the requested PDF pages and write one PNG per printed system."""
+    """Render requested PDF pages and write one padded PNG per printed system."""
     if dpi < 1:
         raise ValueError("system dpi must be at least 1")
+    pad = _validated_pad(pad)
     bounds = validate_system_bounds(bounds)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     document = pdfium.PdfDocument(pdf_path)
@@ -178,7 +190,7 @@ def render_system_crops(
                 )
             if bound.page not in pages:
                 pages[bound.page] = _render_page(document[bound.page - 1], dpi)
-            image = _crop(pages[bound.page], bound)
+            image = _crop(pages[bound.page], bound, pad)
             path = os.path.join(out_dir, f"system-{bound.index:03d}@{dpi}.png")
             if not cv2.imwrite(path, image):
                 raise OSError(f"could not write system crop {path}")
