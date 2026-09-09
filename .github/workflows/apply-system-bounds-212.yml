@@ -26,10 +26,12 @@ jobs:
           python -m pip install -q poetry
           poetry config virtualenvs.in-project true
           poetry install --extras cpu
-      - name: Apply and verify the exact integration
+      - name: Apply, format and verify the exact integration
         run: |
           set -euo pipefail
           python .github/apply-system-bounds-212.py
+          poetry run black homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
+          poetry run isort homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
           poetry run black --check homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
           poetry run isort --check-only homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
           poetry run ruff check homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
@@ -37,13 +39,19 @@ jobs:
           poetry run pytest -q --tb=short -o log_cli=false tests/test_system_crops.py tests/test_system_bounds_processing.py
           git checkout -- poetry.lock
           git diff --check
-          test "$(git diff --name-only)" = "homr/main.py"
+          printf '%s\n' \
+            homr/main.py \
+            homr/system_crops.py \
+            tests/test_system_bounds_processing.py \
+            tests/test_system_crops.py > /tmp/expected-files
+          git diff --name-only > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
       - name: Publish the reviewed integration
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git add homr/main.py
+          git add homr/main.py homr/system_crops.py tests/test_system_crops.py tests/test_system_bounds_processing.py
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit -m 'Wire explicit system bounds into the homr CLI'
