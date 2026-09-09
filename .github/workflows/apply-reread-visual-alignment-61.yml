@@ -1,0 +1,57 @@
+name: Apply reread visual alignment 61
+
+on:
+  push:
+    branches: [fix/reread-visual-alignment-61-work]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message != 'Generate reread visual alignment for issue 61'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install locked development environment
+        run: |
+          python -m pip install -q poetry
+          poetry config virtualenvs.in-project true
+          poetry install --extras cpu
+      - name: Apply and format exact source transform
+        run: |
+          set -euo pipefail
+          poetry run python .github/apply-reread-visual-alignment-61.py
+          poetry run black homr/reread.py tests/test_reread_visual_alignment.py
+          poetry run isort homr/reread.py tests/test_reread_visual_alignment.py
+      - name: Validate focused behavior and static checks
+        run: |
+          set -euo pipefail
+          poetry run ruff check homr/reread.py tests/test_reread.py tests/test_reread_visual_alignment.py
+          poetry run mypy homr/reread.py
+          poetry run pytest -q --tb=short --show-capture=no -o log_cli=false \
+            tests/test_reread.py tests/test_reread_visual_alignment.py
+          git diff --check
+          git diff --exit-code -- fixtures fixturecheck
+      - name: Publish generated source only to this temporary branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git checkout -- poetry.lock pyproject.toml || true
+          git add homr/reread.py tests/test_reread_visual_alignment.py
+          test "$(git diff --cached --name-only | paste -sd ' ' -)" = \
+            "homr/reread.py tests/test_reread_visual_alignment.py"
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'Generate reread visual alignment for issue 61'
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push https://github.com/eerovil/homr.git HEAD:refs/heads/fix/reread-visual-alignment-61-work
