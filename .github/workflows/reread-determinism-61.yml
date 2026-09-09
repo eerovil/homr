@@ -1,0 +1,48 @@
+name: Reread determinism 61
+
+on:
+  push:
+    branches: [diagnostic/reread-determinism-61]
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked CPU runtime
+        run: |
+          python -m pip install -q poetry
+          poetry config virtualenvs.in-project true
+          poetry install --only main --extras cpu
+      - name: Initialize CPU models
+        run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
+      - name: Run twelve fresh-process traces
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/reread-61"
+          mkdir -p "$out"
+          for n in $(seq 1 12); do
+            echo "===== RUN $n =====" | tee "$out/run-$n.log"
+            TRACE_OUTPUT="$out/run-$n.musicxml" PYTHONPATH="$PWD" \
+              poetry run python .github/reread-diagnose.py 2>&1 | tee -a "$out/run-$n.log"
+            sha256sum "$out/run-$n.musicxml" | tee -a "$out/hashes.txt"
+          done
+          sort "$out/hashes.txt" | uniq -c
+      - name: Preserve traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reread-determinism-61
+          path: ${{ runner.temp }}/reread-61
+          retention-days: 3
