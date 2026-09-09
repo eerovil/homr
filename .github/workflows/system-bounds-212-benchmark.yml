@@ -1,0 +1,52 @@
+name: System bounds 212 renderer benchmark
+
+on:
+  push:
+    branches: [diagnostic/system-bounds-212-benchmark]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CHOIR_REPO: ${{ github.workspace }}/choir
+      BENCHMARK_OUT: ${{ runner.temp }}/system-bounds-212
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: eerovil/musescore-choir-plugins
+          ref: main
+          path: choir
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked CPU inference environment
+        run: |
+          python -m pip install -q poetry
+          poetry config virtualenvs.in-project true
+          poetry install --only main --extras cpu
+          command -v pdftoppm
+          command -v pdfinfo
+      - name: Initialize CPU recognition models
+        run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
+      - name: Compare Poppler and pypdfium system crops through recognition
+        run: poetry run python .github/system-bounds-212-benchmark.py
+      - name: Preserve renderer and MusicXML evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-bounds-212-${{ github.sha }}
+          path: ${{ runner.temp }}/system-bounds-212
+          if-no-files-found: warn
+          retention-days: 14
