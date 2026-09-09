@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from homr import main
 from homr.music_xml_generator import XmlGeneratorArguments
-from homr.system_crops import SystemBounds, SystemCrop
+from homr.system_crops import DEFAULT_SYSTEM_PAD, SystemBounds, SystemCrop
 
 
 def _config(write_confidence: bool = False) -> main.ProcessingConfig:
@@ -42,10 +41,16 @@ def _bounds(path: Path) -> None:
 
 
 def _fake_crops(
-    monkeypatch: pytest.MonkeyPatch, seen: list[list[int]]
+    monkeypatch: pytest.MonkeyPatch, seen: list[tuple[list[int], float]]
 ) -> None:
-    def render(pdf: str, bounds: list[SystemBounds], out_dir: str, dpi: int) -> list[SystemCrop]:
-        seen.append([bound.index for bound in bounds])
+    def render(
+        pdf: str,
+        bounds: list[SystemBounds],
+        out_dir: str,
+        dpi: int,
+        pad: float,
+    ) -> list[SystemCrop]:
+        seen.append(([bound.index for bound in bounds], pad))
         result = []
         for bound in bounds:
             path = Path(out_dir) / f"system-{bound.index:03d}.png"
@@ -63,7 +68,7 @@ def test_every_system_is_processed_independently_and_published_in_order(
     pdf.write_bytes(b"pdf")
     bounds = tmp_path / ".systems.json"
     _bounds(bounds)
-    seen: list[list[int]] = []
+    seen: list[tuple[list[int], float]] = []
     _fake_crops(monkeypatch, seen)
     calls: list[str] = []
 
@@ -77,7 +82,7 @@ def test_every_system_is_processed_independently_and_published_in_order(
         str(pdf), str(bounds), _config(), XmlGeneratorArguments(), dpi=200
     )
 
-    assert seen == [[2, 5, 9]]
+    assert seen == [([2, 5, 9], DEFAULT_SYSTEM_PAD)]
     assert calls == ["system-002", "system-005", "system-009"]
     assert [Path(path).name for path in outputs] == [
         "score_system-002.musicxml",
@@ -94,7 +99,7 @@ def test_one_system_index_preserves_the_apps_short_lease_unit(
     pdf.write_bytes(b"pdf")
     bounds = tmp_path / ".systems.json"
     _bounds(bounds)
-    seen: list[list[int]] = []
+    seen: list[tuple[list[int], float]] = []
     _fake_crops(monkeypatch, seen)
 
     def process(path: str, config: main.ProcessingConfig, args: XmlGeneratorArguments) -> None:
@@ -102,10 +107,16 @@ def test_one_system_index_preserves_the_apps_short_lease_unit(
 
     monkeypatch.setattr(main, "process_image", process)
     outputs = main.process_system_bounds(
-        str(pdf), str(bounds), _config(), XmlGeneratorArguments(), dpi=200, system_index=5
+        str(pdf),
+        str(bounds),
+        _config(),
+        XmlGeneratorArguments(),
+        dpi=200,
+        system_index=5,
+        pad=0.03,
     )
 
-    assert seen == [[5]]
+    assert seen == [([5], 0.03)]
     assert [Path(path).name for path in outputs] == ["score_system-005.musicxml"]
 
 
@@ -116,7 +127,7 @@ def test_failed_system_leaves_no_stale_or_partial_published_set(
     pdf.write_bytes(b"pdf")
     bounds = tmp_path / ".systems.json"
     _bounds(bounds)
-    seen: list[list[int]] = []
+    seen: list[tuple[list[int], float]] = []
     _fake_crops(monkeypatch, seen)
     for index in (2, 5, 9):
         (tmp_path / f"score_system-{index:03d}.musicxml").write_text("stale")
@@ -134,7 +145,7 @@ def test_failed_system_leaves_no_stale_or_partial_published_set(
             str(pdf), str(bounds), _config(write_confidence=True), XmlGeneratorArguments(), dpi=200
         )
 
-    assert seen == [[2, 5, 9]]
+    assert seen == [([2, 5, 9], DEFAULT_SYSTEM_PAD)]
     for index in (2, 5, 9):
         assert not (tmp_path / f"score_system-{index:03d}.musicxml").exists()
         assert not (tmp_path / f"score_system-{index:03d}.confidence.json").exists()
