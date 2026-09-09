@@ -22,6 +22,7 @@ from homr.score_reconstruction import (
     repair_bar_arithmetic,
 )
 from homr.simple_logging import eprint
+from homr.slur_resolution import resolve_slurs
 from homr.stem_voice_hints import SHARED
 from homr.transformer.vocabulary import (
     EncodedSymbol,
@@ -155,6 +156,7 @@ def build_part(
     ):
         part.append(measure)
     convert_ties(part)
+    resolve_slurs(part)
     return part
 
 
