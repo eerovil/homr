@@ -2,7 +2,9 @@ import argparse
 import glob
 import json
 import os
+import shutil
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -49,6 +51,13 @@ from homr.simple_logging import eprint
 from homr.staff_detection import break_wide_fragments, detect_staff, make_lines_stronger
 from homr.staff_parsing import parse_staffs
 from homr.staff_position_save_load import load_staff_positions, save_staff_positions
+from homr.system_crops import (
+    DEFAULT_SYSTEM_DPI,
+    DEFAULT_SYSTEM_PAD,
+    load_system_bounds,
+    render_system_crops,
+    select_system,
+)
 from homr.title_detection import detect_title, download_ocr_weights
 from homr.transformer.configs import Config, default_config
 from homr.transformer.score_settings import RhythmSettings
@@ -113,6 +122,79 @@ def get_predictions(
 
 def replace_extension(path: str, new_extension: str) -> str:
     return os.path.splitext(path)[0] + new_extension
+
+
+def process_system_bounds(
+    pdf_path: str,
+    bounds_path: str,
+    config: "ProcessingConfig",
+    xml_generator_args: XmlGeneratorArguments,
+    dpi: int = DEFAULT_SYSTEM_DPI,
+    system_index: int | None = None,
+    pad: float = DEFAULT_SYSTEM_PAD,
+) -> list[str]:
+    """Read supplied printed systems independently and publish them atomically.
+
+    A varying-width choral page cannot be turned into logical part columns from
+    pixels alone. The safe unit is therefore one printed system. All requested
+    crops are recognized before any result is moved beside the PDF; if one fails,
+    no stale or partial new set is left looking successful.
+    """
+    if not pdf_path.lower().endswith(".pdf"):
+        raise InvalidProgramArgumentException("--system-bounds requires a PDF input")
+    try:
+        bounds = select_system(load_system_bounds(bounds_path), system_index)
+    except ValueError as error:
+        raise InvalidProgramArgumentException(str(error)) from error
+
+    stem = os.path.splitext(os.path.abspath(pdf_path))[0]
+    destinations = [f"{stem}_system-{bound.index:03d}.musicxml" for bound in bounds]
+    confidence_destinations = [
+        replace_extension(destination, ".confidence.json") for destination in destinations
+    ]
+    # A failed re-read must not leave an older output masquerading as this run.
+    for output in [*destinations, *confidence_destinations]:
+        if os.path.exists(output):
+            os.remove(output)
+
+    with tempfile.TemporaryDirectory(prefix="homr-systems-") as scratch:
+        try:
+            crops = render_system_crops(pdf_path, bounds, scratch, dpi=dpi, pad=pad)
+        except (OSError, ValueError) as error:
+            raise InvalidProgramArgumentException(str(error)) from error
+
+        generated: list[tuple[str, str, str | None, str]] = []
+        for crop, destination, confidence_destination in zip(
+            crops, destinations, confidence_destinations, strict=True
+        ):
+            eprint(
+                f"Processing printed system {crop.index} "
+                f"(page {crop.bounds.page}, {crop.bounds.top:.3f}..{crop.bounds.bottom:.3f}, "
+                f"pad {pad:.3f})"
+            )
+            process_image(crop.path, config, xml_generator_args)
+            source = replace_extension(crop.path, ".musicxml")
+            if not os.path.exists(source):
+                raise IncompleteRecognitionError(
+                    f"System {crop.index}: recognition produced no MusicXML"
+                )
+            confidence_source = (
+                replace_extension(crop.path, ".confidence.json")
+                if config.write_confidence
+                else None
+            )
+            if confidence_source is not None and not os.path.exists(confidence_source):
+                raise IncompleteRecognitionError(
+                    f"System {crop.index}: recognition produced no confidence sidecar"
+                )
+            generated.append((source, destination, confidence_source, confidence_destination))
+
+        for source, destination, confidence_source, confidence_destination in generated:
+            shutil.move(source, destination)
+            if confidence_source is not None:
+                shutil.move(confidence_source, confidence_destination)
+            eprint("System result was written to", destination)
+    return destinations
 
 
 def load_and_preprocess_predictions(
@@ -556,8 +638,36 @@ def main() -> None:
     parser.add_argument(
         "--no-title", action="store_true", help="Don't detect title for faster inference"
     )
+    parser.add_argument(
+        "--system-bounds",
+        help="JSON .systems bounds for reading a PDF one printed system at a time",
+    )
+    parser.add_argument(
+        "--system-index",
+        type=int,
+        help="With --system-bounds, read only this score-wide system index",
+    )
+    parser.add_argument(
+        "--system-dpi",
+        type=int,
+        default=DEFAULT_SYSTEM_DPI,
+        help=f"Raster resolution for --system-bounds (default {DEFAULT_SYSTEM_DPI})",
+    )
+    parser.add_argument(
+        "--system-pad",
+        type=float,
+        default=DEFAULT_SYSTEM_PAD,
+        help=f"Page-height padding on each system edge (default {DEFAULT_SYSTEM_PAD})",
+    )
 
     args = parser.parse_args()
+    if not args.init:
+        if args.system_index is not None and not args.system_bounds:
+            parser.error("--system-index requires --system-bounds")
+        if args.system_bounds and (not args.image or not args.image.lower().endswith(".pdf")):
+            parser.error("--system-bounds requires a PDF input")
+        if args.system_dpi < 1:
+            parser.error("--system-dpi must be at least 1")
 
     force_gpu = args.gpu == GpuSupport.FORCE
     auto_gpu = args.gpu == GpuSupport.AUTO
@@ -608,7 +718,18 @@ def main() -> None:
         sys.exit(1)
     elif os.path.isfile(args.image):
         try:
-            process_image(args.image, config, xml_generator_args)
+            if args.system_bounds:
+                process_system_bounds(
+                    args.image,
+                    args.system_bounds,
+                    config,
+                    xml_generator_args,
+                    dpi=args.system_dpi,
+                    system_index=args.system_index,
+                    pad=args.system_pad,
+                )
+            else:
+                process_image(args.image, config, xml_generator_args)
         except InvalidProgramArgumentException as e:
             eprint(str(e))
             sys.exit(2)
