@@ -98,7 +98,7 @@ def test_render_uses_requested_pdf_page_and_fractional_band(tmp_path: Path) -> N
         SystemBounds(2, 2, 0.5, 1.0),
     ]
 
-    crops = render_system_crops(str(pdf), bounds, str(tmp_path / "out"), dpi=72)
+    crops = render_system_crops(str(pdf), bounds, str(tmp_path / "out"), dpi=72, pad=0)
 
     assert [crop.index for crop in crops] == [1, 2]
     images = [cv2.imread(crop.path) for crop in crops]
@@ -111,9 +111,37 @@ def test_render_uses_requested_pdf_page_and_fractional_band(tmp_path: Path) -> N
     assert upper.shape[1] == lower.shape[1]
     assert upper.shape[0] >= 95
     # BGR: the upper half is green and the lower half blue. This proves page 2
-    # was selected and the vertical fractions were not applied to the page stack.
+    # was selected and the vertical fractions were not applied to a page stack.
     assert np.mean(upper[:, :, 1]) > np.mean(upper[:, :, 0]) + 40
     assert np.mean(lower[:, :, 0]) > np.mean(lower[:, :, 1]) + 40
+
+
+def test_default_padding_expands_the_printed_band_at_both_edges(tmp_path: Path) -> None:
+    pdf = tmp_path / "two-pages.pdf"
+    _pdf(pdf)
+    bounds = [SystemBounds(1, 2, 0.25, 0.75)]
+
+    tight = render_system_crops(
+        str(pdf), bounds, str(tmp_path / "tight"), dpi=72, pad=0
+    )[0]
+    padded = render_system_crops(str(pdf), bounds, str(tmp_path / "padded"), dpi=72)[0]
+
+    tight_image = cv2.imread(tight.path)
+    padded_image = cv2.imread(padded.path)
+    assert tight_image is not None and padded_image is not None
+    # The production default is 2% at both edges, ~8 px total on this 200px page.
+    assert padded_image.shape[0] >= tight_image.shape[0] + 6
+    assert padded_image.shape[1] == tight_image.shape[1]
+
+
+def test_negative_or_nonfinite_padding_is_refused(tmp_path: Path) -> None:
+    pdf = tmp_path / "two-pages.pdf"
+    _pdf(pdf)
+    for pad in (-0.01, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="padding"):
+            render_system_crops(
+                str(pdf), [SystemBounds(1, 1, 0.1, 0.2)], str(tmp_path / str(pad)), dpi=72, pad=pad
+            )
 
 
 def test_missing_pdf_page_is_an_error_not_a_skipped_system(tmp_path: Path) -> None:
@@ -125,7 +153,7 @@ def test_missing_pdf_page_is_an_error_not_a_skipped_system(tmp_path: Path) -> No
         )
 
 
-def test_validate_does_not_sort_a_misordered_page(tmp_path: Path) -> None:
+def test_validate_does_not_sort_a_misordered_page() -> None:
     bounds = [SystemBounds(1, 1, 0.7, 0.8), SystemBounds(2, 1, 0.2, 0.3)]
     with pytest.raises(ValueError, match="page/top order"):
         validate_system_bounds(bounds)
