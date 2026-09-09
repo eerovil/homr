@@ -12,7 +12,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [default, single]
         repetition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -32,9 +31,9 @@ jobs:
           poetry install --only main --extras cpu
       - name: Initialize CPU models
         run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False)'
-      - name: Trace one fresh process on this runner
+      - name: Trace full rhythm confidence on one fresh process
         env:
-          ORT_MODE: ${{ matrix.mode }}
+          ORT_MODE: default
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/reread-61"
@@ -52,6 +51,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reread-61-${{ matrix.mode }}-${{ matrix.repetition }}
+          name: reread-61-confidence-${{ matrix.repetition }}
           path: ${{ runner.temp }}/reread-61
           retention-days: 3
