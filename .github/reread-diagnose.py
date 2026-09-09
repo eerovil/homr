@@ -68,11 +68,8 @@ def traced_predictions(*args, **kwargs):
 
 
 def compact(symbol):
-    probability = None
     confidence = symbol.confidence or {}
-    rhythm = confidence.get("rhythm") if isinstance(confidence, dict) else None
-    if isinstance(rhythm, dict):
-        probability = rhythm.get("probability")
+    rhythm_confidence = confidence.get("rhythm") if isinstance(confidence, dict) else None
     coordinates = None
     if symbol.coordinates is not None:
         try:
@@ -84,7 +81,7 @@ def compact(symbol):
         "pitch": symbol.pitch,
         "position": symbol.position,
         "stem": symbol.stem_direction,
-        "p": probability,
+        "rhythm_confidence": rhythm_confidence,
         "xy": coordinates,
     }
 
