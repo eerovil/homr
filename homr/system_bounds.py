@@ -15,9 +15,11 @@ import argparse
 import json
 import os
 import statistics
+import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -60,7 +62,9 @@ def _box(
     }
 
 
-def detect_staff_layout(image_path: str, segnet_use_gpu: bool = False) -> dict[str, object]:
+def detect_staff_layout(
+    image_path: str, segnet_use_gpu: bool = False
+) -> dict[str, object]:
     """Return staff and barline boxes for one page image without decoding music."""
     image = cv2.imread(image_path)
     if image is None:
@@ -78,7 +82,9 @@ def detect_staff_layout(image_path: str, segnet_use_gpu: bool = False) -> dict[s
     symbols = predict_symbols(debug, predictions)
     symbols.staff_fragments = break_wide_fragments(symbols.staff_fragments)
 
-    noteheads_with_stems = combine_noteheads_with_stems(symbols.noteheads, symbols.stems_rest)
+    noteheads_with_stems = combine_noteheads_with_stems(
+        symbols.noteheads, symbols.stems_rest
+    )
     if not noteheads_with_stems:
         raise ValueError(f"No noteheads found in {image_path}")
     average_note_head_height = float(
@@ -126,7 +132,10 @@ def detect_staff_layout(image_path: str, segnet_use_gpu: bool = False) -> dict[s
 def _interior_barlines(staff: Box, bar_lines: Sequence[Box]) -> list[float]:
     found: list[float] = []
     for bar in bar_lines:
-        if bar["bottom"] < staff["top"] - 0.005 or bar["top"] > staff["bottom"] + 0.005:
+        if (
+            bar["bottom"] < staff["top"] - 0.005
+            or bar["top"] > staff["bottom"] + 0.005
+        ):
             continue
         x = (bar["left"] + bar["right"]) / 2
         if x < staff["left"] + EDGE_X or x > staff["right"] - EDGE_X:
@@ -155,7 +164,9 @@ def _gap_threshold(gaps: Sequence[float]) -> float:
     return (ordered[cut] + ordered[cut + 1]) / 2
 
 
-def group_staves(staves: Sequence[Box], bar_lines: Sequence[Box]) -> list[list[Box]]:
+def group_staves(
+    staves: Sequence[Box], bar_lines: Sequence[Box]
+) -> list[list[Box]]:
     """Group page-order staves into printed systems using barline agreement."""
     ordered_staves = sorted(staves, key=lambda staff: staff["top"])
     if len(ordered_staves) < 2:
@@ -166,8 +177,12 @@ def group_staves(staves: Sequence[Box], bar_lines: Sequence[Box]) -> list[list[B
         ordered_staves[index + 1]["top"] - ordered_staves[index]["bottom"]
         for index in range(len(ordered_staves) - 1)
     ]
-    scores = [_agreement(bars[index], bars[index + 1]) for index in range(len(bars) - 1)]
-    same: list[bool | None] = [None if score is None else score >= AGREE for score in scores]
+    scores = [
+        _agreement(bars[index], bars[index + 1]) for index in range(len(bars) - 1)
+    ]
+    same: list[bool | None] = [
+        None if score is None else score >= AGREE for score in scores
+    ]
 
     inside = [gap for gap, is_same in zip(gaps, same, strict=True) if is_same]
     if inside:
@@ -193,34 +208,69 @@ def group_staves(staves: Sequence[Box], bar_lines: Sequence[Box]) -> list[list[B
     return systems
 
 
-def bands_for_page(page: int, staves: Sequence[Box], bar_lines: Sequence[Box]) -> list[SystemBounds]:
+def bands_for_page(
+    page: int, staves: Sequence[Box], bar_lines: Sequence[Box]
+) -> list[SystemBounds]:
     """Return contiguous system bands for one page, indexed from one on that page."""
     systems = group_staves(staves, bar_lines)
     if not systems:
         return []
     tops = [system[0]["top"] for system in systems]
     bottoms = [system[-1]["bottom"] for system in systems]
-    between = [tops[index + 1] - bottoms[index] for index in range(len(systems) - 1)]
+    between = [
+        tops[index + 1] - bottoms[index] for index in range(len(systems) - 1)
+    ]
     room = statistics.median(between) if between else 0.05
 
     bands: list[SystemBounds] = []
     for index in range(len(systems)):
-        top = max(0.0, tops[index] - room) if index == 0 else (bottoms[index - 1] + tops[index]) / 2
+        top = (
+            max(0.0, tops[index] - room)
+            if index == 0
+            else (bottoms[index - 1] + tops[index]) / 2
+        )
         bottom = (
             min(1.0, bottoms[index] + room)
             if index == len(systems) - 1
             else (bottoms[index] + tops[index + 1]) / 2
         )
-        bands.append(SystemBounds(index=index + 1, page=page, top=top, bottom=bottom))
+        bands.append(
+            SystemBounds(index=index + 1, page=page, top=top, bottom=bottom)
+        )
     return bands
 
 
-def _render_pdf_page(page: pdfium.PdfPage, path: str, dpi: int) -> None:
-    bitmap = page.render(scale=dpi / 72.0)
-    rgb = np.array(bitmap.to_pil().convert("RGB"))
-    image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-    if not cv2.imwrite(path, image):
-        raise OSError(f"Could not write temporary page image {path}")
+def _render_pdf_page(
+    pdf_path: str, page_number: int, image_path: str, dpi: int
+) -> None:
+    """Raster one PDF page through the accepted proposal renderer.
+
+    The measured choir proposal was validated on Poppler output. PDFium produces a
+    visually equivalent page but changes thin interior barlines enough to split Virta
+    page 1 differently, so this mode deliberately preserves the exact raster seam that
+    the grouping constants were measured against.
+    """
+    stem = str(Path(image_path).with_suffix(""))
+    try:
+        subprocess.run(
+            [
+                "pdftoppm",
+                "-r",
+                str(dpi),
+                "-f",
+                str(page_number),
+                "-l",
+                str(page_number),
+                "-png",
+                "-singlefile",
+                pdf_path,
+                stem,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise OSError(f"Could not render PDF page {page_number}: {error}") from error
 
 
 def propose_system_bounds(
@@ -243,8 +293,10 @@ def propose_system_bounds(
         with tempfile.TemporaryDirectory(prefix="homr-system-bounds-") as scratch:
             for page_index in range(len(pdf)):
                 image_path = os.path.join(scratch, f"page-{page_index + 1:03d}.png")
-                _render_pdf_page(pdf[page_index], image_path, dpi)
-                layout = detect_staff_layout(image_path, segnet_use_gpu=segnet_use_gpu)
+                _render_pdf_page(pdf_path, page_index + 1, image_path, dpi)
+                layout = detect_staff_layout(
+                    image_path, segnet_use_gpu=segnet_use_gpu
+                )
                 staves = layout.get("staves", [])
                 bar_lines = layout.get("bar_lines", [])
                 if not isinstance(staves, list) or not isinstance(bar_lines, list):
@@ -264,7 +316,9 @@ def propose_system_bounds(
         pdf.close()
 
 
-def proposal_json(bounds: Sequence[SystemBounds], dpi: int = DEFAULT_PROPOSAL_DPI) -> str:
+def proposal_json(
+    bounds: Sequence[SystemBounds], dpi: int = DEFAULT_PROPOSAL_DPI
+) -> str:
     """Stable machine-readable proposal output accepted by the existing systems schema."""
     payload = {
         "version": 1,
@@ -294,10 +348,14 @@ def main() -> None:
         default=DEFAULT_PROPOSAL_DPI,
         help=f"PDF raster resolution (default {DEFAULT_PROPOSAL_DPI})",
     )
-    parser.add_argument("--gpu", action="store_true", help="use GPU segmentation when available")
+    parser.add_argument(
+        "--gpu", action="store_true", help="use GPU segmentation when available"
+    )
     args = parser.parse_args()
     try:
-        bounds = propose_system_bounds(args.pdf, dpi=args.dpi, segnet_use_gpu=args.gpu)
+        bounds = propose_system_bounds(
+            args.pdf, dpi=args.dpi, segnet_use_gpu=args.gpu
+        )
     except (OSError, ValueError) as error:
         parser.exit(2, f"{error}\n")
     sys.stdout.write(proposal_json(bounds, args.dpi) + "\n")
