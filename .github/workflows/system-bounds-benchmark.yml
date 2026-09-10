@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: eerovil/musescore-choir-plugins
-          ref: main
+          ref: 095ba5c91ccaa4231fea3122ad6cb67b4b4718ca
           path: choir
           persist-credentials: false
       - name: Compare proposed systems with hand-drawn bounds
@@ -62,6 +62,7 @@ jobs:
               for page in pages:
                   mine = [item for item in found if item.page == page]
                   theirs = [item for item in wanted if item['page'] == page]
+                  print(label, 'page', page, 'proposed', [(x.top, x.bottom) for x in mine])
                   assert len(mine) == len(theirs), (
                       f'{label} page {page}: proposed {len(mine)}, expected {len(theirs)}'
                   )
@@ -70,15 +71,24 @@ jobs:
                           f"{label} page {page} system {expected['index']}: "
                           f"boundary {actual.bottom:.4f}, expected {expected['bottom']:.4f}"
                       )
-                  assert mine[0].top <= theirs[0]['top']
-                  assert mine[-1].bottom >= theirs[-1]['bottom']
+                  assert mine[0].top <= theirs[0]['top'], (
+                      f'{label} page {page}: proposal clips first system top'
+                  )
+                  assert mine[-1].bottom >= theirs[-1]['bottom'], (
+                      f'{label} page {page}: proposal clips last system bottom'
+                  )
 
           virta_pdf = root / 'fixtures/virta-venhetta-vie/00-registered/Virta venhettä vie.pdf'
           virta_bounds = json.loads(
               (root / 'fixtures/virta-venhetta-vie/10-cleaned/.systems.json').read_text()
           )['systems']
           virta = propose_system_bounds(str(virta_pdf))
-          assert len(virta) == len(virta_bounds) == 15
+          print('Virta total', len(virta), 'per page', {
+              page: len([x for x in virta if x.page == page]) for page in sorted({x.page for x in virta})
+          })
+          assert len(virta) == len(virta_bounds) == 15, (
+              f'Virta: proposed {len(virta)} systems, expected {len(virta_bounds)}'
+          )
           assert [item.index for item in virta] == list(range(1, 16))
           check(virta, virta_bounds, 'Virta')
 
@@ -87,6 +97,8 @@ jobs:
               if page['id'] not in {'B1a', 'B1b'}:
                   continue
               found = propose_system_bounds(str(root / page['pdf']))
-              assert len(found) == len(page['systems']) == 3
+              assert len(found) == len(page['systems']) == 3, (
+                  f"{page['id']}: proposed {len(found)} systems, expected {len(page['systems'])}"
+              )
               check(found, page['systems'], page['id'])
           PY
