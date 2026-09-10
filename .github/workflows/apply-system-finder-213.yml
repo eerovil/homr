@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           python .github/apply-system-finder-213.py
+          python .github/apply-system-finder-213-compat.py
           python .github/apply-system-finder-213-init.py
           poetry run black homr/main.py homr/image_prediction.py homr/system_finder.py \
             tests/test_system_finder.py tests/test_system_finder_startup.py
