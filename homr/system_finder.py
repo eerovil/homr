@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Callable, Sequence
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import cv2
 import numpy as np
@@ -25,6 +25,7 @@ import pypdfium2 as pdfium
 from homr import color_adjust
 from homr.bar_line_detection import detect_bar_lines
 from homr.debug import Debug
+from homr.image_prediction import get_predictions, predict_symbols
 from homr.noise_filtering import filter_predictions
 from homr.note_detection import combine_noteheads_with_stems
 from homr.resize import resize_image
@@ -81,11 +82,6 @@ def detect_page_geometry(
     use_gpu: bool = False,
 ) -> PageGeometry:
     """Return normalized staff and barline boxes without decoding any music."""
-    # Imported lazily to avoid making homr.main import this module just to expose
-    # its CLI mode. These are the same segmentation/bounding-box stages ordinary
-    # recognition uses, stopped before staff parsing and transformer decoding.
-    from homr.main import get_predictions, predict_symbols
-
     image = resize_image(image)
     preprocessed = color_adjust.apply_clahe(image)
     predictions = get_predictions(image, preprocessed, source_name, False, use_gpu)
@@ -249,8 +245,8 @@ def bands_for_page(
     return bands
 
 
-def _render_pdf_page(document: object, page_index: int, dpi: int) -> NDArray:
-    page = document[page_index]  # type: ignore[index]
+def _render_pdf_page(document: Any, page_index: int, dpi: int) -> NDArray:
+    page = document[page_index]
     bitmap = page.render(scale=dpi / 72.0)
     rgb = np.asarray(bitmap.to_pil().convert("RGB"))
     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
@@ -261,8 +257,14 @@ def find_system_bounds(
     use_gpu: bool = False,
     dpi: int = FIND_DPI,
     log: Logger = _noop,
+    page: int | None = None,
 ) -> list[SystemBounds]:
-    """Propose every printed-system band in a PDF in stable score order."""
+    """Propose printed-system bands in a PDF, optionally for one page only.
+
+    Full-PDF results are indexed across the score. A single-page request is
+    intentionally indexed from one because its caller may hold one compute slot
+    per page and reindex while accumulating the page results.
+    """
     if not pdf_path.lower().endswith(".pdf"):
         raise ValueError("system-bound proposal requires a PDF input")
     if dpi < 1 or not math.isfinite(float(dpi)):
@@ -274,9 +276,14 @@ def find_system_bounds(
 
     result: list[SystemBounds] = []
     try:
-        pages = len(document)
-        for page_number in range(1, pages + 1):
-            log(f"Looking for systems on page {page_number} of {pages}")
+        page_count = len(document)
+        if page is not None and not 1 <= page <= page_count:
+            raise ValueError(
+                f"system-bound proposal page {page} does not exist; PDF has {page_count} page(s)"
+            )
+        page_numbers = [page] if page is not None else list(range(1, page_count + 1))
+        for page_number in page_numbers:
+            log(f"Looking for systems on page {page_number} of {page_count}")
             image = _render_pdf_page(document, page_number - 1, dpi)
             geometry = detect_page_geometry(
                 image,
@@ -305,7 +312,7 @@ def find_system_bounds(
 
 
 def bounds_payload(bounds: Sequence[SystemBounds]) -> dict[str, list[dict[str, int | float]]]:
-    """Stable JSON schema compatible with the choir app's `.systems.json`."""
+    """Stable JSON schema matching the choir app's `SystemBounds.to_dict()`."""
     return {
         "systems": [
             {
@@ -313,6 +320,8 @@ def bounds_payload(bounds: Sequence[SystemBounds]) -> dict[str, list[dict[str, i
                 "page": bound.page,
                 "top": bound.top,
                 "bottom": bound.bottom,
+                "measure_start": bound.measure_start,
+                "measure_end": bound.measure_end,
             }
             for bound in bounds
         ]
