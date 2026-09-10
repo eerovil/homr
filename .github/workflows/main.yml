@@ -35,6 +35,9 @@ jobs:
       - name: Downloads models CPU
         run: poetry run homr --init --gpu no
 
+      - name: Show system-bounds Black diff
+        run: poetry run black --diff homr/system_bounds.py || true
+
       - name: CI
         env:
           HOMR_REQUIRE_MODELS: "1"
