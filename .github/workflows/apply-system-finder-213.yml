@@ -31,14 +31,21 @@ jobs:
           set -euo pipefail
           python .github/apply-system-finder-213.py
           python .github/apply-system-finder-213-init.py
-          poetry run black homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
-          poetry run isort homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
-          poetry run black --check homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
-          poetry run isort --check-only homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
-          poetry run ruff check homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
-          poetry run mypy homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
+          poetry run black homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run isort homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run black --check homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run isort --check-only homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run ruff check homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run mypy homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
           poetry run pytest -q --tb=short -o log_cli=false \
-            tests/test_system_finder.py tests/test_system_crops.py tests/test_system_bounds_processing.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py \
+            tests/test_system_crops.py tests/test_system_bounds_processing.py \
             tests/test_segmentation_inference.py tests/test_segmentation_patches.py
           git checkout -- poetry.lock
           git diff --check
@@ -47,7 +54,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git add homr/main.py homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py
+          git add homr/main.py homr/image_prediction.py homr/system_finder.py \
+            tests/test_system_finder.py tests/test_system_finder_startup.py
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit -m 'Expose system-bound proposal in the homr CLI'
