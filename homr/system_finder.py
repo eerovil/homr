@@ -14,9 +14,12 @@ overlapping within-system and between-system gap ranges.
 from __future__ import annotations
 
 import math
+import os
 import statistics
+import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import cv2
 import numpy as np
@@ -138,7 +141,9 @@ def detect_page_geometry(
     }
 
 
-def _interior_barlines(staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]) -> list[float]:
+def _interior_barlines(
+    staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]
+) -> list[float]:
     """Barline x positions on one staff, excluding the system's two ends."""
     found: list[float] = []
     for bar in bar_lines:
@@ -166,7 +171,8 @@ def _gap_threshold(gaps: Sequence[float]) -> float:
     if len(ordered) < 2:
         return ordered[0] + 1.0
     steps = [
-        (ordered[index + 1] / max(ordered[index], 1e-6), index) for index in range(len(ordered) - 1)
+        (ordered[index + 1] / max(ordered[index], 1e-6), index)
+        for index in range(len(ordered) - 1)
     ]
     _, cut = max(steps)
     return (ordered[cut] + ordered[cut + 1]) / 2
@@ -238,11 +244,33 @@ def bands_for_page(
     return bands
 
 
-def _render_pdf_page(document: Any, page_index: int, dpi: int) -> NDArray:
-    page = document[page_index]
-    bitmap = page.render(scale=dpi / 72.0)
-    rgb = np.asarray(bitmap.to_pil().convert("RGB"))
-    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+def _render_pdf_page(pdf_path: str, page_number: int, dpi: int, workdir: str) -> NDArray:
+    """Raster one PDF page through Poppler, matching the measured choir proposal seam."""
+    stem = os.path.join(workdir, f"page-{page_number:03d}")
+    try:
+        subprocess.run(
+            [
+                "pdftoppm",
+                "-r",
+                str(dpi),
+                "-f",
+                str(page_number),
+                "-l",
+                str(page_number),
+                "-png",
+                "-singlefile",
+                pdf_path,
+                stem,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise OSError(f"Could not render PDF page {page_number}: {error}") from error
+    image = cv2.imread(stem + ".png")
+    if image is None:
+        raise OSError(f"Could not read rendered PDF page {page_number}")
+    return image
 
 
 def find_system_bounds(
@@ -275,35 +303,40 @@ def find_system_bounds(
                 f"system-bound proposal page {page} does not exist; PDF has {page_count} page(s)"
             )
         page_numbers = [page] if page is not None else list(range(1, page_count + 1))
-        for page_number in page_numbers:
-            log(f"Looking for systems on page {page_number} of {page_count}")
-            image = _render_pdf_page(document, page_number - 1, dpi)
-            geometry = detect_page_geometry(
-                image,
-                source_name=f"{pdf_path}#page-{page_number}",
-                use_gpu=use_gpu,
-            )
-            page_bands = bands_for_page(page_number, geometry["staves"], geometry["bar_lines"])
-            log(
-                f"Page {page_number}: {len(geometry['staves'])} staves in "
-                f"{len(page_bands)} system(s)"
-            )
-            for band in page_bands:
-                result.append(
-                    SystemBounds(
-                        index=len(result) + 1,
-                        page=page_number,
-                        top=band.top,
-                        bottom=band.bottom,
-                    )
+        with tempfile.TemporaryDirectory(prefix="homr-system-finder-") as workdir:
+            for page_number in page_numbers:
+                log(f"Looking for systems on page {page_number} of {page_count}")
+                image = _render_pdf_page(pdf_path, page_number, dpi, workdir)
+                geometry = detect_page_geometry(
+                    image,
+                    source_name=f"{pdf_path}#page-{page_number}",
+                    use_gpu=use_gpu,
                 )
+                page_bands = bands_for_page(
+                    page_number, geometry["staves"], geometry["bar_lines"]
+                )
+                log(
+                    f"Page {page_number}: {len(geometry['staves'])} staves in "
+                    f"{len(page_bands)} system(s)"
+                )
+                for band in page_bands:
+                    result.append(
+                        SystemBounds(
+                            index=len(result) + 1,
+                            page=page_number,
+                            top=band.top,
+                            bottom=band.bottom,
+                        )
+                    )
     finally:
         document.close()
     return result
 
 
-def bounds_payload(bounds: Sequence[SystemBounds]) -> dict[str, list[dict[str, int | float]]]:
-    """Stable JSON schema matching the choir app's `SystemBounds.to_dict()`."""
+def bounds_payload(
+    bounds: Sequence[SystemBounds],
+) -> dict[str, list[dict[str, int | float]]]:
+    """Stable JSON schema matching the choir app's ``SystemBounds.to_dict()``."""
     return {
         "systems": [
             {
