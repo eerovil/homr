@@ -35,21 +35,22 @@ def test_barline_agreement_groups_staves_before_gap_size() -> None:
     assert [len(system) for system in systems] == [2, 2]
 
 
-def test_small_gap_veto_keeps_a_staff_when_its_barlines_are_missing() -> None:
+def test_small_gap_veto_keeps_a_staff_when_its_barlines_disagree() -> None:
     staves = [
         _staff(0.10, 0.14),
-        _staff(0.20, 0.24),
-        _staff(0.295, 0.335),
-        _staff(0.395, 0.435),
+        _staff(0.22, 0.26),
+        _staff(0.42, 0.46),
+        _staff(0.53, 0.57),
     ]
-    # The first pair establishes an ordinary within-system gap of 0.06. The second pair
-    # has no barline evidence and an even smaller 0.06-ish gap, so geometry keeps it.
-    bars = [*[_bar(x, 0.10, 0.24) for x in (0.30, 0.50, 0.70)]]
+    bars = [
+        *[_bar(x, 0.10, 0.26) for x in (0.30, 0.50)],
+        *[_bar(x, 0.42, 0.46) for x in (0.35, 0.55)],
+        _bar(0.62, 0.53, 0.57),
+    ]
 
     systems = system_bounds.group_staves(staves, bars)
 
-    assert len(systems[0]) == 2
-    assert sum(len(system) for system in systems) == 4
+    assert [len(system) for system in systems] == [2, 2]
 
 
 def test_gap_fallback_uses_the_largest_step_when_no_barlines_exist() -> None:
