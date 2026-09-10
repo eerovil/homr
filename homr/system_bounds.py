@@ -11,12 +11,13 @@ is only a veto/fallback when barline evidence is missing. No music decoding happ
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import statistics
+import sys
 import tempfile
 from collections.abc import Sequence
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -31,7 +32,6 @@ from homr.note_detection import combine_noteheads_with_stems
 from homr.resize import resize_image
 from homr.staff_detection import break_wide_fragments, detect_staff, make_lines_stronger
 from homr.system_crops import DEFAULT_SYSTEM_DPI, SystemBounds
-from homr.type_definitions import NDArray
 
 # Keep these values stable: they are measured against the choir benchmark and are part of
 # the proposal contract, not tuning knobs for individual pages.
@@ -280,3 +280,28 @@ def proposal_json(bounds: Sequence[SystemBounds], dpi: int = DEFAULT_PROPOSAL_DP
         ],
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m homr.system_bounds",
+        description="Propose printed-system bounds for a PDF as JSON without decoding music.",
+    )
+    parser.add_argument("pdf", help="PDF score to inspect")
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=DEFAULT_PROPOSAL_DPI,
+        help=f"PDF raster resolution (default {DEFAULT_PROPOSAL_DPI})",
+    )
+    parser.add_argument("--gpu", action="store_true", help="use GPU segmentation when available")
+    args = parser.parse_args()
+    try:
+        bounds = propose_system_bounds(args.pdf, dpi=args.dpi, segnet_use_gpu=args.gpu)
+    except (OSError, ValueError) as error:
+        parser.exit(2, f"{error}\n")
+    sys.stdout.write(proposal_json(bounds, args.dpi) + "\n")
+
+
+if __name__ == "__main__":
+    main()
