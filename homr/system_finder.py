@@ -138,9 +138,7 @@ def detect_page_geometry(
     }
 
 
-def _interior_barlines(
-    staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]
-) -> list[float]:
+def _interior_barlines(staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]) -> list[float]:
     """Barline x positions on one staff, excluding the system's two ends."""
     found: list[float] = []
     for bar in bar_lines:
@@ -168,8 +166,7 @@ def _gap_threshold(gaps: Sequence[float]) -> float:
     if len(ordered) < 2:
         return ordered[0] + 1.0
     steps = [
-        (ordered[index + 1] / max(ordered[index], 1e-6), index)
-        for index in range(len(ordered) - 1)
+        (ordered[index + 1] / max(ordered[index], 1e-6), index) for index in range(len(ordered) - 1)
     ]
     _, cut = max(steps)
     return (ordered[cut] + ordered[cut + 1]) / 2
@@ -231,11 +228,7 @@ def bands_for_page(
 
     bands: list[SystemBounds] = []
     for index in range(len(systems)):
-        top = (
-            max(0.0, tops[index] - room)
-            if index == 0
-            else (bottoms[index - 1] + tops[index]) / 2
-        )
+        top = max(0.0, tops[index] - room) if index == 0 else (bottoms[index - 1] + tops[index]) / 2
         bottom = (
             min(1.0, bottoms[index] + room)
             if index == len(systems) - 1
@@ -290,9 +283,7 @@ def find_system_bounds(
                 source_name=f"{pdf_path}#page-{page_number}",
                 use_gpu=use_gpu,
             )
-            page_bands = bands_for_page(
-                page_number, geometry["staves"], geometry["bar_lines"]
-            )
+            page_bands = bands_for_page(page_number, geometry["staves"], geometry["bar_lines"])
             log(
                 f"Page {page_number}: {len(geometry['staves'])} staves in "
                 f"{len(page_bands)} system(s)"

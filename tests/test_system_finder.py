@@ -26,7 +26,9 @@ def barline(staff_box: NormalizedBox, x: float) -> NormalizedBox:
     }
 
 
-def page(*rows: tuple[float, float, list[float]]) -> tuple[list[NormalizedBox], list[NormalizedBox]]:
+def page(
+    *rows: tuple[float, float, list[float]]
+) -> tuple[list[NormalizedBox], list[NormalizedBox]]:
     staves: list[NormalizedBox] = []
     bars: list[NormalizedBox] = []
     for top, bottom, xs in rows:
@@ -123,9 +125,7 @@ def test_page_with_no_staves_proposes_nothing() -> None:
 
 
 def test_payload_matches_system_bounds_schema() -> None:
-    payload = system_finder.bounds_payload(
-        [SystemBounds(index=1, page=2, top=0.1, bottom=0.4)]
-    )
+    payload = system_finder.bounds_payload([SystemBounds(index=1, page=2, top=0.1, bottom=0.4)])
     assert payload == {
         "systems": [
             {
@@ -150,7 +150,9 @@ def _two_page_pdf(path: Path) -> None:
     first.save(path, "PDF", save_all=True, append_images=[second], resolution=72.0)
 
 
-def _fake_geometry(image: np.ndarray, source_name: str = "", use_gpu: bool = False) -> system_finder.PageGeometry:
+def _fake_geometry(
+    image: np.ndarray, source_name: str = "", use_gpu: bool = False
+) -> system_finder.PageGeometry:
     one = staff(0.15, 0.20)
     two = staff(0.35, 0.40)
     bars = [barline(one, 0.3), barline(two, 0.3)]

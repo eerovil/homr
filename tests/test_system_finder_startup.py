@@ -23,9 +23,7 @@ def test_finder_cli_initializes_segnet_without_transformer_models(
         coreml_encoder: bool,
         include_transformer: bool = True,
     ) -> None:
-        downloads.append(
-            (segnet_use_gpu, transformer_use_gpu, coreml_encoder, include_transformer)
-        )
+        downloads.append((segnet_use_gpu, transformer_use_gpu, coreml_encoder, include_transformer))
 
     monkeypatch.setattr(main, "download_weights", download)
     monkeypatch.setattr(
