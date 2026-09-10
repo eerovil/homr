@@ -1,0 +1,112 @@
+name: Choir system-bounds benchmark
+
+on:
+  pull_request:
+    paths:
+      - 'homr/system_finder.py'
+      - 'homr/image_prediction.py'
+      - 'homr/main.py'
+      - 'tests/test_system_finder*.py'
+      - '.github/workflows/system-bounds-benchmark.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'homr/system_finder.py'
+      - 'homr/image_prediction.py'
+      - 'homr/main.py'
+      - 'tests/test_system_finder*.py'
+      - '.github/workflows/system-bounds-benchmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proposal-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOMR_REQUIRE_MODELS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+      - name: Install homr inference dependencies
+        run: |
+          python -m pip install -q poetry
+          poetry config virtualenvs.in-project true
+          poetry install --only main --extras cpu
+      - name: Initialize segmentation model only
+        run: poetry run python -c 'from homr.main import download_weights; download_weights(False, False, False, False)'
+      - name: Check out choir benchmark fixtures
+        uses: actions/checkout@v6
+        with:
+          repository: eerovil/musescore-choir-plugins
+          ref: 095ba5c91ccaa4231fea3122ad6cb67b4b4718ca
+          path: choir
+          persist-credentials: false
+      - name: Compare proposed systems with hand-drawn bounds
+        run: |
+          poetry run python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from homr.system_finder import find_system_bounds
+
+          root = Path('choir')
+          tolerance = 0.02
+
+          def check(found, wanted, label):
+              pages = sorted({item['page'] for item in wanted})
+              for page in pages:
+                  mine = [item for item in found if item.page == page]
+                  theirs = [item for item in wanted if item['page'] == page]
+                  print(label, 'page', page, 'proposed', [(x.top, x.bottom) for x in mine])
+                  assert len(mine) == len(theirs), (
+                      f'{label} page {page}: proposed {len(mine)}, expected {len(theirs)}'
+                  )
+                  for actual, expected in zip(mine[:-1], theirs[:-1], strict=True):
+                      assert abs(actual.bottom - expected['bottom']) <= tolerance, (
+                          f"{label} page {page} system {expected['index']}: "
+                          f"boundary {actual.bottom:.4f}, expected {expected['bottom']:.4f}"
+                      )
+                  assert mine[0].top <= theirs[0]['top'], (
+                      f'{label} page {page}: proposal clips first system top'
+                  )
+                  assert mine[-1].bottom >= theirs[-1]['bottom'], (
+                      f'{label} page {page}: proposal clips last system bottom'
+                  )
+
+          virta_pdf = root / 'fixtures/virta-venhetta-vie/00-registered/Virta venhettä vie.pdf'
+          virta_bounds = json.loads(
+              (root / 'fixtures/virta-venhetta-vie/10-cleaned/.systems.json').read_text()
+          )['systems']
+          virta = find_system_bounds(str(virta_pdf))
+          print('Virta total', len(virta), 'per page', {
+              page: len([x for x in virta if x.page == page]) for page in sorted({x.page for x in virta})
+          })
+          assert len(virta) == len(virta_bounds) == 15, (
+              f'Virta: proposed {len(virta)} systems, expected {len(virta_bounds)}'
+          )
+          assert [item.index for item in virta] == list(range(1, 16))
+          check(virta, virta_bounds, 'Virta')
+
+          manifest = json.loads((root / 'fixtures/omr-benchmark/pages.json').read_text())
+          for page in manifest['pages']:
+              if page['id'] not in {'B1a', 'B1b'}:
+                  continue
+              found = find_system_bounds(str(root / page['pdf']))
+              assert len(found) == len(page['systems']) == 3, (
+                  f"{page['id']}: proposed {len(found)} systems, expected {len(page['systems'])}"
+              )
+              check(found, page['systems'], page['id'])
+          PY
