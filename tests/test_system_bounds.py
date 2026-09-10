@@ -67,7 +67,12 @@ def test_gap_fallback_uses_the_largest_step_when_no_barlines_exist() -> None:
 
 
 def test_band_edges_are_contiguous_and_page_relative() -> None:
-    staves = [_staff(0.10, 0.14), _staff(0.20, 0.24), _staff(0.40, 0.44), _staff(0.50, 0.54)]
+    staves = [
+        _staff(0.10, 0.14),
+        _staff(0.20, 0.24),
+        _staff(0.40, 0.44),
+        _staff(0.50, 0.54),
+    ]
     bars = [
         *[_bar(x, 0.10, 0.24) for x in (0.30, 0.50, 0.70)],
         *[_bar(x, 0.40, 0.54) for x in (0.25, 0.55, 0.78)],
@@ -102,7 +107,7 @@ class _FakePdf:
 def test_pdf_proposal_preserves_page_order_and_uses_score_wide_indices(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    rendered: list[tuple[int, str, int]] = []
+    rendered: list[tuple[str, int, str, int]] = []
     layouts = iter(
         [
             {"staves": [_staff(0.1, 0.2)], "bar_lines": []},
@@ -114,14 +119,22 @@ def test_pdf_proposal_preserves_page_order_and_uses_score_wide_indices(
     monkeypatch.setattr(
         system_bounds,
         "_render_pdf_page",
-        lambda page, path, dpi: rendered.append((fake_pdf.pages.index(page), path, dpi)),
+        lambda pdf, page, path, dpi: rendered.append((pdf, page, path, dpi)),
     )
-    monkeypatch.setattr(system_bounds, "detect_staff_layout", lambda *_args, **_kwargs: next(layouts))
+    monkeypatch.setattr(
+        system_bounds,
+        "detect_staff_layout",
+        lambda *_args, **_kwargs: next(layouts),
+    )
 
-    bounds = system_bounds.propose_system_bounds(str(tmp_path / "score.pdf"))
+    pdf_path = str(tmp_path / "score.pdf")
+    bounds = system_bounds.propose_system_bounds(pdf_path)
 
     assert [(bound.index, bound.page) for bound in bounds] == [(1, 1), (2, 2)]
-    assert [item[2] for item in rendered] == [200, 200]
+    assert [(item[0], item[1], item[3]) for item in rendered] == [
+        (pdf_path, 1, 200),
+        (pdf_path, 2, 200),
+    ]
     assert fake_pdf.closed
 
 
