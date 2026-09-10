@@ -4,7 +4,6 @@ import json
 import sys
 from pathlib import Path
 
-import cv2
 import numpy as np
 import pytest
 from PIL import Image, ImageDraw
@@ -128,7 +127,16 @@ def test_payload_matches_system_bounds_schema() -> None:
         [SystemBounds(index=1, page=2, top=0.1, bottom=0.4)]
     )
     assert payload == {
-        "systems": [{"index": 1, "page": 2, "top": 0.1, "bottom": 0.4}]
+        "systems": [
+            {
+                "index": 1,
+                "page": 2,
+                "top": 0.1,
+                "bottom": 0.4,
+                "measure_start": 0,
+                "measure_end": 0,
+            }
+        ]
     }
 
 
@@ -142,33 +150,61 @@ def _two_page_pdf(path: Path) -> None:
     first.save(path, "PDF", save_all=True, append_images=[second], resolution=72.0)
 
 
+def _fake_geometry(image: np.ndarray, source_name: str = "", use_gpu: bool = False) -> system_finder.PageGeometry:
+    one = staff(0.15, 0.20)
+    two = staff(0.35, 0.40)
+    bars = [barline(one, 0.3), barline(two, 0.3)]
+    return {
+        "width": int(image.shape[1]),
+        "height": int(image.shape[0]),
+        "staves": [one, two],
+        "bar_lines": bars,
+    }
+
+
 def test_pdf_pages_are_proposed_independently_in_score_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pdf = tmp_path / "two-pages.pdf"
     _two_page_pdf(pdf)
-    calls: list[tuple[int, bool]] = []
+    calls: list[tuple[str, bool]] = []
 
     def detect(
         image: np.ndarray, source_name: str = "", use_gpu: bool = False
     ) -> system_finder.PageGeometry:
-        calls.append((image.shape[0], use_gpu))
-        one = staff(0.15, 0.20)
-        two = staff(0.35, 0.40)
-        bars = [barline(one, 0.3), barline(two, 0.3)]
-        return {
-            "width": int(image.shape[1]),
-            "height": int(image.shape[0]),
-            "staves": [one, two],
-            "bar_lines": bars,
-        }
+        calls.append((source_name, use_gpu))
+        return _fake_geometry(image, source_name, use_gpu)
 
     monkeypatch.setattr(system_finder, "detect_page_geometry", detect)
     found = system_finder.find_system_bounds(str(pdf), use_gpu=True, dpi=72)
 
     assert len(calls) == 2
     assert all(use_gpu for _, use_gpu in calls)
+    assert calls[0][0].endswith("#page-1")
+    assert calls[1][0].endswith("#page-2")
     assert [(bound.index, bound.page) for bound in found] == [(1, 1), (2, 2)]
+
+
+def test_one_page_can_be_requested_for_short_compute_leases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = tmp_path / "two-pages.pdf"
+    _two_page_pdf(pdf)
+    calls: list[str] = []
+
+    def detect(
+        image: np.ndarray, source_name: str = "", use_gpu: bool = False
+    ) -> system_finder.PageGeometry:
+        calls.append(source_name)
+        return _fake_geometry(image, source_name, use_gpu)
+
+    monkeypatch.setattr(system_finder, "detect_page_geometry", detect)
+    found = system_finder.find_system_bounds(str(pdf), dpi=72, page=2)
+
+    assert len(calls) == 1 and calls[0].endswith("#page-2")
+    assert [(bound.index, bound.page) for bound in found] == [(1, 2)]
+    with pytest.raises(ValueError, match="does not exist"):
+        system_finder.find_system_bounds(str(pdf), dpi=72, page=3)
 
 
 def test_system_bound_cli_writes_json_only_to_stdout(
@@ -180,9 +216,10 @@ def test_system_bound_cli_writes_json_only_to_stdout(
     pdf.write_bytes(b"pdf")
     monkeypatch.setattr(main, "download_weights", lambda *args: None)
     monkeypatch.setattr(
-        system_finder,
+        main,
         "find_system_bounds",
         lambda *args, **kwargs: [SystemBounds(index=1, page=1, top=0.1, bottom=0.9)],
+        raising=False,
     )
     monkeypatch.setattr(
         sys,
@@ -194,7 +231,16 @@ def test_system_bound_cli_writes_json_only_to_stdout(
 
     output = capsys.readouterr()
     assert json.loads(output.out) == {
-        "systems": [{"index": 1, "page": 1, "top": 0.1, "bottom": 0.9}]
+        "systems": [
+            {
+                "index": 1,
+                "page": 1,
+                "top": 0.1,
+                "bottom": 0.9,
+                "measure_start": 0,
+                "measure_end": 0,
+            }
+        ]
     }
     assert "Result was written" not in output.out
 
