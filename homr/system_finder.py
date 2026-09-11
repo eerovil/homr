@@ -169,8 +169,7 @@ def _gap_threshold(gaps: Sequence[float]) -> float:
     if len(ordered) < 2:
         return ordered[0] + 1.0
     steps = [
-        (ordered[index + 1] / max(ordered[index], 1e-6), index)
-        for index in range(len(ordered) - 1)
+        (ordered[index + 1] / max(ordered[index], 1e-6), index) for index in range(len(ordered) - 1)
     ]
     _, cut = max(steps)
     return (ordered[cut] + ordered[cut + 1]) / 2
