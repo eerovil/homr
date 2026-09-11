@@ -141,9 +141,7 @@ def detect_page_geometry(
     }
 
 
-def _interior_barlines(
-    staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]
-) -> list[float]:
+def _interior_barlines(staff: NormalizedBox, bar_lines: Sequence[NormalizedBox]) -> list[float]:
     """Barline x positions on one staff, excluding the system's two ends."""
     found: list[float] = []
     for bar in bar_lines:
@@ -248,8 +246,10 @@ def _render_pdf_page(pdf_path: str, page_number: int, dpi: int, workdir: str) ->
     """Raster one PDF page through Poppler, matching the measured choir proposal seam."""
     stem = os.path.join(workdir, f"page-{page_number:03d}")
     try:
-        subprocess.run(
-            [
+        # The executable is fixed on the host's trusted PATH. PDF paths are argv
+        # entries, never shell input; no shell is started here.
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
                 "pdftoppm",
                 "-r",
                 str(dpi),
@@ -312,9 +312,7 @@ def find_system_bounds(
                     source_name=f"{pdf_path}#page-{page_number}",
                     use_gpu=use_gpu,
                 )
-                page_bands = bands_for_page(
-                    page_number, geometry["staves"], geometry["bar_lines"]
-                )
+                page_bands = bands_for_page(page_number, geometry["staves"], geometry["bar_lines"])
                 log(
                     f"Page {page_number}: {len(geometry['staves'])} staves in "
                     f"{len(page_bands)} system(s)"
