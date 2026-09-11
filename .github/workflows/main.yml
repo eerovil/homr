@@ -45,5 +45,13 @@ jobs:
           HOMR_REQUIRE_MODELS: "1"
         run: make ci
 
+      - name: Diagnose proposal checks
+        if: failure()
+        run: |
+          poetry run black --diff homr/system_finder.py tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run isort --diff homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py tests/test_system_finder_startup.py
+          poetry run ruff check homr/image_prediction.py homr/system_finder.py tests/test_system_finder.py tests/test_system_finder_startup.py || true
+          poetry run mypy homr/system_finder.py tests/test_system_finder.py tests/test_system_finder_startup.py || true
+
       - name: Downloads models GPU
         run: poetry run homr --init --gpu force
