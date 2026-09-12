@@ -25,6 +25,11 @@ jobs:
           cache-dependency-path: |
             poetry.lock
 
+      - name: Install Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
       - name: Install poetry
         run: |
           python -m pip install poetry

@@ -16,22 +16,15 @@ import onnxruntime as ort
 
 from homr import color_adjust, download_utils
 from homr.autocrop import autocrop
-from homr.bar_line_detection import (
-    detect_bar_lines,
-    prepare_bar_line_image,
-)
-from homr.bounding_boxes import (
-    BoundingEllipse,
-    RotatedBoundingBox,
-    create_bounding_ellipses,
-    create_rotated_bounding_boxes,
-)
+from homr.bar_line_detection import detect_bar_lines
+from homr.bounding_boxes import create_rotated_bounding_boxes
 from homr.brace_dot_detection import (
     find_braces_brackets_and_grand_staff_lines,
     prepare_brace_dot_image,
 )
 from homr.debug import Debug
 from homr.errors import IncompleteRecognitionError
+from homr.image_prediction import get_predictions, predict_symbols
 from homr.model import InputPredictions, MultiStaff, Staff
 from homr.music_xml_generator import XmlGeneratorArguments, generate_xml
 from homr.noise_filtering import filter_predictions
@@ -46,7 +39,6 @@ from homr.pdf_utils import render_pdf_to_image
 from homr.resize import resize_image
 from homr.score_reconstruction import ReconstructionChange
 from homr.segmentation.config import segnet_path_onnx, segnet_path_onnx_fp16
-from homr.segmentation.inference_segnet import extract
 from homr.simple_logging import eprint
 from homr.staff_detection import break_wide_fragments, detect_staff, make_lines_stronger
 from homr.staff_parsing import parse_staffs
@@ -58,6 +50,7 @@ from homr.system_crops import (
     render_system_crops,
     select_system,
 )
+from homr.system_finder import bounds_payload, find_system_bounds
 from homr.title_detection import detect_title, download_ocr_weights
 from homr.transformer.configs import Config, default_config
 from homr.transformer.score_settings import RhythmSettings
@@ -65,22 +58,6 @@ from homr.transformer.vocabulary import EncodedSymbol
 from homr.type_definitions import NDArray
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-
-class PredictedSymbols:
-    def __init__(
-        self,
-        noteheads: list[BoundingEllipse],
-        staff_fragments: list[RotatedBoundingBox],
-        clefs_keys: list[RotatedBoundingBox],
-        stems_rest: list[RotatedBoundingBox],
-        bar_lines: list[RotatedBoundingBox],
-    ) -> None:
-        self.noteheads = noteheads
-        self.staff_fragments = staff_fragments
-        self.clefs_keys = clefs_keys
-        self.stems_rest = stems_rest
-        self.bar_lines = bar_lines
 
 
 class InvalidProgramArgumentException(Exception):
@@ -91,33 +68,6 @@ class GpuSupport(Enum):
     No = "no"
     AUTO = "auto"
     FORCE = "force"
-
-
-def get_predictions(
-    original: NDArray,
-    preprocessed: NDArray,
-    img_path: str,
-    enable_cache: bool,
-    segnet_use_gpu: bool,
-) -> InputPredictions:
-    result = extract(
-        preprocessed,
-        img_path,
-        step_size=320,
-        use_cache=enable_cache,
-        use_gpu_inference=segnet_use_gpu,
-    )
-    original_image = cv2.resize(original, (result.staff.shape[1], result.staff.shape[0]))
-    preprocessed_image = cv2.resize(preprocessed, (result.staff.shape[1], result.staff.shape[0]))
-    return InputPredictions(
-        original=original_image,
-        preprocessed=preprocessed_image,
-        notehead=result.notehead.astype(np.uint8),
-        symbols=result.symbols.astype(np.uint8),
-        staff=result.staff.astype(np.uint8),
-        clefs_keys=result.clefs_keys.astype(np.uint8),
-        stems_rest=result.stems_rests.astype(np.uint8),
-    )
 
 
 def replace_extension(path: str, new_extension: str) -> str:
@@ -225,28 +175,6 @@ def load_and_preprocess_predictions(
     debug.write_threshold_image("notehead", predictions.notehead)
     debug.write_threshold_image("clefs_keys", predictions.clefs_keys)
     return predictions, debug
-
-
-def predict_symbols(debug: Debug, predictions: InputPredictions) -> PredictedSymbols:
-    eprint("Creating bounds for noteheads")
-    noteheads = create_bounding_ellipses(predictions.notehead, min_size=(4, 4))
-    eprint("Creating bounds for staff_fragments")
-    staff_fragments = create_rotated_bounding_boxes(
-        predictions.staff, skip_merging=True, min_size=(5, 1), max_size=(10000, 100)
-    )
-
-    eprint("Creating bounds for clefs_keys")
-    clefs_keys = create_rotated_bounding_boxes(
-        predictions.clefs_keys, min_size=(20, 40), max_size=(1000, 1000)
-    )
-    eprint("Creating bounds for stems_rest")
-    stems_rest = create_rotated_bounding_boxes(predictions.stems_rest)
-    eprint("Creating bounds for bar_lines")
-    bar_line_img = prepare_bar_line_image(predictions.stems_rest)
-    debug.write_threshold_image("bar_line_img", bar_line_img)
-    bar_lines = create_rotated_bounding_boxes(bar_line_img, skip_merging=True, min_size=(1, 5))
-
-    return PredictedSymbols(noteheads, staff_fragments, clefs_keys, stems_rest, bar_lines)
 
 
 @dataclass
@@ -535,22 +463,28 @@ def get_all_image_files_in_folder(folder: str) -> list[str]:
     return sorted(without_teasers)
 
 
-def download_weights(segnet_use_gpu: bool, transformer_use_gpu: bool, coreml_encoder: bool) -> None:
+def download_weights(
+    segnet_use_gpu: bool,
+    transformer_use_gpu: bool,
+    coreml_encoder: bool,
+    include_transformer: bool = True,
+) -> None:
     base_url = "https://github.com/liebharc/homr/releases/download/onnx_checkpoints/"
     models = [segnet_path_onnx_fp16 if segnet_use_gpu else segnet_path_onnx]
-    if transformer_use_gpu:
-        # CUDA runs the whole transformer on the fp16 models.
-        models.append(default_config.filepaths.encoder_path_fp16)
-        models.append(default_config.filepaths.decoder_path_fp16)
-    else:
-        # On the CPU EP the fp32 models are faster, and the CoreML EP cannot run
-        # the decoder, so the decoder always uses fp32. The CoreML encoder, when
-        # enabled, uses the fp16 encoder instead of the fp32 one.
-        if coreml_encoder:
+    if include_transformer:
+        if transformer_use_gpu:
+            # CUDA runs the whole transformer on the fp16 models.
             models.append(default_config.filepaths.encoder_path_fp16)
+            models.append(default_config.filepaths.decoder_path_fp16)
         else:
-            models.append(default_config.filepaths.encoder_path)
-        models.append(default_config.filepaths.decoder_path)
+            # On the CPU EP the fp32 models are faster, and the CoreML EP cannot run
+            # the decoder, so the decoder always uses fp32. The CoreML encoder, when
+            # enabled, uses the fp16 encoder instead of the fp32 one.
+            if coreml_encoder:
+                models.append(default_config.filepaths.encoder_path_fp16)
+            else:
+                models.append(default_config.filepaths.encoder_path)
+            models.append(default_config.filepaths.decoder_path)
     missing_models = [model for model in models if not os.path.exists(model)]
 
     if len(missing_models) == 0:
@@ -659,13 +593,31 @@ def main() -> None:
         default=DEFAULT_SYSTEM_PAD,
         help=f"Page-height padding on each system edge (default {DEFAULT_SYSTEM_PAD})",
     )
+    parser.add_argument(
+        "--find-system-bounds",
+        action="store_true",
+        help="Propose printed-system bounds for a PDF as JSON without decoding music",
+    )
+    parser.add_argument(
+        "--system-page",
+        type=int,
+        help="With --find-system-bounds, propose only this 1-based PDF page",
+    )
 
     args = parser.parse_args()
     if not args.init:
         if args.system_index is not None and not args.system_bounds:
             parser.error("--system-index requires --system-bounds")
+        if args.system_page is not None and not args.find_system_bounds:
+            parser.error("--system-page requires --find-system-bounds")
+        if args.system_bounds and args.find_system_bounds:
+            parser.error("--system-bounds and --find-system-bounds are mutually exclusive")
         if args.system_bounds and (not args.image or not args.image.lower().endswith(".pdf")):
             parser.error("--system-bounds requires a PDF input")
+        if args.find_system_bounds and (not args.image or not args.image.lower().endswith(".pdf")):
+            parser.error("--find-system-bounds requires a PDF input")
+        if args.system_page is not None and args.system_page < 1:
+            parser.error("--system-page must be at least 1")
         if args.system_dpi < 1:
             parser.error("--system-dpi must be at least 1")
 
@@ -683,11 +635,36 @@ def main() -> None:
     # transformer isn't already on CUDA/ROCm.
     coreml_encoder = args.coreml_encoder and not transformer_use_gpu and coreml_available()
 
-    download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
     if args.init:
+        download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
         download_ocr_weights()
         eprint("Init finished")
         return
+
+    if args.find_system_bounds:
+        # This mode stops before transformer decoding, so do not require or
+        # download encoder/decoder models just to locate printed systems.
+        download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder, False)
+        if args.debug:
+            ort.set_default_logger_severity(2)
+        else:
+            ort.set_default_logger_severity(3)
+        try:
+            proposal = find_system_bounds(
+                args.image,
+                use_gpu=segnet_use_gpu,
+                dpi=args.system_dpi,
+                log=eprint,
+                page=args.system_page,
+            )
+        except (OSError, ValueError) as error:
+            eprint(str(error))
+            sys.exit(2)
+        json.dump(bounds_payload(proposal), sys.stdout)
+        sys.stdout.write("\n")
+        return
+
+    download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
 
     config = ProcessingConfig(
         args.debug,
