@@ -12,6 +12,7 @@ replaced without silently changing what homr believes the music is.
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
@@ -185,7 +186,10 @@ def _onsets(
     span: tuple[int, int],
     swap: tuple[int, int, str] | None = None,
 ) -> list[Fraction]:
-    """When each moment of this bar starts on the writer's clock, one symbol optionally reread."""
+    """When each moment of this bar starts on the writer's clock, one symbol optionally reread.
+
+    One entry more than the bar has moments: the last is where the bar ends.
+    """
     clock = Fraction(0)
     sounding: list[Fraction] = []
     onsets = []
@@ -198,6 +202,7 @@ def _onsets(
         onsets.append(clock)
         clock += advance_to_next_group(chord, clock, sounding)
         sounding[:] = [end for end in sounding if end > clock]
+    onsets.append(clock)
     return onsets
 
 
@@ -232,11 +237,15 @@ def repair_tuplet_overlaps(
     other way round -- as its tuplet value, or its tuplet value as plain -- when all
     three hold:
 
-    - **the decoder offered that reading** among its own alternatives;
+    - **the decoder offered that reading** among its own alternatives -- or the
+      same notehead, read into the other voice of its staff, carries it
+      (`_same_head_values`);
     - **the same moment already holds that value**, read by another head: the
       triplet is on the page, this head merely lost it;
     - **it ends the note exactly when its voice next sounds**, on the writer's own
-      clock re-run with the change.
+      clock re-run with the change -- or, for its voice's last note in the bar,
+      exactly when the bar ends (eerovil/musescore-choir-plugins#245: Legenda
+      bar 2's last triplet eighth ran an eighth past its barline).
 
     Nothing else about the note changes, and no other value is tried: a voice that
     overlaps itself for any other reason -- two voices sharing one position label,
@@ -246,6 +255,10 @@ def repair_tuplet_overlaps(
     for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
         onsets = _onsets(voice, span)
         moments = list(range(span[0], span[1]))
+        # The first moment where some voice is out of time. Before it the clock
+        # can be trusted; at and after it a value read off the clock may only be
+        # fitting another note's mistake, so `_inside_its_triplet` waits for it.
+        trouble_from: int | None = None
         for offset, chord_index in enumerate(moments):
             chord = voice[chord_index]
             for symbol_index, symbol in enumerate(chord.symbols):
@@ -260,19 +273,46 @@ def repair_tuplet_overlaps(
                             for other in voice[moments[later]].symbols
                         )
                     ),
-                    None,
+                    # Its voice's last note in the bar: it must end with the bar.
+                    len(moments),
                 )
-                if following is None:
+                ends_now = onsets[offset] + symbol.get_duration().fraction
+                overlaps = ends_now > onsets[following]
+                # A gap before its voice's next note, with nothing of its own filling it.
+                leaves_gap = ends_now < onsets[following] and following < len(moments)
+                if not overlaps and not leaves_gap:
                     continue
-                if onsets[offset] + symbol.get_duration().fraction <= onsets[following]:
+                if leaves_gap and _partner_sings_between(
+                    voice, moments[offset + 1 : following], symbol.position
+                ):
+                    # The other voice of the staff sings in the gap: this voice
+                    # most likely lost its copy of that note, not its own length.
                     continue
+                clock_trusted = trouble_from is None or trouble_from == offset
+                if trouble_from is None:
+                    trouble_from = offset
                 beside = {
                     other.rhythm for other in chord.symbols if other is not symbol and _timed(other)
                 }
                 fits = []
-                for candidate in _all_alternatives(symbol):
-                    if not _tuplet_twin(symbol.rhythm, candidate) or candidate not in beside:
+                for candidate in _all_alternatives(symbol) + _same_head_values(chord, symbol):
+                    if candidate in fits:
                         continue
+                    # A gap is only ever closed by the stricter reading below: the
+                    # twin rule dates the note off a clock it moves itself, which an
+                    # overlap can afford and a gap cannot.
+                    twin_beside = (
+                        overlaps and _tuplet_twin(symbol.rhythm, candidate) and candidate in beside
+                    )
+                    if not twin_beside:
+                        if not clock_trusted or not _inside_its_triplet(chord, symbol, candidate):
+                            continue
+                        # Read only off the moments as they stand: shortening a note
+                        # also moves the clock, and a value that "fits" only by
+                        # dragging its voice's next note along with it fits nothing.
+                        lasts = EncodedSymbol(candidate).get_duration().fraction
+                        if onsets[offset] + lasts != onsets[following]:
+                            continue
                     swapped = _onsets(voice, span, (chord_index, symbol_index, candidate))
                     ends = swapped[offset] + EncodedSymbol(candidate).get_duration().fraction
                     if ends == swapped[following]:
@@ -308,6 +348,88 @@ def repair_tuplet_overlaps(
             symbols[symbol_index] = symbol.change_rhythm(rhythm)
         out.append(SymbolChord(symbols, chord.tuplet_mark))
     return out
+
+
+def _partner_sings_between(voice: list[SymbolChord], between: list[int], position: str) -> bool:
+    partner = position[:-1] if position.endswith("2") else position + "2"
+    return any(
+        other.position == partner and other.rhythm.startswith("note") and _timed(other)
+        for chord_index in between
+        for other in voice[chord_index].symbols
+    )
+
+
+def _inside_its_triplet(chord: SymbolChord, symbol: EncodedSymbol, candidate: str) -> bool:
+    """Whether `candidate` is a tuplet value of the kind already sounding in this moment.
+
+    On Legenda system 2 (eerovil/musescore-choir-plugins#245) every voice of the bar
+    sings triplets, but a head read as a plain quarter shares its moment only with
+    triplet eighths, so its own twin is nowhere beside it. That the moment is inside
+    a triplet of the same kind is the evidence instead -- read together with the
+    decoder offering the value and the note then ending exactly where its voice
+    goes on.
+    """
+    if not candidate.startswith(symbol.rhythm.split("_", 1)[0] + "_"):
+        return False
+    if "." in candidate or not _plain_value(EncodedSymbol(candidate).remove_tuplet().rhythm):
+        return False  # a dotted triplet value is not something to guess at
+    wanted = EncodedSymbol(candidate).get_duration()
+    if not EncodedSymbol(candidate).is_tuplet():
+        return False
+    for other in chord.symbols:
+        if other is symbol or not _timed(other) or not other.is_tuplet():
+            continue
+        theirs = other.get_duration()
+        if (theirs.actual_notes, theirs.normal_notes) == (wanted.actual_notes, wanted.normal_notes):
+            return True
+    return False
+
+
+def _staff_of(position: str) -> str:
+    return position[:-1] if position.endswith("2") else position
+
+
+def _same_head_values(chord: SymbolChord, symbol: EncodedSymbol) -> list[str]:
+    """The values this head carries in the other voice of its own staff.
+
+    A unison head drawn with two stems is written into both voices (#153), so the
+    other copy is the same printed notehead read a second time. On Legenda bar 2
+    (eerovil/musescore-choir-plugins#245) the lower voice read a beamed triplet
+    eighth as `note_12` and the upper voice read the very same head as `note_8`,
+    without `note_12` among its own alternatives at all. The head beside it saying
+    so is the evidence the decoder's own list would have been.
+    """
+    return [
+        other.rhythm
+        for other in chord.symbols
+        if other is not symbol
+        and _timed(other)
+        and other.pitch == symbol.pitch
+        and other.position != symbol.position
+        and _staff_of(other.position) == _staff_of(symbol.position)
+    ]
+
+
+def repair_tuplet_overlaps_until_settled(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Run `repair_tuplet_overlaps` again while it still finds something.
+
+    Each pass dates the moments on the clock as it was read, so a run of misread
+    triplet notes is repaired one note per pass: the second note only ends exactly
+    where its voice goes on once the first has stopped overlapping it.
+    """
+    for _ in range(_MAX_REPAIR_PASSES):
+        found: list[ReconstructionChange] = []
+        voice = repair_tuplet_overlaps(voice, found)
+        if changes is not None:
+            changes.extend(found)
+        if not found:
+            break
+    return voice
+
+
+_MAX_REPAIR_PASSES = 256
 
 
 def _all_alternatives(symbol: EncodedSymbol) -> list[str]:
@@ -919,6 +1041,464 @@ def group_into_chords(voice: list[EncodedSymbol]) -> list[SymbolChord]:
     return [SymbolChord(s) for s in sort_token_chords(voice)]
 
 
+def fill_unison_copies(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Give a voice that doubles its staff-mate note for note the notes it skipped.
+
+    Either voice of the staff may be the copy: the one with fewer notes, all of
+    them standing with the same pitch in the other.
+
+    Where the two voices of a staff sing in unison, every head is read into both
+    of them. On Legenda system 2, bar 1 (eerovil/musescore-choir-plugins#245) the
+    decoder wrote the second voice's copy of every head in the bar but one -- the
+    middle of three beamed triplet eighths -- so that voice had a hole MuseScore
+    filled with a sixteenth rest the page does not print.
+
+    A voice is a copy here only when, in this bar, it holds no rest, has at least
+    two notes, and every one of them stands in a moment where the other voice of
+    its staff has the same pitch. Then each note of the other voice standing in a
+    moment the copy is missing from is written into the copy as well. Values are
+    not touched: where the two disagree, `repair_tuplet_overlaps` settles it.
+    """
+    out = list(voice)
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        moments = _voice_moments(voice, span)
+        for copy_position in list(moments):
+            lead = copy_position[:-1] if copy_position.endswith("2") else copy_position + "2"
+            if lead not in moments or len(moments[copy_position]) >= len(moments[lead]):
+                continue
+            copies = moments[copy_position]
+            if len(copies) < _MIN_UNISON_NOTES:
+                continue
+            copied = {chord_index for chord_index, _ in copies}
+            in_unison = True
+            for chord_index, indices in copies:
+                symbols = voice[chord_index].symbols
+                pitches = {
+                    s.pitch for s in symbols if s.position == lead and s.rhythm.startswith("note")
+                }
+                for i in indices:
+                    if symbols[i].rhythm.startswith("rest") or symbols[i].pitch not in pitches:
+                        in_unison = False
+            if not in_unison:
+                continue
+            for chord_index, indices in moments[lead]:
+                if chord_index in copied:
+                    continue
+                symbols = list(out[chord_index].symbols)
+                for i in indices:
+                    leading = symbols[i]
+                    if not leading.rhythm.startswith("note"):
+                        continue
+                    twin = leading.change_rhythm(leading.rhythm)
+                    twin.position = copy_position
+                    symbols.append(twin)
+                    why = "its voice doubles the other note for note and skipped this one"
+                    if changes is not None:
+                        changes.append(
+                            ReconstructionChange(
+                                kind="unison_fill",
+                                bar=bar_number,
+                                group=chord_index,
+                                symbol=len(symbols) - 1,
+                                staff=copy_position,
+                                pitch=leading.pitch,
+                                before=None,
+                                after=leading.rhythm,
+                                reason=why,
+                            )
+                        )
+                    eprint(f"Unison: writing {leading.pitch} into {copy_position} as well, {why}")
+                out[chord_index] = SymbolChord(symbols, out[chord_index].tuplet_mark)
+    return out
+
+
+_MIN_UNISON_NOTES = 2
+
+
+def _plain_length(length: Fraction) -> bool:
+    """Whether a length is one plain note values can spell: its denominator a power of two."""
+    denominator = length.denominator
+    return denominator & (denominator - 1) == 0
+
+
+def _triplet_twin_of(rhythm: str) -> str | None:
+    """The triplet value of a plain undotted note or rest (`note_8` -> `note_12`)."""
+    match = re.fullmatch(r"(note|rest)_(\d+)", rhythm)
+    if not match:
+        return None
+    base = int(match[2])
+    if base & (base - 1) or base < 2:  # noqa: PLR2004 -- a half is the longest triplet value
+        return None
+    return f"{match[1]}_{base * 3 // 2}"
+
+
+def _voice_moments(
+    voice: list[SymbolChord], span: tuple[int, int]
+) -> dict[str, list[tuple[int, list[int]]]]:
+    """Per position, the moments it sounds in: (chord index, its timed symbol indices)."""
+    moments: dict[str, list[tuple[int, list[int]]]] = {}
+    for chord_index in range(span[0], span[1]):
+        by_position: dict[str, list[int]] = {}
+        for symbol_index, symbol in enumerate(voice[chord_index].symbols):
+            if _timed(symbol) and not _is_grace(symbol):
+                by_position.setdefault(symbol.position, []).append(symbol_index)
+        for position, indices in by_position.items():
+            moments.setdefault(position, []).append((chord_index, indices))
+    return moments
+
+
+def _moment_value(voice: list[SymbolChord], chord_index: int, indices: list[int]) -> EncodedSymbol:
+    """The symbol whose value this position's moment lasts: its shortest."""
+    symbols = [voice[chord_index].symbols[i] for i in indices]
+    return min(symbols, key=lambda s: s.get_duration().fraction)
+
+
+def _offers_triplet(voice: list[SymbolChord], chord_index: int, indices: list[int]) -> bool:
+    """Whether every head of this moment is plain and offers its triplet value."""
+    for symbol_index in indices:
+        symbol = voice[chord_index].symbols[symbol_index]
+        twin = _triplet_twin_of(symbol.rhythm)
+        if twin is None or twin not in _all_alternatives(symbol):
+            return False
+    return True
+
+
+def _apply_triplets(
+    voice: list[SymbolChord],
+    moments: list[tuple[int, list[int]]],
+    bar_number: int,
+    why: str,
+    changes: list[ReconstructionChange] | None,
+) -> list[SymbolChord]:
+    out = list(voice)
+    for chord_index, indices in moments:
+        symbols = list(out[chord_index].symbols)
+        for symbol_index in indices:
+            symbol = symbols[symbol_index]
+            twin = _triplet_twin_of(symbol.rhythm)
+            if twin is None:
+                continue
+            if changes is not None:
+                changes.append(
+                    ReconstructionChange(
+                        kind="tuplet_repair",
+                        bar=bar_number,
+                        group=chord_index,
+                        symbol=symbol_index,
+                        staff=symbol.position,
+                        pitch=symbol.pitch,
+                        before=symbol.rhythm,
+                        after=twin,
+                        reason=why,
+                    )
+                )
+            eprint(f"Tuplet: reading {symbol.pitch} as {twin} rather than {symbol.rhythm}, {why}")
+            symbols[symbol_index] = symbol.change_rhythm(twin)
+        out[chord_index] = SymbolChord(symbols, out[chord_index].tuplet_mark)
+    return out
+
+
+def complete_open_triplets(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Finish a triplet the decoder started and then read on as plain notes.
+
+    A triplet note cannot stand on its own: the bracket it is printed under closes
+    only when its notes together last a plain value. On Legenda bar 2
+    (eerovil/musescore-choir-plugins#245) the page prints a quarter and an eighth
+    under one triplet bracket; the decoder read the quarter as `note_6` and the
+    eighth as a plain `note_8`, so the triplet was left two thirds of a beat long
+    and every note after it in the bar came a twelfth late.
+
+    So while a voice's triplet is open, its following plain notes are read as
+    their triplet values until the triplet closes -- but only when the decoder
+    offered each of those values itself, and only when the triplet does close
+    inside the bar. A triplet that would still be open at the barline, or that
+    meets a note offering no triplet value, is left exactly as it was read.
+    """
+    bars = _bar_boundaries(voice)
+    for bar_number, span in enumerate(bars, start=1):
+        for moments in _voice_moments(voice, span).values():
+            open_total = Fraction(0)
+            pending: list[tuple[int, list[int]]] = []
+            for chord_index, indices in moments:
+                value = _moment_value(voice, chord_index, indices)
+                if value.is_tuplet():
+                    if pending:
+                        break  # a run of guesses meeting a second triplet: not ours to join
+                    open_total += value.get_duration().fraction
+                    continue
+                if _plain_length(open_total):
+                    open_total = Fraction(0)
+                    continue
+                if not _offers_triplet(voice, chord_index, indices):
+                    break
+                twin = EncodedSymbol(_triplet_twin_of(value.rhythm) or value.rhythm)
+                pending.append((chord_index, indices))
+                open_total += twin.get_duration().fraction
+                if _plain_length(open_total):
+                    voice = _apply_triplets(
+                        voice, pending, bar_number, "it closes the triplet open before it", changes
+                    )
+                    pending, open_total = [], Fraction(0)
+    return voice
+
+
+def triplets_onto_the_beat(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Read one run of plain notes as a triplet where that alone puts the bar on the beat.
+
+    Under a time signature in quarters a bar is a whole number of quarters, but the
+    model only reads the denominator and a triplet it misses entirely leaves no
+    trace in any one note. On Legenda bar 2 (eerovil/musescore-choir-plugins#245)
+    a second quarter-and-eighth triplet was read as a plain quarter and a plain
+    eighth, so the voice measured nine eighths: an eighth off any beat.
+
+    A run of notes read as a triplet is shortened by a third of what it spells, so
+    a voice an amount off the beat is put back on it by the runs spelling three
+    times that amount. One is read as a triplet when all of this holds:
+
+    - a time signature is in force and this is not the bar that opens its span;
+    - the voice, on its own cursor, is not a whole number of beats long;
+    - **exactly one** run of consecutive plain notes in that voice spells three
+      times the overrun, closes as a triplet, and offers its triplet values among
+      the decoder's own alternatives, note by note.
+
+    Two runs that would each do it are two readings of the page, and the bar is
+    left alone.
+    """
+    bars = _bar_boundaries(voice)
+    denominator: int | None = None
+    opens_span = False
+    for bar_number, span in enumerate(bars, start=1):
+        for chord in voice[span[0] : span[1]]:
+            if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
+                denominator = int(chord.symbols[0].rhythm.split("/")[1])
+                opens_span = True
+        if denominator is None or opens_span:
+            opens_span = False
+            continue
+        beat = Fraction(1, denominator)
+        lengths = _staff_lengths(voice, span)
+        for position, moments in _voice_moments(voice, span).items():
+            overrun = lengths.get(position, Fraction(0)) % beat
+            if overrun == 0:
+                continue
+            found = []
+            for first in range(len(moments)):
+                written = Fraction(0)
+                for last in range(first, len(moments)):
+                    chord_index, indices = moments[last]
+                    if not _offers_triplet(voice, chord_index, indices):
+                        break
+                    written += _moment_value(voice, chord_index, indices).get_duration().fraction
+                    if written / 3 == overrun:
+                        found.append(moments[first : last + 1])
+                    if written / 3 >= overrun:
+                        break
+            if len(found) == 1:
+                voice = _apply_triplets(
+                    voice,
+                    found[0],
+                    bar_number,
+                    "it is the one run whose triplet puts its bar on the beat",
+                    changes,
+                )
+    return voice
+
+
+def triplets_to_match_the_other_staff(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Read a voice's plain notes as triplets where the other staff says how long the bar is.
+
+    On Legenda system 3, bar 7 (eerovil/musescore-choir-plugins#245) both bass
+    voices read every triplet and measure a whole note, while the decoder read the
+    tenors' bar -- the same three-plus-three rhythm printed above them -- as plain
+    quarters and eighths after its first triplet, and hardly offered a triplet
+    value for any of them. The tenor bar came out eleven eighths long.
+
+    A bar is one length on every staff, so where every voice of the other staff
+    agrees on it, a voice that runs over it has misread something. Reading a run
+    of plain notes as triplets shortens it by a third of what the run spells, so
+    the run that fits spells three times the overrun. One is read as triplets when:
+
+    - every voice of the other staff measures the same length, on its own cursor;
+    - this voice measures more than that;
+    - **exactly one** run of consecutive plain undotted notes in this voice spells
+      three times the overrun, and read as triplets it closes on a plain length.
+
+    The decoder need not have offered the values: the other staff's bar is the
+    evidence, and two runs that would each fit leave the bar alone.
+    """
+    out = voice
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        lengths = _staff_lengths(out, span)
+        for position, moments in _voice_moments(out, span).items():
+            staff = _staff_of(position)
+            others = {length for pos, length in lengths.items() if _staff_of(pos) != staff}
+            if len(others) != 1:
+                continue
+            target = others.pop()
+            overrun = lengths.get(position, Fraction(0)) - target
+            if overrun <= 0:
+                continue
+            found = []
+            for first in range(len(moments)):
+                written = Fraction(0)
+                for last in range(first, len(moments)):
+                    chord_index, indices = moments[last]
+                    if not all(
+                        _triplet_twin_of(out[chord_index].symbols[i].rhythm) for i in indices
+                    ):
+                        break
+                    written += _moment_value(out, chord_index, indices).get_duration().fraction
+                    if written / 3 == overrun and _plain_length(written * 2 / 3):
+                        found.append(moments[first : last + 1])
+                    if written / 3 >= overrun:
+                        break
+            if len(found) == 1:
+                out = _apply_triplets(
+                    out,
+                    found[0],
+                    bar_number,
+                    "the other staff measures the bar and only this run as triplets fits it",
+                    changes,
+                )
+    return out
+
+
+def retime_onto_steady_voices(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Regroup a bar's moments by what each voice's own values say.
+
+    The decoder says which symbols sound together, and that is only approximately
+    true. On Legenda system 3, bar 7 (eerovil/musescore-choir-plugins#245) it put
+    each tenor eighth into the moment *after* the bass eighth printed under it, so
+    once the tenors' values were right the tenor still sounded a twelfth late and
+    the writer's one clock, stepping at every tenor-only moment, pushed both
+    staves past the barline.
+
+    Each voice is timed by its own values from the moment it first sounds. The
+    bar is regrouped by those times only when the reading then agrees with itself
+    everywhere:
+
+    - every voice ends at the same time;
+    - every note of every voice starts where some voice of **another staff** has
+      a note or rest starting too -- the staves line up, moment for moment;
+    - the bar holds nothing but timed notes and rests, on at least two staves.
+
+    Otherwise the bar stays as the decoder grouped it.
+    """
+    out: list[SymbolChord] = []
+    previous = 0
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        out.extend(voice[previous : span[0]])
+        out.extend(_retimed_bar(voice, span, bar_number, changes) or voice[span[0] : span[1]])
+        previous = span[1]
+    out.extend(voice[previous:])
+    return out
+
+
+_MIN_STAVES_TO_RETIME = 2
+
+
+def _retimed_bar(
+    voice: list[SymbolChord],
+    span: tuple[int, int],
+    bar_number: int,
+    changes: list[ReconstructionChange] | None,
+) -> list[SymbolChord] | None:
+    chords = voice[span[0] : span[1]]
+    if not chords or any(
+        not (_timed(symbol) and not _is_grace(symbol))
+        for chord in chords
+        for symbol in chord.symbols
+    ):
+        return None
+    onsets = _onsets(voice, span)
+    timeline: dict[str, list[Fraction]] = {}
+    first: dict[str, Fraction] = {}
+    for offset, chord in enumerate(chords):
+        by_position: dict[str, Fraction] = {}
+        for symbol in chord.symbols:
+            length = symbol.get_duration().fraction
+            by_position[symbol.position] = min(by_position.get(symbol.position, length), length)
+        for position, length in by_position.items():
+            timeline.setdefault(position, []).append(length)
+            first.setdefault(position, onsets[offset])
+    staves = {_staff_of(position) for position in timeline}
+    if len(staves) < _MIN_STAVES_TO_RETIME:
+        return None
+    moved: dict[str, list[Fraction]] = {}
+    ends = set()
+    for position, lengths in timeline.items():
+        cursor = first[position]
+        times = []
+        for length in lengths:
+            times.append(cursor)
+            cursor += length
+        moved[position] = times
+        ends.add(cursor)
+    if len(ends) != 1:
+        return None
+    for position, times in moved.items():
+        across = {
+            at
+            for other, other_times in moved.items()
+            if _staff_of(other) != _staff_of(position)
+            for at in other_times
+        }
+        if not set(times) <= across:
+            return None
+    placed: list[tuple[Fraction, int, EncodedSymbol]] = []
+    seen: dict[str, int] = {}
+    order = 0
+    unchanged = True
+    for offset, chord in enumerate(chords):
+        counted: set[str] = set()
+        for symbol in chord.symbols:
+            if symbol.position not in counted:
+                seen[symbol.position] = seen.get(symbol.position, -1) + 1
+                counted.add(symbol.position)
+            at = moved[symbol.position][seen[symbol.position]]
+            unchanged = unchanged and at == onsets[offset]
+            placed.append((at, order, symbol))
+            order += 1
+    if unchanged:
+        return None
+    placed.sort(key=lambda item: (item[0], item[1]))
+    rebuilt: list[SymbolChord] = []
+    current: Fraction | None = None
+    for at, _, symbol in placed:
+        if at != current:
+            rebuilt.append(SymbolChord([]))
+            current = at
+        rebuilt[-1].symbols.append(symbol)
+    why = "timed by their own values, every voice ends together and meets the other staff"
+    for position in sorted(moved):
+        if changes is not None:
+            changes.append(
+                ReconstructionChange(
+                    kind="retime",
+                    bar=bar_number,
+                    group=span[0],
+                    symbol=None,
+                    staff=position,
+                    pitch=None,
+                    before=None,
+                    after="retimed",
+                    reason=why,
+                )
+            )
+    eprint(f"Retime: regrouping bar {bar_number} by each voice's values, {why}")
+    return rebuilt
+
+
 class TupletParser:
     @staticmethod
     def parse(groups: list[SymbolChord]) -> list[SymbolChord]:
@@ -1002,7 +1582,13 @@ def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     """Apply homr's musical reconstruction passes in their established order."""
     changes: list[ReconstructionChange] = []
     groups = group_into_chords(voice)
-    groups = repair_tuplet_overlaps(groups, changes)
+    groups = complete_open_triplets(groups, changes)
+    groups = triplets_onto_the_beat(groups, changes)
+    groups = fill_unison_copies(groups, changes)
+    groups = repair_tuplet_overlaps_until_settled(groups, changes)
+    groups = triplets_to_match_the_other_staff(groups, changes)
+    groups = repair_tuplet_overlaps_until_settled(groups, changes)
+    groups = retime_onto_steady_voices(groups, changes)
     groups = repair_bar_arithmetic(groups, changes)
     groups = add_tuplet_start_stop(groups)
     groups = infer_meter_changes(groups, changes)

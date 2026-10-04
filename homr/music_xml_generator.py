@@ -184,6 +184,8 @@ def build_measures(
         nonlocal clock, sounding
         read_clefs(current_measure, clefs)
         rebalance_measure_voices(current_measure, clefs)
+        hide_shared_rests(current_measure)
+        bracket_tuplets(current_measure, division)
         measures.append(current_measure)
         clock, sounding = Fraction(0), []
 
@@ -661,6 +663,165 @@ def double_shared_noteheads(
         for offset, element in enumerate(elements, start=1):
             measure.insert(after + offset, element)
     return len(insertions)
+
+
+def _timeline(measure: ET.Element) -> dict[tuple[str, str], list[tuple[int, int, ET.Element]]]:
+    """Each voice's notes and rests as (onset, end, element), chord notes left out."""
+    events: dict[tuple[str, str], list[tuple[int, int, ET.Element]]] = defaultdict(list)
+    cursor = 0
+    for child in measure:
+        if child.tag in ("backup", "forward"):
+            step = int(child.findtext("duration") or 0)
+            cursor += -step if child.tag == "backup" else step
+            continue
+        if child.tag != "note" or child.find("chord") is not None:
+            continue
+        duration = int(child.findtext("duration") or 0)
+        if duration <= 0 or child.find("grace") is not None:
+            continue
+        key = (child.findtext("staff") or "1", child.findtext("voice") or "1")
+        events[key].append((cursor, cursor + duration, child))
+        cursor += duration
+    return events
+
+
+def hide_shared_rests(measure: ET.Element) -> int:
+    """Write the rests two voices share into the voice the page left them out of.
+
+    A choir page prints a rest once where both voices of a staff rest, and homr
+    files it under one of them, so the other voice simply starts late or stops
+    for a while. A renderer then fills that hole with a rest of its own choosing:
+    on Legenda system 2, bar 2 (eerovil/musescore-choir-plugins#245) the second
+    tenor came in on the third triplet eighth and MuseScore drew a stray
+    sixteenth rest and a bracket of its own inside the triplets.
+
+    So where a voice has a hole that the other voice of its staff covers exactly
+    with rests, those rests are copied into it, hidden (`print-object="no"`):
+    the page shows them once, and the time is now said rather than guessed. A
+    hole the other voice sings through is a lost note, and is left alone.
+    Returns how many rests were written.
+    """
+    events = _timeline(measure)
+    written = 0
+    insertions: list[tuple[ET.Element, list[ET.Element]]] = []
+    for (staff, voice_no), voice in sorted(events.items()):
+        partners = [
+            other for key, other in events.items() if key[0] == staff and key[1] != voice_no
+        ]
+        if len(partners) != 1:
+            continue
+        reached = 0
+        for start, stop, element in sorted(voice, key=lambda event: event[0]):
+            if start > reached:
+                rests = _rests_covering(partners[0], reached, start)
+                if rests:
+                    # In front of the note the hole ends at, so a reader meets
+                    # the rests in time order: step back over the hole, rest
+                    # through it, and arrive where that note already stands.
+                    back = ET.Element("backup")
+                    ET.SubElement(back, "duration").text = str(start - reached)
+                    hidden = [_hidden_copy(rest, voice_no) for rest in rests]
+                    insertions.append((element, [back, *hidden]))
+                    written += len(hidden)
+            reached = max(reached, stop)
+    for element, before in insertions:
+        index = list(measure).index(element)
+        for offset, item in enumerate(before):
+            measure.insert(index + offset, item)
+    return written
+
+
+def _rests_covering(
+    partner: list[tuple[int, int, ET.Element]], start: int, end: int
+) -> list[ET.Element]:
+    """The partner's rests that tile [start, end) exactly, or nothing."""
+    inside = sorted(
+        (event for event in partner if start <= event[0] and event[1] <= end),
+        key=lambda event: event[0],
+    )
+    position = start
+    for onset, stop, element in inside:
+        if onset != position or element.find("rest") is None:
+            return []
+        position = stop
+    return [element for _, _, element in inside] if position == end else []
+
+
+def _hidden_copy(rest: ET.Element, voice_no: str) -> ET.Element:
+    hidden = copy.deepcopy(rest)
+    hidden.set("print-object", "no")
+    voice_el = hidden.find("voice")
+    if voice_el is not None:
+        voice_el.text = voice_no
+    for notations in hidden.findall("notations"):
+        hidden.remove(notations)
+    return hidden
+
+
+def bracket_tuplets(measure: ET.Element, whole: int) -> None:
+    """Draw each voice's tuplet brackets from where its notes actually fall.
+
+    A bracket is written per voice and closes when its notes reach a plain beat
+    position again: a quarter and an eighth under one triplet are one bracket,
+    and so are three eighths. It is decided here, on the measure as written,
+    rather than on the token stream, because only here is every note in the
+    voice it will be read in -- a head drawn with two stems has been copied into
+    the second voice (`double_shared_noteheads`) and the voices have been
+    rebalanced. On Legenda bar 2 (eerovil/musescore-choir-plugins#245) the
+    token-level bracketing closed a bracket every three moments of the whole
+    staff and so never closed the page's quarter-and-eighth triplets, and gave
+    up on the bar altogether as soon as one voice did not fit.
+
+    A run that starts off the beat, has a gap in it, or never comes back to a
+    plain position is left without a bracket rather than closed at a guess; its
+    notes keep their time modification, which is what says how long they are.
+    """
+    for notations in measure.iter("notations"):
+        for tuplet in notations.findall("tuplet"):
+            notations.remove(tuplet)
+    events = _timeline(measure)
+
+    def plain(position: int) -> bool:
+        denominator = Fraction(position, whole).denominator
+        return denominator & (denominator - 1) == 0
+
+    for voice_events in events.values():
+        run: list[ET.Element] = []
+        kind: tuple[str, str] | None = None
+        reached = 0
+        for start, end, note in sorted(voice_events, key=lambda event: event[0]):
+            modification = note.find("time-modification")
+            if modification is None:
+                run = []
+                continue
+            this_kind = (
+                modification.findtext("actual-notes") or "",
+                modification.findtext("normal-notes") or "",
+            )
+            if run and (start != reached or this_kind != kind):
+                run = []
+            if not run and not plain(start):
+                continue
+            run.append(note)
+            kind, reached = this_kind, end
+            if plain(end):
+                if len(run) > 1:
+                    # A triplet the page prints over the other voice's rests is
+                    # drawn once, above that voice: this one's is left unseen.
+                    hidden = run[0].get("print-object") == "no"
+                    _add_tuplet(run[0], "start", hidden)
+                    _add_tuplet(run[-1], "stop", hidden)
+                run = []
+
+
+def _add_tuplet(note: ET.Element, kind: str, hidden: bool = False) -> None:
+    notations = note.find("notations")
+    if notations is None:
+        notations = ET.SubElement(note, "notations")
+    tuplet = ET.SubElement(notations, "tuplet", type=kind)
+    if hidden:
+        tuplet.set("bracket", "no")
+        tuplet.set("show-number", "none")
 
 
 def _write_stem(note: ET.Element, direction: str) -> None:
