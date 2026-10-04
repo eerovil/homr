@@ -581,6 +581,41 @@
    "score": 100.0,
    "structure": 0
   },
+  "talviuni-s1": {
+   "image": "809bebb2c8dcd008",
+   "meter": 0,
+   "reference": "cf75561370c39236",
+   "score": 93.62,
+   "structure": 0
+  },
+  "talviuni-s2": {
+   "image": "59841f749e1caa40",
+   "meter": 0,
+   "reference": "feb614ef1a51114d",
+   "score": 100.0,
+   "structure": 0
+  },
+  "talviuni-s3": {
+   "image": "27c9ad2019ccab28",
+   "meter": 0,
+   "reference": "a52a6a2974e46384",
+   "score": 98.67,
+   "structure": 0
+  },
+  "talviuni-s4": {
+   "image": "ca509c3930e5d1b2",
+   "meter": 0,
+   "reference": "b752c30e48172063",
+   "score": 100.0,
+   "structure": 0
+  },
+  "talviuni-s5": {
+   "image": "0811cd4d5ab68ed7",
+   "meter": 0,
+   "reference": "0f3f4eddbb0462eb",
+   "score": 92.59,
+   "structure": 0
+  },
   "virta-scratch-s1": {
    "image": "dea1940128e5809c",
    "meter": 0,
@@ -687,6 +722,6 @@
    "structure": 0
   }
  },
- "digest": "87e0fbd0ec898895",
- "why": "A fingerprint per case, not the music: this repository is public and the songs are not ours. A reference changing is then a deliberate commit rather than a silent drift under a number. See fixturecheck/references.py."
+ "digest": "5c1c6d63604b9876",
+ "why": "A fingerprint per case and the score it was last accepted at \u2014 not the music: this repository is public and the songs are not ours. A reference changing, or a case being accepted lower than it stood, is then a deliberate commit rather than a silent drift under a number. See fixturecheck/references.py."
 }
