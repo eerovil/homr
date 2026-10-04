@@ -184,6 +184,7 @@ def build_measures(
         nonlocal clock, sounding
         read_clefs(current_measure, clefs)
         rebalance_measure_voices(current_measure, clefs)
+        bracket_tuplets(current_measure, division)
         measures.append(current_measure)
         clock, sounding = Fraction(0), []
 
@@ -661,6 +662,82 @@ def double_shared_noteheads(
         for offset, element in enumerate(elements, start=1):
             measure.insert(after + offset, element)
     return len(insertions)
+
+
+def bracket_tuplets(measure: ET.Element, whole: int) -> None:
+    """Draw each voice's tuplet brackets from where its notes actually fall.
+
+    A bracket is written per voice and closes when its notes reach a plain beat
+    position again: a quarter and an eighth under one triplet are one bracket,
+    and so are three eighths. It is decided here, on the measure as written,
+    rather than on the token stream, because only here is every note in the
+    voice it will be read in -- a head drawn with two stems has been copied into
+    the second voice (`double_shared_noteheads`) and the voices have been
+    rebalanced. On Legenda bar 2 (eerovil/musescore-choir-plugins#245) the
+    token-level bracketing closed a bracket every three moments of the whole
+    staff and so never closed the page's quarter-and-eighth triplets, and gave
+    up on the bar altogether as soon as one voice did not fit.
+
+    A run that starts off the beat, has a gap in it, or never comes back to a
+    plain position is left without a bracket rather than closed at a guess; its
+    notes keep their time modification, which is what says how long they are.
+    """
+    for notations in measure.iter("notations"):
+        for tuplet in notations.findall("tuplet"):
+            notations.remove(tuplet)
+    events: dict[tuple[str, str], list[tuple[int, int, ET.Element]]] = defaultdict(list)
+    cursor = 0
+    onset = 0
+    for child in measure:
+        if child.tag in ("backup", "forward"):
+            step = int(child.findtext("duration") or 0)
+            cursor += -step if child.tag == "backup" else step
+            continue
+        if child.tag != "note" or child.find("chord") is not None:
+            continue
+        duration = int(child.findtext("duration") or 0)
+        if duration <= 0 or child.find("grace") is not None:
+            continue
+        onset = cursor
+        cursor += duration
+        key = (child.findtext("staff") or "1", child.findtext("voice") or "1")
+        events[key].append((onset, onset + duration, child))
+
+    def plain(position: int) -> bool:
+        denominator = Fraction(position, whole).denominator
+        return denominator & (denominator - 1) == 0
+
+    for voice_events in events.values():
+        run: list[ET.Element] = []
+        kind: tuple[str, str] | None = None
+        reached = 0
+        for start, end, note in sorted(voice_events, key=lambda event: event[0]):
+            modification = note.find("time-modification")
+            if modification is None:
+                run = []
+                continue
+            this_kind = (
+                modification.findtext("actual-notes") or "",
+                modification.findtext("normal-notes") or "",
+            )
+            if run and (start != reached or this_kind != kind):
+                run = []
+            if not run and not plain(start):
+                continue
+            run.append(note)
+            kind, reached = this_kind, end
+            if plain(end):
+                if len(run) > 1:
+                    _add_tuplet(run[0], "start")
+                    _add_tuplet(run[-1], "stop")
+                run = []
+
+
+def _add_tuplet(note: ET.Element, kind: str) -> None:
+    notations = note.find("notations")
+    if notations is None:
+        notations = ET.SubElement(note, "notations")
+    ET.SubElement(notations, "tuplet", type=kind)
 
 
 def _write_stem(note: ET.Element, direction: str) -> None:
