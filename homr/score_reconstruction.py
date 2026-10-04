@@ -282,6 +282,12 @@ def repair_tuplet_overlaps(
                 leaves_gap = ends_now < onsets[following] and following < len(moments)
                 if not overlaps and not leaves_gap:
                     continue
+                if leaves_gap and _partner_sings_between(
+                    voice, moments[offset + 1 : following], symbol.position
+                ):
+                    # The other voice of the staff sings in the gap: this voice
+                    # most likely lost its copy of that note, not its own length.
+                    continue
                 clock_trusted = trouble_from is None or trouble_from == offset
                 if trouble_from is None:
                     trouble_from = offset
@@ -292,7 +298,12 @@ def repair_tuplet_overlaps(
                 for candidate in _all_alternatives(symbol) + _same_head_values(chord, symbol):
                     if candidate in fits:
                         continue
-                    twin_beside = _tuplet_twin(symbol.rhythm, candidate) and candidate in beside
+                    # A gap is only ever closed by the stricter reading below: the
+                    # twin rule dates the note off a clock it moves itself, which an
+                    # overlap can afford and a gap cannot.
+                    twin_beside = (
+                        overlaps and _tuplet_twin(symbol.rhythm, candidate) and candidate in beside
+                    )
                     if not twin_beside:
                         if not clock_trusted or not _inside_its_triplet(chord, symbol, candidate):
                             continue
@@ -339,6 +350,15 @@ def repair_tuplet_overlaps(
     return out
 
 
+def _partner_sings_between(voice: list[SymbolChord], between: list[int], position: str) -> bool:
+    partner = position[:-1] if position.endswith("2") else position + "2"
+    return any(
+        other.position == partner and other.rhythm.startswith("note") and _timed(other)
+        for chord_index in between
+        for other in voice[chord_index].symbols
+    )
+
+
 def _inside_its_triplet(chord: SymbolChord, symbol: EncodedSymbol, candidate: str) -> bool:
     """Whether `candidate` is a tuplet value of the kind already sounding in this moment.
 
@@ -351,8 +371,8 @@ def _inside_its_triplet(chord: SymbolChord, symbol: EncodedSymbol, candidate: st
     """
     if not candidate.startswith(symbol.rhythm.split("_", 1)[0] + "_"):
         return False
-    if not _plain_value(EncodedSymbol(candidate).remove_tuplet().rhythm):
-        return False
+    if "." in candidate or not _plain_value(EncodedSymbol(candidate).remove_tuplet().rhythm):
+        return False  # a dotted triplet value is not something to guess at
     wanted = EncodedSymbol(candidate).get_duration()
     if not EncodedSymbol(candidate).is_tuplet():
         return False
@@ -1026,6 +1046,9 @@ def fill_unison_copies(
 ) -> list[SymbolChord]:
     """Give a voice that doubles its staff-mate note for note the notes it skipped.
 
+    Either voice of the staff may be the copy: the one with fewer notes, all of
+    them standing with the same pitch in the other.
+
     Where the two voices of a staff sing in unison, every head is read into both
     of them. On Legenda system 2, bar 1 (eerovil/musescore-choir-plugins#245) the
     decoder wrote the second voice's copy of every head in the bar but one -- the
@@ -1041,9 +1064,9 @@ def fill_unison_copies(
     out = list(voice)
     for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
         moments = _voice_moments(voice, span)
-        for copy_position in [p for p in moments if p.endswith("2")]:
-            lead = copy_position[:-1]
-            if lead not in moments:
+        for copy_position in list(moments):
+            lead = copy_position[:-1] if copy_position.endswith("2") else copy_position + "2"
+            if lead not in moments or len(moments[copy_position]) >= len(moments[lead]):
                 continue
             copies = moments[copy_position]
             if len(copies) < _MIN_UNISON_NOTES:
@@ -1372,7 +1395,6 @@ def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     groups = group_into_chords(voice)
     groups = complete_open_triplets(groups, changes)
     groups = triplets_onto_the_beat(groups, changes)
-    groups = repair_tuplet_overlaps_until_settled(groups, changes)
     groups = fill_unison_copies(groups, changes)
     groups = repair_tuplet_overlaps_until_settled(groups, changes)
     groups = repair_bar_arithmetic(groups, changes)
