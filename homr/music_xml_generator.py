@@ -27,8 +27,13 @@ from homr.stem_voice_hints import SHARED
 from homr.transformer.vocabulary import (
     EncodedSymbol,
     empty,
+    is_lower_position,
+    is_second_voice_position,
     nonote,
 )
+
+#: Marks a note the model placed in a staff's second voice until the rebalancer reads it.
+VOICE_TOKEN = "voice-token"
 
 __all__ = [
     "SymbolChord",
@@ -135,7 +140,7 @@ def xml_to_string(element: ET.Element) -> str:
 
 def _voice_has_two_staves(voice: list[EncodedSymbol]) -> bool:
     """True if any symbol uses the lower staff (e.g. piano left hand / bass clef)."""
-    return any(s.position == "lower" for s in voice)
+    return any(is_lower_position(s.position) for s in voice)
 
 
 def build_part(
@@ -360,7 +365,7 @@ def build_key(model_key: EncodedSymbol, attributes: ET.Element) -> None:
 
 
 def get_staff(symbol: EncodedSymbol) -> int:
-    return 2 if symbol.position == "lower" else 1
+    return 2 if is_lower_position(symbol.position) else 1
 
 
 def get_xml_voice(staff_num: int, rhythmic_layer: int) -> int:
@@ -536,6 +541,7 @@ def rebalance_measure_voices(
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
         two_voices = _staff_carries_two_voices(sorted_events, (clefs or {}).get(staff_num))
+        voice_tokens = any(note.get(VOICE_TOKEN) for event in events for note in event.notes)
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -554,6 +560,12 @@ def rebalance_measure_voices(
                 if two_voices and len(directions) == 1
                 else None
             )
+            if voice_tokens:
+                # The model said which voice each note is on a staff it read two voices
+                # on, and that reading outranks a stem: it is the newer evidence.
+                tokens = {note.get(VOICE_TOKEN) == "2" for note in event.notes}
+                if len(tokens) == 1:
+                    preferred_voice = 2 if tokens.pop() else 1
             voice_no = preferred_voice if preferred_voice is not None else 1
             while voice_no in used_voices:
                 if preferred_voice is not None:
@@ -569,6 +581,7 @@ def rebalance_measure_voices(
     double_shared_noteheads(measure, assignments)
     for note in measure.findall("note"):
         note.attrib.pop("stem-shared", None)
+        note.attrib.pop(VOICE_TOKEN, None)
 
 
 def double_shared_noteheads(
@@ -902,6 +915,8 @@ def build_articulations(
             ET.SubElement(notation, "arpeggiate")
         elif articulation == "accent":
             xml_articulations.append(ET.Element("accent"))
+        elif articulation == "mordent":
+            xml_articulations.append(ET.Element("mordent"))
         elif articulation == "staccato":
             xml_articulations.append(ET.Element("staccato"))
         elif articulation == "staccatissimo":
@@ -1005,7 +1020,9 @@ def build_note_or_rest(
         ET.SubElement(note, "type").text = DURATION_NAMES[base_duration]
     elif model_duration.fraction.numerator > 0:
         base_duration = 1 if model_duration.kern == 0 else model_duration.kern
-        ET.SubElement(note, "duration").text = str(int(model_duration.fraction * state.division))
+        ET.SubElement(note, "duration").text = str(
+            max(1, int(model_duration.fraction * state.division))
+        )
         ET.SubElement(note, "type").text = DURATION_NAMES[base_duration]
     else:
         ET.SubElement(note, "duration").text = str(state.beats)
@@ -1030,10 +1047,28 @@ def build_note_or_rest(
         # rebalancer and removed again once it has been read.
         note.set("stem-shared", "yes")
 
+    if is_second_voice_position(model_note.position):
+        # The model read this note as the staff's second voice (upper2/lower2). Left as
+        # a mark for the voice rebalancer, which ranks it above any stem, and removed
+        # again once it has been read.
+        note.set(VOICE_TOKEN, "2")
+
     build_articulations(note, model_note.articulation, tuplet_mark, state)
     build_slurs(note, model_note.slur, slur_number)
+    build_image_position(note, model_note)
 
     return note
+
+
+def build_image_position(xml: ET.Element, symbol: EncodedSymbol) -> None:
+    """
+    Adds the position of the symbol on the input image as comment. The position is estimated
+    from the attention of the transformer, it points roughly at the symbol but isn't precise.
+    """
+    if symbol.image_coordinates is None:
+        return
+    x, y = symbol.image_coordinates
+    xml.append(ET.Comment(f" imgpos: {round(x)}, {round(y)} "))
 
 
 def build_multi_measure_rest(symbol: EncodedSymbol, attributes: ET.Element) -> None:
@@ -1048,7 +1083,7 @@ def build_multi_measure_rest(symbol: EncodedSymbol, attributes: ET.Element) -> N
 def build_backup(duration: Fraction, state: ConversionState) -> ET.Element:
     assert duration > Fraction(0), "Backup duration must be positive"
     backup = ET.Element("backup")
-    ET.SubElement(backup, "duration").text = str(int(duration * state.division))
+    ET.SubElement(backup, "duration").text = str(max(1, int(duration * state.division)))
     return backup
 
 

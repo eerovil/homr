@@ -4,7 +4,7 @@ from threading import Lock
 from homr.model import Staff
 from homr.transformer.configs import Config
 from homr.transformer.staff2score import Staff2Score
-from homr.transformer.vocabulary import EncodedSymbol
+from homr.transformer.vocabulary import EncodedSymbol, is_upper_or_has_no_position
 from homr.type_definitions import NDArray
 
 # Keep only the latest configuration, not an unbounded cache of model sessions.
@@ -63,4 +63,4 @@ def predict_best(org_image: NDArray, staff: Staff, config: Config) -> list[Encod
         result = inference.predict(org_image)
     if staff.is_grandstaff:
         return result
-    return [r for r in result if r.position != "lower"]
+    return [r for r in result if is_upper_or_has_no_position(r.position)]

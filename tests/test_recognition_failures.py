@@ -18,6 +18,7 @@ from homr import reread
 from homr import staff_parsing as parsing
 from homr.errors import IncompleteRecognitionError
 from homr.model import MultiStaff
+from homr.point_mapping import identity
 from homr.transformer.vocabulary import EncodedSymbol
 
 
@@ -56,7 +57,7 @@ def test_truncation_identifies_the_staff_and_keeps_the_cause(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image, staff = np.zeros((1, 1)), Mock()
-    monkeypatch.setattr(parsing, "prepare_staff_image", Mock(return_value=(image, staff)))
+    monkeypatch.setattr(parsing, "prepare_staff_image", Mock(return_value=(image, staff, identity)))
     original = IncompleteRecognitionError("decoder exhausted")
     monkeypatch.setattr(parsing, "parse_staff_tromr", Mock(side_effect=original))
     with pytest.raises(IncompleteRecognitionError, match="Staff 7: decoder exhausted") as error:
@@ -126,7 +127,7 @@ def test_incomplete_page_never_reaches_xml_generation(
     if previous_output:
         output.write_text("old output")
     debug = Mock()
-    detection: tuple = ([], np.zeros((1, 1)), debug, Mock(), [])
+    detection: tuple = ([], np.zeros((1, 1)), debug, Mock(), [], identity)
     monkeypatch.setattr(cli, "detect_staffs_in_image", Mock(return_value=detection))
     monkeypatch.setattr(
         cli, "parse_staffs", Mock(side_effect=IncompleteRecognitionError("partial"))

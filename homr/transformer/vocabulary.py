@@ -94,8 +94,21 @@ def build_position() -> dict[str, int]:
     """
     The staff position, applies to notes, rests and clefs
     """
-    positions = [nonote, "upper", "lower"]
+    positions = [nonote, "upper", "upper2", "lower", "lower2"]
     return build_dict(positions)
+
+
+def is_lower_position(position: str) -> bool:
+    return position.startswith("lower")
+
+
+def is_second_voice_position(position: str) -> bool:
+    """upper2 and lower2: the second voice on the upper or lower staff."""
+    return position in ("upper2", "lower2")
+
+
+def is_upper_or_has_no_position(position: str) -> bool:
+    return not is_lower_position(position)
 
 
 def build_articulation() -> dict[str, int]:
@@ -146,6 +159,7 @@ def build_articulation() -> dict[str, int]:
         "fermata_tremolo",
         "fermata_trill",
         "fermata_turn",
+        "mordent",
         "staccatissimo",
         "staccatissimo_staccato",
         "staccatissimo_staccato_tenuto",
@@ -243,7 +257,7 @@ def kern_to_symbol_duration(kern: str) -> SymbolDuration:
     """
     if kern.endswith("m"):
         # Multirest
-        SymbolDuration(Fraction(1), 0, 1, 1, 4)
+        return SymbolDuration(Fraction(1), 0, 1, 1, 4)
 
     # Extract numeric prefix (can be > 1 digit)
     i = 0
@@ -312,6 +326,8 @@ class EncodedSymbol:
         # transformer prediction and intentionally does not affect equality or
         # token serialization.
         self.stem_direction = stem_direction
+        # The coordinates mapped back to the image which was given to homr as input
+        self.image_coordinates: tuple[float, float] | None = None
         self._duration: SymbolDuration | None = None
 
     def is_control_symbol(self) -> bool:
@@ -353,10 +369,10 @@ class EncodedSymbol:
         return result
 
     def to_upper_position(self) -> "EncodedSymbol":
-        if self.position != "lower":
+        if is_upper_or_has_no_position(self.position):
             return self
         result = copy.copy(self)
-        result.position = "upper"
+        result.position = self.position.replace("lower", "upper")
         return result
 
     def is_valid(self) -> bool:
@@ -488,7 +504,7 @@ def _remove_redudant_clefs_keys_and_time_signatures(
         result = []
         for symbol in chord:
             if symbol.rhythm.startswith("clef"):
-                if symbol.position == "upper":
+                if is_upper_or_has_no_position(symbol.position):
                     if symbol.rhythm != clef_upper:
                         clef_upper = symbol.rhythm
                         result.append(symbol)
@@ -701,7 +717,7 @@ def _only_keep_lower_staff_if_there_is_a_clef(
         for symbol in chord:
             if has_lower_clef:
                 result.append(symbol)
-            elif i < 5 and symbol.rhythm.startswith("clef") and symbol.position == "lower":
+            elif i < 5 and symbol.rhythm.startswith("clef") and is_lower_position(symbol.position):
                 has_lower_clef = True
                 result.append(symbol)
             else:

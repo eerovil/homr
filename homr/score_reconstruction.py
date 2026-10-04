@@ -12,6 +12,7 @@ replaced without silently changing what homr believes the music is.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -19,6 +20,10 @@ import numpy as np
 
 from homr.simple_logging import eprint
 from homr.transformer.vocabulary import EncodedSymbol, SymbolDuration, sort_token_chords
+
+#: The order a moment's positions are written in. Anything unexpected is read as the
+#: lower staff, which is what the old upper/lower split did.
+_POSITION_ORDER = ("upper", "upper2", "lower", "lower2")
 
 
 @dataclass(frozen=True)
@@ -67,22 +72,24 @@ class SymbolChord:
         return len(sounding) > 0 and all(s.rhythm.startswith("rest") for s in sounding)
 
     def into_positions(self) -> list[SymbolChord]:
-        upper = []
-        lower = []
-        lower_is_only_rest = True
+        """One chord per position (upper, upper2, lower, lower2), in that order.
+
+        A position holding only rests goes first: the last chord is the one which
+        advances time, so a rest written last would push the notes beside it later.
+        """
+        buckets: dict[str, list[EncodedSymbol]] = defaultdict(list)
         for symbol in self.symbols:
-            if symbol.position == "upper":
-                upper.append(symbol)
-            else:
-                lower.append(symbol)
-                lower_is_only_rest = lower_is_only_rest and symbol.rhythm.startswith("rest")
-        chords = (
-            SymbolChord(upper, self.tuplet_mark),
-            SymbolChord(lower, self.tuplet_mark),
+            position = symbol.position if symbol.position in _POSITION_ORDER else "lower"
+            buckets[position].append(symbol)
+        chords = [
+            SymbolChord(buckets[position], self.tuplet_mark)
+            for position in _POSITION_ORDER
+            if buckets[position]
+        ]
+        chords.sort(
+            key=lambda chord: all(s.rhythm.startswith("rest") for s in chord.symbols), reverse=True
         )
-        if lower_is_only_rest:
-            chords = (chords[1], chords[0])
-        return [chord for chord in chords if len(chord.symbols) > 0]
+        return chords
 
 
 def find_common_division(durations: list[Fraction]) -> int:
@@ -651,9 +658,15 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
             measure_duration.append(duration_in_measure)
             duration_in_measure = Fraction(0)
         else:
+            # Every note's own value, not only the chord's shortest: a value the
+            # division cannot express is written as zero divisions.
+            for symbol in chord.symbols:
+                if symbol.rhythm.startswith(("note", "rest")):
+                    frac = symbol.get_duration().fraction
+                    if frac > Fraction(0):
+                        durations.append(frac)
             duration = chord.get_duration()
             if duration > Fraction(0):
-                durations.append(duration)
                 duration_in_measure += duration
 
     if duration_in_measure > Fraction(0):

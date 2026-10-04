@@ -84,6 +84,33 @@ def _first_measure(xml: ET.Element) -> ET.Element:
     return m
 
 
+def _name(note: ET.Element) -> str:
+    """Step and octave, e.g. C5."""
+    return note.findtext("pitch/step", "") + note.findtext("pitch/octave", "")
+
+
+def _onsets(xml: ET.Element) -> list[tuple[str, str, float]]:
+    """(staff, pitch with octave, onset in quarter notes) for every note of the first measure."""
+    part = xml.find("part")
+    assert part is not None
+    divisions = int(part.findtext("measure/attributes/divisions", "1"))
+    time, onset, result = 0, 0, []
+    for element in _first_measure(xml):
+        if element.tag == "backup":
+            time -= int(element.findtext("duration", "0"))
+        elif element.tag == "forward":
+            time += int(element.findtext("duration", "0"))
+        elif element.tag == "note":
+            if element.find("chord") is None:
+                onset = time
+                time += _duration(element)
+            pitch = element.find("pitch")
+            if pitch is not None:
+                name = pitch.findtext("step", "") + pitch.findtext("octave", "")
+                result.append((_staff(element), name, onset / divisions))
+    return sorted(result)
+
+
 class TestMusicXmlGenerator(unittest.TestCase):
     """
     MusicXML testing is mostly covered by training/validate_music_xml_conversion.py
@@ -207,6 +234,24 @@ barline . . . . ."""
                 self.assertLessEqual(v, 4)
             else:
                 self.assertGreaterEqual(v, 5)
+
+    def test_two_voices_on_the_same_staff(self) -> None:
+        two_voices = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_2 G4 _ _ _ upper&note_4 E4 _ _ _ upper2&note_1 C3 _ _ _ lower
+note_4 D4 _ _ _ upper2
+barline . . . . ."""
+        tokens = read_token_lines(two_voices.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        by_pitch = {_pitch(n): n for n in _notes(_first_measure(xml))}
+
+        # The second voice belongs to the upper staff, but is a voice of its own
+        # instead of being a chord note of the first voice.
+        self.assertEqual(_staff(by_pitch["E"]), "1")
+        self.assertIsNone(by_pitch["E"].find("chord"))
+        self.assertNotEqual(_voice(by_pitch["E"]), _voice(by_pitch["G"]))
+        self.assertEqual(_voice(by_pitch["E"]), _voice(by_pitch["D"]))
 
     def test_begin_chord_with_standalone_rests(self) -> None:
         """
@@ -661,3 +706,150 @@ barline . . . . ."""
         self.assertEqual(_tieds(xml), ["start", "stop"])
         # the outer slur is untouched
         self.assertEqual(_slurs(xml), ["start", "stop"])
+
+    def test_next_group_starts_when_the_earliest_sounding_note_ends(self) -> None:
+        """
+        Tokens tell which notes start together, not when each group starts. Here the left
+        hand's quarter note E3 starts under the right hand's quarter note C5, so the right
+        hand's D5 starts when C5 ends (beat 1), while E3 is still sounding. Advancing by the
+        shortest note of the group just written would put D5 at beat 1.5 instead.
+        """
+        hands_moving_independently = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_4 C5 _ _ _ upper&note_8 C3 _ _ _ lower
+note_4 E3 _ _ _ lower
+note_4 D5 _ _ _ upper
+note_8 G3 _ _ _ lower
+note_2 E5 _ _ _ upper&note_2 C3 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(hands_moving_independently.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        self.assertEqual(
+            _onsets(xml),
+            sorted(
+                [
+                    ("1", "C5", 0.0),
+                    ("1", "D5", 1.0),
+                    ("1", "E5", 2.0),
+                    ("2", "C3", 0.0),
+                    ("2", "E3", 0.5),
+                    ("2", "G3", 1.5),
+                    ("2", "C3", 2.0),
+                ]
+            ),
+        )
+
+    def test_independent_hands_in_elijah_measure(self) -> None:
+        """
+        Measure 6 of the Elijah page from issue #142, as the transformer reads it: the
+        right hand plays a quarter chord and dotted rhythms while the left hand holds A2
+        and moves in eighths and quarters. Every note must start on its beat, so that
+        no staff runs past the end of the 4/4 measure.
+        """
+        elijah_measure_6 = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+keySignature_-4 . . . . .
+timeSignature/4 . . . . .
+note_4 A4 b _ _ upper&note_4 E4 b _ _ upper&note_4 C4 _ _ _ upper&note_2 A2 b _ _ lower2&note_8 A2 b _ _ lower
+note_4 A3 b _ _ lower
+note_8. A4 b _ _ upper&note_8. E4 b _ _ upper&note_8. C4 _ _ _ upper
+note_8 A3 b _ _ lower
+note_16 C5 _ _ _ upper&note_16 A4 b _ _ upper&note_16 E4 b _ _ upper
+note_8. C5 _ _ _ upper&note_8. A4 b _ _ upper&note_8. G4 b _ _ upper&note_8. E4 b _ _ upper&note_8 A2 b _ _ lower
+note_4 C4 _ _ _ lower&note_4 A3 b _ _ lower
+note_16 E5 b _ _ upper&note_16 A4 b _ _ upper&note_16 G4 b _ _ upper
+note_8. E5 b _ _ upper&note_8. A4 b _ _ upper&note_8. G4 b _ _ upper
+note_8 E4 b _ _ lower&note_8 C4 _ _ _ lower&note_8 A3 b _ _ lower
+note_16 E5 b _ _ upper&note_16 A4 b _ _ upper&note_16 G4 b _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(elijah_measure_6.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        onsets = _onsets(xml)
+        upper = sorted({onset for staff, _, onset in onsets if staff == "1"})
+        lower = sorted({onset for staff, _, onset in onsets if staff == "2"})
+        self.assertEqual(upper, [0.0, 1.0, 1.75, 2.0, 2.75, 3.0, 3.75])
+        self.assertEqual(lower, [0.0, 0.5, 1.5, 2.0, 2.5, 3.5])
+
+    def test_grace_notes_take_no_time(self) -> None:
+        """A group of only grace notes must not move later notes (the next note stays on beat 1)."""
+        with_grace_note = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_4 C5 _ _ _ upper&note_2 C3 _ _ _ lower
+note_8G D5 _ _ _ upper
+note_4 E5 _ _ _ upper
+note_2 F5 _ _ _ upper&note_2 G2 _ _ _ lower
+barline . . . . ."""
+        tokens = read_token_lines(with_grace_note.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        by_pitch = {name: onset for _, name, onset in _onsets(xml)}
+        self.assertEqual(by_pitch["E5"], 1.0)
+        self.assertEqual(by_pitch["F5"], 2.0)
+        self.assertEqual(by_pitch["G2"], 2.0)
+
+    def test_image_position_is_written_as_comment(self) -> None:
+        tokens = read_token_lines("""clef_G2 . . . . upper
+note_4 E4 _ _ _ upper
+note_4 C4 _ _ _ upper
+barline . . . . .""".splitlines())
+        tokens[1].image_coordinates = (45.4, 230.6)
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        notes = list(xml.iter("note"))
+        comments = [[c.text for c in n if c.tag is ET.Comment] for n in notes]  # type: ignore[comparison-overlap]
+        self.assertEqual(comments, [[" imgpos: 45, 231 "], []])
+        self.assertIn("<!-- imgpos: 45, 231 -->", ET.tostring(xml, encoding="unicode"))
+
+    def test_a_second_voice_token_writes_the_note_in_voice_two(self) -> None:
+        """
+        Model 465 can say a note is the staff's second voice (upper2). A half note under
+        two quarters is then voice 2 on staff 1, starting with the first quarter, and
+        the mark the rebalancer reads is gone from the output.
+        """
+        two_voices = """clef_G2 _ _ _ _ upper
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_4 E5 _ _ _ upper&note_2 C5 _ _ _ upper2
+note_4 D5 _ _ _ upper
+note_2 C5 _ _ _ upper&note_2 A4 _ _ _ upper2
+barline . . . . ."""
+        tokens = read_token_lines(two_voices.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        measure = _first_measure(xml)
+        voices = {(_name(n), _voice(n)) for n in _notes(measure)}
+        self.assertEqual(voices, {("E5", "1"), ("D5", "1"), ("C5", "1"), ("C5", "2"), ("A4", "2")})
+        self.assertEqual({_staff(n) for n in _notes(measure)}, {"1"})
+        onsets = _onsets(xml)
+        self.assertIn(("1", "C5", 0.0), onsets)
+        self.assertIn(("1", "A4", 2.0), onsets)
+        self.assertNotIn("voice-token", ET.tostring(xml, encoding="unicode"))
+
+    def test_a_lower2_token_stays_on_the_lower_staff(self) -> None:
+        tokens = read_token_lines("""clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_1 C5 _ _ _ upper&note_2 C3 _ _ _ lower&note_1 G2 _ _ _ lower2
+note_2 D3 _ _ _ lower
+barline . . . . .""".splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        by_pitch = {_name(n): (_staff(n), _voice(n)) for n in _notes(_first_measure(xml))}
+        self.assertEqual(by_pitch["G2"][0], "2")
+        self.assertNotEqual(by_pitch["G2"][1], by_pitch["C3"][1])
+        self.assertEqual(by_pitch["C3"][1], by_pitch["D3"][1])
+
+    def test_every_value_in_a_chord_is_written_exactly(self) -> None:
+        """
+        The division used to be found from each chord's shortest value only, so a longer
+        note beside it whose denominator nothing else had was truncated -- to 0
+        divisions in the worst case. A 64th beside a 96th is 3:2 and must stay so.
+        """
+        tokens = read_token_lines("""clef_G2 _ _ _ _ upper
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_96 C5 _ _ _ upper&note_64 E4 _ _ _ upper
+note_2 F5 _ _ _ upper
+barline . . . . .""".splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        by_pitch = {_name(n): _duration(n) for n in _notes(_first_measure(xml))}
+        self.assertEqual(by_pitch["E4"] * 2, by_pitch["C5"] * 3)
+        self.assertNotIn(0, by_pitch.values())
