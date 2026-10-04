@@ -516,3 +516,82 @@ def test_unison_pairing_requires_coordinates_for_both_notes() -> None:
         assert _pair_by_attention(left, right, [], 1) == 0
     assert first.stem_direction is None
     assert missing.stem_direction is None
+
+
+def _second_voice_unison(xs: tuple[float, float]) -> list[EncodedSymbol]:
+    """Talviuni's bar 3: model 465 marks both notes of the unison as the second voice.
+
+    The clef is the staff's (`upper`); the notes are its second voice (`upper2`).
+    """
+    return [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        EncodedSymbol("note_2.", pitch="A4", position="upper2", coordinates=(xs[0], 56.0)),
+        EncodedSymbol("note_4", pitch="A4", position="upper2", coordinates=(xs[1], 80.0)),
+    ]
+
+
+_TALVIUNI_HEADS = [
+    _head(253.0, 71.0, 4, [StemDirection.DOWN]),
+    _head(263.0, 71.0, 4, [StemDirection.UP]),
+]
+
+
+def test_a_second_voice_note_reads_against_its_staffs_clef() -> None:
+    """Keyed by the raw position, an `upper2` note had no clef and was never paired."""
+    symbols = _second_voice_unison((255.0, 249.0))
+
+    assert pair_unison_stems(symbols, _TALVIUNI_HEADS) == 1
+
+
+def test_the_heads_are_looked_for_across_both_notes_not_around_one() -> None:
+    """The right-hand head sits 14px from the left-hand note: out of reach of it alone."""
+    symbols = _second_voice_unison((255.0, 249.0))
+    pair_unison_stems(symbols, _TALVIUNI_HEADS)
+
+    by_rhythm = {symbol.rhythm: symbol.stem_direction for symbol in symbols[1:]}
+    assert by_rhythm == {"note_4": "down", "note_2.": "up"}
+
+
+def test_a_pair_marked_as_one_voice_is_split_by_its_stems() -> None:
+    """One voice cannot sound one pitch twice at once, so the marks follow the stems."""
+    symbols = _second_voice_unison((255.0, 249.0))
+    pair_unison_stems(symbols, _TALVIUNI_HEADS)
+
+    by_rhythm = {symbol.rhythm: symbol.position for symbol in symbols[1:]}
+    assert by_rhythm == {"note_4": "upper2", "note_2.": "upper"}
+
+
+def test_a_pair_already_marked_as_two_voices_keeps_its_marks() -> None:
+    symbols = _second_voice_unison((255.0, 249.0))
+    symbols[1].position = "upper"
+    pair_unison_stems(symbols, _TALVIUNI_HEADS)
+
+    assert [symbol.position for symbol in symbols[1:]] == ["upper", "upper2"]
+
+
+def test_the_split_pair_survives_and_lands_in_two_voices() -> None:
+    """End to end: the quarter is no longer deleted as a repeat of the dotted half."""
+    symbols = _second_voice_unison((255.0, 249.0))
+    pair_unison_stems(symbols, _TALVIUNI_HEADS)
+    kept = _remove_duplicated_piches(symbols[1:])
+    assert len(kept) == 2
+    for symbol in kept:
+        symbol.coordinates = None
+    voice = [
+        EncodedSymbol("clef_G2", position="upper"),
+        kept[0],
+        EncodedSymbol("chord"),
+        kept[1],
+        EncodedSymbol("note_2", pitch="G4", position="upper2", stem_direction="down"),
+        EncodedSymbol("note_4", pitch="A4", position="upper", stem_direction="up"),
+        EncodedSymbol("chord"),
+        EncodedSymbol("note_4", pitch="F4", position="upper2", stem_direction="down"),
+        EncodedSymbol("barline"),
+    ]
+    notes = generate_xml(XmlGeneratorArguments(), [voice], "").findall(".//measure/note")
+    by_voice: dict[str, list[str]] = {}
+    for note in notes:
+        by_voice.setdefault(note.findtext("voice") or "", []).append(
+            f"{note.findtext('pitch/step')}{note.findtext('duration')}"
+        )
+    assert sorted(by_voice.values()) == sorted([["A3", "A1"], ["A1", "G2", "F1"]])

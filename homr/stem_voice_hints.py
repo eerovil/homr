@@ -64,6 +64,17 @@ def expected_position(pitch: str, clef: tuple[str, int]) -> int | None:
     return 2 * line - 1 + _diatonic(step, int(octave)) - _diatonic(reference_step, reference_octave)
 
 
+def _staff(position: str) -> str:
+    """The staff a position names: `upper2` and `lower2` are second voices on it.
+
+    Model 465 marks a staff's second voice with its own position, and the clef,
+    the noteheads and the moment are all the staff's, not the voice's. Keyed by
+    the raw position, every second-voice note had no clef in force and no column
+    shared with the first voice, so none of the repairs below could see it.
+    """
+    return position[:-1] if position.endswith("2") else position
+
+
 def _clefs_in_force(symbols: list[EncodedSymbol]) -> list[tuple[str, int] | None]:
     """The clef governing each symbol, tracked per staff of the group.
 
@@ -76,8 +87,8 @@ def _clefs_in_force(symbols: list[EncodedSymbol]) -> list[tuple[str, int] | None
     for symbol in symbols:
         match = _CLEF.match(symbol.rhythm)
         if match is not None:
-            current[symbol.position] = (match.group(1), int(match.group(2)))
-        found.append(current.get(symbol.position))
+            current[_staff(symbol.position)] = (match.group(1), int(match.group(2)))
+        found.append(current.get(_staff(symbol.position)))
     return found
 
 
@@ -162,7 +173,7 @@ def _columns(symbols: list[EncodedSymbol], clefs: list[tuple[str, int] | None]) 
         coordinates = _note_coordinates(symbol)
         if coordinates is None or clefs[index] is None:
             continue
-        per_staff.setdefault(symbol.position, []).append((coordinates[0], index))
+        per_staff.setdefault(_staff(symbol.position), []).append((coordinates[0], index))
     columns: list[list[int]] = []
     for places in per_staff.values():
         group: list[int] = []
@@ -292,11 +303,17 @@ def _pair(first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], positi
     second_coordinates = _note_coordinates(second)
     if first_coordinates is None or second_coordinates is None:
         return 0
-    x, y = first_coordinates
+    y = first_coordinates[1]
+    # Across both notes, not around the first: the two heads of a unison are drawn
+    # side by side, so the second can sit further from the first decoded note than
+    # the tolerance reaches -- on Talviuni's third bar it was 14px off, and the pair
+    # was never matched, so the quarter note was then deleted as a repeat.
+    left = min(first_coordinates[0], second_coordinates[0]) - _MATCH_X_TOLERANCE
+    right = max(first_coordinates[0], second_coordinates[0]) + _MATCH_X_TOLERANCE
     here = [
         note
         for note in notes
-        if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
+        if left <= note.center[0] <= right
         and note.position == position
         and abs(note.center[1] - y) <= _COLUMN_REACH
     ]
@@ -308,6 +325,14 @@ def _pair(first: EncodedSymbol, second: EncodedSymbol, notes: list[Note], positi
     tokens = (first, second) if first_coordinates[0] <= second_coordinates[0] else (second, first)
     for token, head in zip(tokens, heads, strict=True):
         token.stem_direction = "up" if head.stem_directions[0] == StemDirection.UP else "down"
+    # Both marked as the same voice is a claim the pair itself refutes: one voice
+    # cannot sound one pitch twice at once. The model's voice mark outranks a stem
+    # everywhere else, so here the stems have to be written into the marks or the
+    # up-stem head lands in the second voice beside its partner (Talviuni bar 3).
+    if first.position == second.position:
+        staff = _staff(first.position)
+        for token in tokens:
+            token.position = staff if token.stem_direction == "up" else staff + "2"
     return 1
 
 

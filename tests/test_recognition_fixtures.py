@@ -1,6 +1,6 @@
 # ruff: noqa: S101
 
-"""The six real MusicXML acceptance cases, not just segmentation checks.
+"""The seven real MusicXML acceptance cases, not just segmentation checks.
 
 Use the existing comparator and frozen per-case memory without ratcheting it.
 Missing models may skip locally; HOMR_REQUIRE_MODELS=1 makes CI fail instead.
@@ -28,6 +28,7 @@ EXPECTED_CASES = {
     "laulun-aika-s2",
     "sammon-ryosto",
     "system4",
+    "talviuni-s1",
     "talviuni-s2",
 }
 
