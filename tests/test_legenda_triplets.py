@@ -436,3 +436,35 @@ def test_a_rest_both_voices_share_is_written_hidden_into_the_one_without_it() ->
 def test_a_gap_the_other_voice_sings_through_is_left_alone() -> None:
     measure = two_voices(("1", 0, 8, False), ("1", 8, 4, False), ("2", 8, 4, False))
     assert hide_shared_rests(measure) == 0
+
+
+def sangerhilsen_beat_four() -> list[SymbolChord]:
+    """Sangerhilsen system 6, bar 1, beat 4: a unison triplet, one copy of E3 lost."""
+    return [
+        moment(
+            note("note_12", "upper", "C4"),
+            note("note_8", "lower2", "C3", ("note_12",)),
+            note("note_12", "lower", "C3", ("note_12.", "note_6", "note_8")),
+        ),
+        moment(note("note_12", "upper", "E4"), note("note_12", "lower2", "E3")),
+        moment(
+            note("note_12", "upper", "G4"),
+            note("note_12", "lower2", "G3"),
+            note("note_12", "lower", "G3"),
+        ),
+        barline(),
+    ]
+
+
+def test_a_gap_the_other_voice_sings_in_is_a_lost_copy_not_a_long_note() -> None:
+    voice = repair_tuplet_overlaps_until_settled(sangerhilsen_beat_four())
+    assert rhythms(voice, "lower") == ["note_12", "note_12"]
+
+
+def test_the_copy_may_be_either_voice_of_the_staff() -> None:
+    changes: list[ReconstructionChange] = []
+    filled = fill_unison_copies(sangerhilsen_beat_four(), changes)
+    assert [(c.pitch, c.staff) for c in changes] == [("E3", "lower")]
+    voice = repair_tuplet_overlaps_until_settled(filled)
+    assert rhythms(voice, "lower") == ["note_12"] * 3
+    assert rhythms(voice, "lower2") == ["note_12"] * 3
