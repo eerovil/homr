@@ -12,6 +12,7 @@ from homr.score_reconstruction import (
     SymbolChord,
     TupletParser,
     add_tuplet_start_stop,
+    advance_to_next_group,
     find_common_division,
     find_division_and_time_signature_nominator,
     find_nominator_per_time_signature,
@@ -216,7 +217,7 @@ def build_measures(
                 build_multi_measure_rest(symbol, attributes)
             else:
                 staff_positions = group.into_positions()
-                advance = _advance_to_next_group(group, clock, sounding)
+                advance = advance_to_next_group(group, clock, sounding)
                 clock += advance
                 sounding = [end for end in sounding if end > clock]
                 for pos_no, staff_pos in enumerate(staff_positions):
@@ -293,20 +294,6 @@ def build_measures(
         ET.SubElement(time_el, "beats").text = str(beats)
         ET.SubElement(time_el, "beat-type").text = "4"
     return measures
-
-
-def _advance_to_next_group(
-    group: SymbolChord, clock: Fraction, sounding: list[Fraction]
-) -> Fraction:
-    """How far the next group starts after this one, updating the sounding notes in place."""
-    durations = [
-        s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
-    ]
-    timed = [d for d in durations if d > 0]  # grace notes have no duration and take no time
-    if not timed:
-        return Fraction(0)
-    sounding.extend(clock + d for d in timed)
-    return min(end for end in sounding if end > clock) - clock
 
 
 def build_work(title_text: str) -> ET.Element:
@@ -799,6 +786,129 @@ def convert_ties(part: ET.Element) -> None:
             if before is None:
                 continue
             tie_event(before, event)
+    tie_unisons(part)
+
+
+#: Where an event sounds: the measure's index and the onset inside it, in divisions.
+_When = tuple[int, int]
+
+
+def _events_in_time(
+    part: ET.Element,
+) -> dict[tuple[str, str], list[tuple[_When, list[ET.Element]]]]:
+    """Each voice's events in order, with when each one sounds."""
+    voices: dict[tuple[str, str], list[tuple[_When, list[ET.Element]]]] = defaultdict(list)
+    for index, measure in enumerate(part.findall("measure")):
+        cursor = 0
+        last: list[ET.Element] | None = None
+        for element in measure:
+            if element.tag in ("backup", "forward"):
+                step = int(element.findtext("duration", "0"))
+                cursor += step if element.tag == "forward" else -step
+                continue
+            if element.tag != "note":
+                continue
+            if element.find("chord") is not None and last is not None:
+                last.append(element)
+                continue
+            last = [element]
+            key = (element.findtext("staff", "1"), element.findtext("voice", "1"))
+            voices[key].append(((index, cursor), last))
+            if element.find("grace") is None:
+                cursor += int(element.findtext("duration", "0"))
+    return voices
+
+
+def _with_pitch(event: list[ET.Element], pitch: str) -> ET.Element | None:
+    return next((note for note in event if get_note_pitch(note) == pitch), None)
+
+
+def tie_unisons(part: ET.Element) -> None:
+    """Tie both voices of a unison whose one printed tie was read across them.
+
+    Two voices singing one pitch share a notehead, so the page prints one tie from
+    it to the next shared head. The model marks the head the curve touches, and
+    which voice that head is filed under is a coin toss: on Sangerhilsen bars
+    10-11 and 26-27 (eerovil/musescore-choir-plugins#240) the start went to one
+    voice and the stop to the other, so no voice had both ends, nothing became a
+    tie, and the slur left behind ran from one singer into another.
+
+    The start and the stop are read as one tie when the two voices are in unison
+    at both ends -- the same pitch at the same moment where the curve starts, and
+    again where it stops -- and then **each** voice is tied, since each sings the
+    held note. A slur between two voices that are not in unison at both ends is a
+    different thing and is left alone.
+
+    For the same reason a tie read in one voice of such a unison is the other
+    voice's too (Sangerhilsen's basses in those bars: both ends filed under one
+    voice, the other voice left re-striking a note it holds), unless the other
+    voice carries a curve of its own there.
+    """
+    voices = _events_in_time(part)
+    when_of = {
+        key: {when: index for index, (when, _) in enumerate(events)}
+        for key, events in voices.items()
+    }
+    for (staff, voice), events in voices.items():
+        for index in range(len(events) - 1):
+            (when, event), (later, successor) = events[index], events[index + 1]
+            for start_note in event:
+                pitch = get_note_pitch(start_note)
+                if pitch is None:
+                    continue
+                own_end = _with_pitch(successor, pitch)
+                if own_end is None:
+                    continue
+                begins = get_slur(start_note, "start")
+                tied = _has_tie(start_note, "start") and _has_tie(own_end, "stop")
+                if begins is None and not tied:
+                    continue
+                for (other_staff, other_voice), other_events in voices.items():
+                    if other_staff != staff or other_voice == voice:
+                        continue
+                    at = when_of[(other_staff, other_voice)].get(when)
+                    if at is None or at + 1 >= len(other_events):
+                        continue
+                    if other_events[at + 1][0] != later:
+                        continue
+                    partner = _with_pitch(other_events[at][1], pitch)
+                    partner_end = _with_pitch(other_events[at + 1][1], pitch)
+                    if partner is None or partner_end is None:
+                        continue
+                    if tied:
+                        # Tied in its own voice already; the partner sings the same
+                        # held note, unless it carries a curve of its own.
+                        if _has_tie(partner, "start") or get_slur(partner, "start"):
+                            continue
+                        if get_slur(partner_end, "stop") is not None:
+                            continue
+                        _tie(partner, partner_end)
+                        continue
+                    ends = get_slur(partner_end, "stop")
+                    if ends is None or begins is None:
+                        continue
+                    begin_slur, begin_notation = begins
+                    end_slur, end_notation = ends
+                    begin_notation.remove(begin_slur)
+                    end_notation.remove(end_slur)
+                    _tie(start_note, own_end)
+                    _tie(partner, partner_end)
+                    break
+
+
+def _has_tie(note: ET.Element, kind: str) -> bool:
+    return any(tie.get("type") == kind for tie in note.findall("tie"))
+
+
+def _tie(start: ET.Element, stop: ET.Element) -> None:
+    """Tie two notes, unless they already are."""
+    for note, kind in ((start, "start"), (stop, "stop")):
+        if _has_tie(note, kind):
+            continue
+        notation = note.find("notations")
+        if notation is None:
+            notation = ET.SubElement(note, "notations")
+        add_tie(note, kind, notation)
 
 
 def group_into_events(measure: ET.Element) -> list[list[ET.Element]]:

@@ -396,3 +396,78 @@ def test_the_moments_never_decide_a_bar_holding_a_rest() -> None:
     voice = system(even_bar(), hanget_soi_bar_3(), even_bar())
     voice[4].symbols[0].rhythm = "rest_16"
     assert repair_bar_arithmetic(voice) is voice
+
+
+# --- a quarter read as a grace note (Sangerhilsen bars 15 and 31) ---
+
+
+def grace_bar(own_voice_after: bool = False) -> list[SymbolChord]:
+    """The upper voice's accented quarter on beat four came back `note_4G`, alone.
+
+    The moment after it holds every other voice but not its own, so it leads into
+    nothing: it is that voice's quarter, read small.
+    """
+    last = [
+        note("note_4", "upper2", stem="down", pitch="D5"),
+        note("note_4", "lower", stem="up", pitch="G3"),
+    ]
+    if own_voice_after:
+        last.append(note("note_4", "upper", stem="up", pitch="E5"))
+    return [
+        moment(
+            note("note_2", "upper", stem="up", pitch="G5"),
+            note("note_2.", "upper2", stem="down", pitch="D5"),
+            note("note_2", "lower", stem="up", pitch="B3"),
+        ),
+        moment(note("note_4", "upper", stem="up", pitch="F5"), note("note_4", "lower", pitch="A3")),
+        moment(note("note_4G", "upper", stem="up", alternatives=("note_4",), pitch="E5")),
+        moment(*last),
+        barline(),
+    ]
+
+
+def four_four(positions: tuple[str, ...] = ("upper", "upper2", "lower")) -> list[SymbolChord]:
+    return even_bar(quarters=4, positions=positions)
+
+
+def test_a_grace_note_leading_into_nothing_is_read_as_the_quarter_it_is() -> None:
+    voice = system(four_four(), four_four(), grace_bar())
+    repaired = repair_bar_arithmetic(voice)
+    assert rhythms(repaired)[-3:] == ["note_2", "note_4", "note_4"]
+    # and it sounds with the moment it was in front of, not a beat before it
+    joined = repaired[-2]
+    assert {(s.position, s.rhythm) for s in joined.symbols} == {
+        ("upper", "note_4"),
+        ("upper2", "note_4"),
+        ("lower", "note_4"),
+    }
+    assert len(repaired) == len(voice) - 1
+
+
+def test_a_grace_note_before_its_own_voices_note_stays_a_grace_note() -> None:
+    voice = system(four_four(), four_four(), grace_bar(own_voice_after=True))
+    assert "note_4G" in rhythms(repair_bar_arithmetic(voice))
+
+
+# --- a rest the page prints once for both voices of a staff ---
+
+
+def test_a_voice_short_by_its_partners_rests_is_not_lengthened() -> None:
+    """Sangerhilsen bar 20: the lower voice's eighth must not be held through the rests."""
+    rests = [
+        moment(
+            note("note_2", "upper", stem="up", pitch="C5"),
+            note("note_2", "upper2", stem="down", pitch="A4"),
+            note("note_2", "lower", stem="up", pitch="E3"),
+        ),
+        moment(
+            note("note_8", "upper", stem="up", pitch="C5"),
+            note("note_8", "upper2", stem="down", alternatives=("note_2",), pitch="A4"),
+            note("note_8", "lower", stem="up", pitch="E3"),
+        ),
+        moment(note("rest_8", "upper"), note("rest_8", "lower")),
+        moment(note("rest_4", "upper"), note("rest_4", "lower")),
+        barline(),
+    ]
+    voice = system(four_four(), four_four(), rests)
+    assert repair_bar_arithmetic(voice) is voice

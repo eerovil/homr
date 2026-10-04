@@ -6,14 +6,14 @@ Regenerated from `fixturecheck/series.jsonl` on every run — do not edit by han
 
 | harness | measured | homr | references | of everything judged, right | cases |
 | --- | --- | --- | --- | --- | --- |
-| `fixturecheck` | 2026-10-04T04:49:23+00:00 (one) | `c343b30+9f25c5` | `f26eeff6c43ce42b` | **92.6%** | 1 read |
+| `fixturecheck` | 2026-10-04T07:09:12+00:00 (fixtures) | `cb5546d+b49cef~pod` | `f26eeff6c43ce42b` | **99.2%** | 7 read |
 | `choir-bench` | _never_ | — | — | — | — |
 
 The two are **not averaged**. `fixturecheck` scores notes across the printed systems of the repertoire; `choir-bench` scores staves and bars across the public-domain benchmark pages. They answer different questions and a single figure over both would mean nothing.
 
 ## The gate
 
-**pass** — all 7 committed cases stand at or above the reading they were accepted at, under homr `c343b30+9f25c5`, latest as of 2026-10-04T04:48:53+00:00.
+**pass** — all 7 committed cases stand at or above the reading they were accepted at, under homr `cb5546d+b49cef~pod`, latest as of 2026-10-04T07:09:12+00:00.
 
 **Nothing gets worse, per case.** Each case remembers the notes-right score it was last accepted at; a run fails if any case reads below its own memory, and a case that improves has its memory raised. Not a total — a win on one page must not pay for a loss on another. Three tiers under one rule: the pinned failures, the five committed fixtures, and every song system on the host that owns the songs.
 
@@ -23,7 +23,6 @@ The two are **not averaged**. `fixturecheck` scores notes across the printed sys
 
 | when | harness | tier | homr | references | right |
 | --- | --- | --- | --- | --- | --- |
-| 2026-09-07T07:25:11+00:00 | `fixturecheck` | one | `d99edf9~pod` | `87e0fbd0ec898895+drift1` | 100.0% |
 | 2026-09-07T07:25:21+00:00 | `fixturecheck` | one | `d99edf9~pod` | `87e0fbd0ec898895+drift1` | 100.0% |
 | 2026-09-07T07:25:32+00:00 | `fixturecheck` | one | `d99edf9~pod` | `87e0fbd0ec898895+drift1` | 100.0% |
 | 2026-09-07T07:26:04+00:00 | `fixturecheck` | one | `d99edf9~pod` | `87e0fbd0ec898895+drift1` | 96.4% |
@@ -35,6 +34,7 @@ The two are **not averaged**. `fixturecheck` scores notes across the printed sys
 | 2026-10-04T04:49:13+00:00 | `fixturecheck` | one | `c343b30+9f25c5` | `f26eeff6c43ce42b` | 98.7% |
 | 2026-10-04T04:49:15+00:00 | `fixturecheck` | one | `c343b30+9f25c5` | `f26eeff6c43ce42b` | 100.0% |
 | 2026-10-04T04:49:23+00:00 | `fixturecheck` | one | `c343b30+9f25c5` | `f26eeff6c43ce42b` | 92.6% |
+| 2026-10-04T07:09:12+00:00 | `fixturecheck` | fixtures | `cb5546d+b49cef~pod` | `f26eeff6c43ce42b` | 99.2% |
 
 A tier is not a sample of the one above it — a ten-case run and a full sweep are different populations, so read a percentage against runs of the same tier.
 
