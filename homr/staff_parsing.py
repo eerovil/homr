@@ -15,6 +15,8 @@ from homr.staff_parsing_tromr import parse_staff_tromr
 from homr.staff_regions import StaffRegions
 from homr.stem_voice_hints import (
     add_stem_voice_hints,
+    drop_unprinted_chord_notes,
+    move_notes_to_their_heads,
     pair_unison_by_attention,
     pair_unison_stems,
     rescue_duplicate_pitches,
@@ -372,6 +374,9 @@ def parse_staff_image(
         noteheads = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]
         hinted = add_stem_voice_hints(result, noteheads)
         eprint("Applied", hinted, "stem voice hints on staff", index)
+        moved = move_notes_to_their_heads(result, noteheads)
+        if moved:
+            eprint("Moved", moved, "note(s) to the moment their head is printed in")
         # Before the duplicate remover runs: a note the decoder gave its
         # neighbour's pitch is about to be deleted as a duplicate, and the
         # segmentation knows which head it really is.
@@ -390,6 +395,9 @@ def parse_staff_image(
         read = pair_unison_by_attention(result, noteheads)
         if read:
             eprint("Read", read, "unison(s) off the decoder's attention")
+        dropped = drop_unprinted_chord_notes(result, noteheads)
+        if dropped:
+            eprint("Dropped", dropped, "chord note(s) the page prints no head for")
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):

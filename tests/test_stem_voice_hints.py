@@ -11,6 +11,8 @@ from homr.music_xml_generator import (
 from homr.stem_voice_hints import (
     SHARED,
     add_stem_voice_hints,
+    drop_unprinted_chord_notes,
+    move_notes_to_their_heads,
     pair_unison_by_attention,
     pair_unison_stems,
     rescue_duplicate_pitches,
@@ -628,3 +630,112 @@ def test_a_unison_is_not_moved_onto_the_neighbouring_notes_head() -> None:
 
     assert rescue_duplicate_pitches(symbols, heads) == 0
     assert [symbol.pitch for symbol in symbols[1:]] == ["G4", "B4", "B4"]
+
+
+def _chord() -> EncodedSymbol:
+    return EncodedSymbol("chord")
+
+
+def _read(
+    pitch: str, position: str, at: tuple[float, float], rhythm: str = "note_12", sure: float = 0.9
+) -> EncodedSymbol:
+    confidence = {"rhythm": {"probability": sure}, "pitch": {"probability": 1.0}}
+    return EncodedSymbol(
+        rhythm, pitch=pitch, position=position, coordinates=at, confidence=confidence
+    )
+
+
+def _layout(symbols: list[EncodedSymbol]) -> list[list[tuple[str, str]]]:
+    """Moments as (pitch, position) lists, `chord` joining a note to the one before."""
+    moments: list[list[tuple[str, str]]] = []
+    joined = False
+    for symbol in symbols:
+        if symbol.rhythm == "chord":
+            joined = True
+            continue
+        if symbol.rhythm.startswith("note"):
+            if joined and moments:
+                moments[-1].append((symbol.pitch, symbol.position))
+            else:
+                moments.append([(symbol.pitch, symbol.position)])
+        joined = False
+    return moments
+
+
+def _early_triplet_note(upper_already_there: bool = False) -> list[EncodedSymbol]:
+    """Sangerhilsen bar 33: the upper voice's middle note read into the first moment."""
+    second = [_read("C5", "upper2", (168.0, 56.0))]
+    if upper_already_there:
+        second += [_chord(), _read("C5", "upper", (168.0, 54.0))]
+    return [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        _read("A4", "upper2", (150.0, 62.0)),
+        _chord(),
+        _read("C5", "upper", (166.0, 70.0)),
+        *second,
+    ]
+
+
+_TRIPLET_HEADS = [
+    _head(150.0, 62.0, 4, [StemDirection.UP, StemDirection.DOWN]),
+    _head(167.0, 56.0, 6, [StemDirection.UP, StemDirection.DOWN]),
+]
+
+
+def test_a_note_read_a_moment_early_moves_to_the_head_it_names() -> None:
+    symbols = _early_triplet_note()
+
+    assert move_notes_to_their_heads(symbols, _TRIPLET_HEADS) == 1
+    assert _layout(symbols) == [[("A4", "upper2")], [("C5", "upper2"), ("C5", "upper")]]
+
+
+def test_a_note_is_not_moved_into_a_moment_its_voice_already_sounds_in() -> None:
+    symbols = _early_triplet_note(upper_already_there=True)
+
+    assert move_notes_to_their_heads(symbols, _TRIPLET_HEADS) == 0
+
+
+def test_a_note_whose_head_is_in_its_own_column_stays() -> None:
+    symbols = _early_triplet_note()
+    heads = [*_TRIPLET_HEADS, _head(151.0, 56.0, 6, [StemDirection.UP])]
+
+    assert move_notes_to_their_heads(symbols, heads) == 0
+
+
+def _phantom_chord_note(sure: float) -> list[EncodedSymbol]:
+    """Sangerhilsen bar 15: the lower voice's D read as a D and an E together."""
+    return [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        _read("G5", "upper", (166.0, 40.0), "note_2"),
+        _chord(),
+        _read("E5", "upper2", (160.0, 72.0), "note_2.", sure=sure),
+        _chord(),
+        _read("D5", "upper2", (166.0, 78.0), "note_2."),
+    ]
+
+
+_ONE_HEAD_EACH = [
+    _head(166.0, 50.0, 10, [StemDirection.UP]),
+    _head(167.0, 64.0, 7, [StemDirection.DOWN]),
+]
+
+
+def test_a_chord_note_the_page_has_no_head_for_is_dropped() -> None:
+    symbols = _phantom_chord_note(sure=0.79)
+
+    assert drop_unprinted_chord_notes(symbols, _ONE_HEAD_EACH) == 1
+    assert _layout(symbols) == [[("G5", "upper"), ("D5", "upper2")]]
+
+
+def test_a_chord_note_the_decoder_was_sure_of_is_kept() -> None:
+    """A lost head is the segmentation's commonest fault; it never outvotes a sure read."""
+    symbols = _phantom_chord_note(sure=0.95)
+
+    assert drop_unprinted_chord_notes(symbols, _ONE_HEAD_EACH) == 0
+
+
+def test_a_chord_with_a_head_for_every_note_is_kept() -> None:
+    symbols = _phantom_chord_note(sure=0.79)
+    heads = [*_ONE_HEAD_EACH, _head(160.0, 60.0, 8, [StemDirection.DOWN])]
+
+    assert drop_unprinted_chord_notes(symbols, heads) == 0
