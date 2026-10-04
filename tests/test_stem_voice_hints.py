@@ -13,6 +13,7 @@ from homr.stem_voice_hints import (
     add_stem_voice_hints,
     pair_unison_by_attention,
     pair_unison_stems,
+    rescue_duplicate_pitches,
 )
 from homr.transformer.vocabulary import EncodedSymbol, _remove_duplicated_piches
 
@@ -595,3 +596,35 @@ def test_the_split_pair_survives_and_lands_in_two_voices() -> None:
             f"{note.findtext('pitch/step')}{note.findtext('duration')}"
         )
     assert sorted(by_voice.values()) == sorted([["A3", "A1"], ["A1", "G2", "F1"]])
+
+
+def test_a_pitch_read_twice_beside_a_free_head_is_rescued_onto_it() -> None:
+    """Two heads at two positions and only one read: the other note is the free head."""
+    heads = [
+        _head(168.0, 56.0, 5, [StemDirection.UP]),
+        _head(168.0, 48.0, 7, [StemDirection.DOWN]),
+    ]
+    symbols = _unison(("note_4", "note_4"), (166.0, 170.0))
+
+    assert rescue_duplicate_pitches(symbols, heads) == 1
+    assert sorted(symbol.pitch for symbol in symbols[1:]) == ["B4", "D5"]
+
+
+def test_a_unison_is_not_moved_onto_the_neighbouring_notes_head() -> None:
+    """Sangerhilsen bar 1: a triplet's last E, one head both voices read.
+
+    The triplet's middle note sits close enough to fall in the same column of
+    heads, and its head is not free -- the middle note has already read it. Moving
+    the unison's second reading onto it turned an E into a C natural.
+    """
+    heads = [
+        _head(156.0, 64.0, 3, [StemDirection.DOWN]),
+        _head(168.0, 56.0, 5, [StemDirection.DOWN]),
+    ]
+    symbols = _unison(("note_12", "note_12"), (166.0, 170.0))
+    symbols.insert(
+        1, EncodedSymbol("note_12", pitch="G4", position="upper", coordinates=(150.0, 62.0))
+    )
+
+    assert rescue_duplicate_pitches(symbols, heads) == 0
+    assert [symbol.pitch for symbol in symbols[1:]] == ["G4", "B4", "B4"]

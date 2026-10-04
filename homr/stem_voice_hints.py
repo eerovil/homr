@@ -241,6 +241,14 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         spelled = pitch_at(other, clef)
         if spelled is None:
             continue
+        owner = next((note for note in here if note.position == other), None)
+        if owner is not None and _claimed_elsewhere(symbols, members, clefs, owner):
+            # The head is not free: it is the next or previous note of the staff,
+            # set close enough to fall in this column. Sangerhilsen bar 1: the
+            # triplet's last E is one head both voices share, and its second
+            # reading was moved onto the C sharp the triplet's middle note had
+            # already read -- an E sung as a C natural.
+            continue
         # The lower head takes the lower pitch: re-pitch whichever of the two is
         # drawn on the side the free position sits.
         target = (
@@ -251,11 +259,37 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         # to say which line it belongs to and lands in whichever voice the chord
         # is assigned -- a note present but in the wrong part, which is what the
         # first version of this produced.
-        owner = next((note for note in here if note.position == other), None)
         if owner is not None and len(owner.stem_directions) == 1:
             target.stem_direction = "up" if owner.stem_directions[0] == StemDirection.UP else "down"
         rescued += 1
     return rescued
+
+
+def _claimed_elsewhere(
+    symbols: list[EncodedSymbol],
+    members: list[int],
+    clefs: list[tuple[str, int] | None],
+    head: Note,
+) -> bool:
+    """Whether a decoded note outside this column already reads this head.
+
+    A head is only free to rescue a note onto if nobody has read it. A note of the
+    neighbouring moment at that head's position, within the matching tolerance of
+    it, has.
+    """
+    staff = _staff(symbols[members[0]].position)
+    for index, symbol in enumerate(symbols):
+        if index in members or not symbol.rhythm.startswith("note"):
+            continue
+        clef = clefs[index]
+        if _staff(symbol.position) != staff or clef is None:
+            continue
+        coordinates = _note_coordinates(symbol)
+        if coordinates is None or abs(coordinates[0] - head.center[0]) > _MATCH_X_TOLERANCE:
+            continue
+        if expected_position(symbol.pitch, clef) == head.position:
+            return True
+    return False
 
 
 def pair_unison_stems(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
