@@ -1021,6 +1021,79 @@ def group_into_chords(voice: list[EncodedSymbol]) -> list[SymbolChord]:
     return [SymbolChord(s) for s in sort_token_chords(voice)]
 
 
+def fill_unison_copies(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Give a voice that doubles its staff-mate note for note the notes it skipped.
+
+    Where the two voices of a staff sing in unison, every head is read into both
+    of them. On Legenda system 2, bar 1 (eerovil/musescore-choir-plugins#245) the
+    decoder wrote the second voice's copy of every head in the bar but one -- the
+    middle of three beamed triplet eighths -- so that voice had a hole MuseScore
+    filled with a sixteenth rest the page does not print.
+
+    A voice is a copy here only when, in this bar, it holds no rest, has at least
+    two notes, and every one of them stands in a moment where the other voice of
+    its staff has the same pitch. Then each note of the other voice standing in a
+    moment the copy is missing from is written into the copy as well. Values are
+    not touched: where the two disagree, `repair_tuplet_overlaps` settles it.
+    """
+    out = list(voice)
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        moments = _voice_moments(voice, span)
+        for copy_position in [p for p in moments if p.endswith("2")]:
+            lead = copy_position[:-1]
+            if lead not in moments:
+                continue
+            copies = moments[copy_position]
+            if len(copies) < _MIN_UNISON_NOTES:
+                continue
+            copied = {chord_index for chord_index, _ in copies}
+            in_unison = True
+            for chord_index, indices in copies:
+                symbols = voice[chord_index].symbols
+                pitches = {
+                    s.pitch for s in symbols if s.position == lead and s.rhythm.startswith("note")
+                }
+                for i in indices:
+                    if symbols[i].rhythm.startswith("rest") or symbols[i].pitch not in pitches:
+                        in_unison = False
+            if not in_unison:
+                continue
+            for chord_index, indices in moments[lead]:
+                if chord_index in copied:
+                    continue
+                symbols = list(out[chord_index].symbols)
+                for i in indices:
+                    leading = symbols[i]
+                    if not leading.rhythm.startswith("note"):
+                        continue
+                    twin = leading.change_rhythm(leading.rhythm)
+                    twin.position = copy_position
+                    symbols.append(twin)
+                    why = "its voice doubles the other note for note and skipped this one"
+                    if changes is not None:
+                        changes.append(
+                            ReconstructionChange(
+                                kind="unison_fill",
+                                bar=bar_number,
+                                group=chord_index,
+                                symbol=len(symbols) - 1,
+                                staff=copy_position,
+                                pitch=leading.pitch,
+                                before=None,
+                                after=leading.rhythm,
+                                reason=why,
+                            )
+                        )
+                    eprint(f"Unison: writing {leading.pitch} into {copy_position} as well, {why}")
+                out[chord_index] = SymbolChord(symbols, out[chord_index].tuplet_mark)
+    return out
+
+
+_MIN_UNISON_NOTES = 2
+
+
 def _plain_length(length: Fraction) -> bool:
     """Whether a length is one plain note values can spell: its denominator a power of two."""
     denominator = length.denominator
@@ -1299,6 +1372,8 @@ def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     groups = group_into_chords(voice)
     groups = complete_open_triplets(groups, changes)
     groups = triplets_onto_the_beat(groups, changes)
+    groups = repair_tuplet_overlaps_until_settled(groups, changes)
+    groups = fill_unison_copies(groups, changes)
     groups = repair_tuplet_overlaps_until_settled(groups, changes)
     groups = repair_bar_arithmetic(groups, changes)
     groups = add_tuplet_start_stop(groups)

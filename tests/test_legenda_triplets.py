@@ -22,11 +22,13 @@ from homr.music_xml_generator import (
     XmlGeneratorArguments,
     bracket_tuplets,
     generate_xml,
+    hide_shared_rests,
 )
 from homr.score_reconstruction import (
     ReconstructionChange,
     SymbolChord,
     complete_open_triplets,
+    fill_unison_copies,
     repair_tuplet_overlaps_until_settled,
     triplets_onto_the_beat,
 )
@@ -226,20 +228,17 @@ def test_the_whole_bar_comes_out_one_whole_note_long_in_both_voices() -> None:
             lengths[voice] = lengths.get(voice, Fraction(0)) + Fraction(
                 int(item.findtext("duration") or 0), division
             )
-    # The voice holding the G fills the bar; the other comes in on the C after it.
-    assert sorted(lengths.values()) == [Fraction(5, 6), Fraction(1)]
-    brackets = {
-        length: [
+    # The second voice doubles the first note for note, so it is given the G it
+    # skipped (`fill_unison_copies`) and both fill the bar.
+    assert list(lengths.values()) == [Fraction(1), Fraction(1)]
+    for voice in lengths:
+        marks = [
             t.get("type")
             for item in measure.findall("note")
             if item.findtext("voice") == voice
             for t in item.iter("tuplet")
         ]
-        for voice, length in lengths.items()
-    }
-    assert brackets[Fraction(1)] == ["start", "stop"] * 4
-    # Coming in partway through the first triplet, it has no bracket to open there.
-    assert brackets[Fraction(5, 6)] == ["start", "stop"] * 3
+        assert marks == ["start", "stop"] * 4
 
 
 def measure_of(*notes: tuple[str, int, bool]) -> ET.Element:
@@ -364,3 +363,76 @@ def test_a_value_is_not_read_off_a_clock_an_earlier_note_has_put_out() -> None:
     repaired = repair_tuplet_overlaps_until_settled(with_sixteenth)
     assert "note_24" not in rhythms(repaired, "lower2")
     assert rhythms(repaired, "lower2")[1:4] == ["note_12", "note_6", "note_12"]
+
+
+def test_a_unison_copy_is_given_the_note_it_skipped() -> None:
+    """System 2, bar 1: the second voice's copy of the middle beamed D was never read."""
+    bar = [
+        moment(note("note_12", "lower", "D3"), note("note_12", "lower2", "D3")),
+        moment(note("note_12", "lower", "D3")),
+        moment(note("note_12", "lower", "C3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    changes: list[ReconstructionChange] = []
+    filled = fill_unison_copies(bar, changes)
+    assert rhythms(filled, "lower2") == ["note_12"] * 3
+    assert [(c.kind, c.pitch, c.staff) for c in changes] == [("unison_fill", "D3", "lower2")]
+
+
+def test_a_voice_that_sings_its_own_line_is_not_filled() -> None:
+    bar = [
+        moment(note("note_12", "lower", "D3"), note("note_12", "lower2", "B2")),
+        moment(note("note_12", "lower", "D3")),
+        moment(note("note_12", "lower", "C3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    assert rhythms(fill_unison_copies(bar), "lower2") == ["note_12", "note_12"]
+
+
+def test_a_voice_holding_a_rest_is_not_filled() -> None:
+    bar = [
+        moment(note("note_12", "lower", "D3"), note("rest_12", "lower2", "_")),
+        moment(note("note_12", "lower", "D3")),
+        moment(note("note_12", "lower", "C3"), note("note_12", "lower2", "C3")),
+        moment(note("note_12", "lower", "C3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    assert rhythms(fill_unison_copies(bar), "lower2") == ["rest_12", "note_12", "note_12"]
+
+
+def two_voices(*events: tuple[str, int, int, bool]) -> ET.Element:
+    """A one-staff measure written voice by voice: (voice, onset, length, rest?)."""
+    measure = ET.Element("measure")
+    cursor = 0
+    for voice, onset, length, rest in events:
+        if onset != cursor:
+            step = ET.SubElement(measure, "backup" if onset < cursor else "forward")
+            ET.SubElement(step, "duration").text = str(abs(cursor - onset))
+        item = ET.SubElement(measure, "note")
+        if rest:
+            ET.SubElement(item, "rest")
+        else:
+            ET.SubElement(ET.SubElement(item, "pitch"), "step").text = "G"
+        ET.SubElement(item, "duration").text = str(length)
+        ET.SubElement(item, "voice").text = voice
+        ET.SubElement(item, "staff").text = "1"
+        cursor = onset + length
+    return measure
+
+
+def test_a_rest_both_voices_share_is_written_hidden_into_the_one_without_it() -> None:
+    """System 2, bar 2: the second tenor comes in after two rests printed once."""
+    measure = two_voices(
+        ("1", 0, 4, True), ("1", 4, 4, True), ("1", 8, 4, False), ("2", 8, 4, False)
+    )
+    assert hide_shared_rests(measure) == 2
+    second = [item for item in measure if item.tag == "note" and item.findtext("voice") == "2"]
+    assert [item.get("print-object") for item in second] == ["no", "no", None]
+    # In time order: the hidden rests stand in front of the note the gap ends at.
+    tags = [item.tag for item in measure]
+    assert tags[tags.index("note", 3) - 1] == "backup"
+
+
+def test_a_gap_the_other_voice_sings_through_is_left_alone() -> None:
+    measure = two_voices(("1", 0, 8, False), ("1", 8, 4, False), ("2", 8, 4, False))
+    assert hide_shared_rests(measure) == 0
