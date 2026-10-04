@@ -126,9 +126,11 @@ def _bar_boundaries(voice: list[SymbolChord]) -> list[tuple[int, int]]:
 def _staff_lengths(voice: list[SymbolChord], span: tuple[int, int]) -> dict[str, Fraction]:
     """How long each staff of this bar measures, each on its own cursor.
 
-    A moment costs a staff the shortest of *its* notes there, which is what
-    `MeasureCursors` does when it writes the bar out, so a staff holding a whole
-    note against four quarters measures a whole.
+    A moment costs a staff the shortest of *its* notes there, so a staff holding a
+    whole note against four quarters measures a whole. (The writer used to keep a
+    cursor per staff the same way; since eerovil/musescore-choir-plugins#220 it runs
+    upstream's one clock for the part, and this stays the per-staff measure the
+    meter is inferred from.)
     """
     by_position: dict[str, Fraction] = {}
     for chord in voice[span[0] : span[1]]:
@@ -351,7 +353,7 @@ def _holds_a_rest(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
     liebharc/homr#126 -- so a printed rest and the notes of the voice engraved
     **beside** it come out in one stream. A rest is therefore the least
     trustworthy thing in the bar: it may not be the silence of the stream it
-    stands in, which is the whole reason `disown_silence` exists, and a staff
+    stands in, and a staff
     whose length is mostly a rest's is a length about the rest.
 
     That is not a reason to distrust the arithmetic -- it is why `hanget-soi`
@@ -390,7 +392,7 @@ def _moments_agree(
 
     There is other evidence, and homr has already read it. The tokens are read
     across the page, so the symbols of one moment are printed above one another
-    and **sound together** -- the claim `disown_silence` already rests on. The
+    and **sound together**. The
     treble of that bar adds up, and it dates the moment the bass's last note
     stands in at beat 1.5. Only the page's own reading puts it there; the dotted
     eighth puts it at 1.25, in a column the other staff says is 1.5. So the

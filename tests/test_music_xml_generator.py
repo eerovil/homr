@@ -173,33 +173,6 @@ barline . . . . ."""
         self.assertEqual(_beats(measure), [0, 0, 1, 2])
         self.assertNotIn("forward", [child.tag for child in measure])
 
-    def test_a_misread_duration_moves_only_its_own_staff(self) -> None:
-        """The upper staff is read exactly right, and stays where it was read.
-
-        Both staves play two eighths and then a note; the lower staff's second
-        note comes back a sixteenth, which the page prints as an eighth. Under
-        one shared cursor the moment advanced by the shortest note in it, so the
-        upper staff's third note landed a sixteenth early -- a wrong beat on a
-        staff nothing had misread. Each staff now advances by its own note, so
-        the lower staff carries its own error and nothing else does.
-        """
-        misread = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
-timeSignature/4 . . . . .
-note_8 C5 _ _ _ upper&note_8 C3 _ _ _ lower
-note_8 D5 _ _ _ upper&note_16 D3 _ _ _ lower
-note_4 E5 _ _ _ upper&note_8 E3 _ _ _ lower
-barline . . . . ."""
-        tokens = read_token_lines(misread.splitlines())
-        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
-        measure = _first_measure(xml)
-        divisions = int(measure.findtext("attributes/divisions", "1"))
-        upper = [
-            beat
-            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
-            if _staff(note) == "1"
-        ]
-        self.assertEqual(upper, [0, divisions // 2, divisions])
-
     def test_grand_staff_generation(self) -> None:
         grandstaff = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
 keySignature_1 . . . . .
@@ -364,30 +337,6 @@ barline . . . . ."""
             if _staff(note) == "1"
         ]
         self.assertEqual(upper, [("rest", 0), ("E", 2 * quarter)])
-
-    def test_a_rest_is_not_disowned_by_another_rest(self) -> None:
-        """Only a note can say a rest was not this stream's silence.
-
-        Two rests in a row on the upper staff stay end to end. Piling the second
-        onto the first would say the staff was silent twice over the same beats,
-        which is not a reading of anything.
-        """
-        two_rests = """clef_G2 _ _ _ _ upper&clef_F4 _ _ _ _ lower
-timeSignature/4 . . . . .
-rest_4 _ _ _ _ upper&note_8 C3 _ _ _ lower
-rest_4 _ _ _ _ upper&note_8 D3 _ _ _ lower
-note_2 E5 _ _ _ upper&note_2 E3 _ _ _ lower
-barline . . . . ."""
-        tokens = read_token_lines(two_rests.splitlines())
-        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
-        measure = _first_measure(xml)
-        quarter = int(measure.findtext("attributes/divisions", "1"))
-        upper = [
-            beat
-            for beat, note in zip(_beats(measure), _notes(measure), strict=True)
-            if _staff(note) == "1"
-        ]
-        self.assertEqual(upper[:2], [0, quarter])
 
     def test_one_staff_keeps_its_rests(self) -> None:
         """A part of one staff has one stream, so there is no evidence and no change.
