@@ -236,3 +236,23 @@ def test_onsets_are_measured_as_the_shortest_note_of_each_moment() -> None:
     _, timed = reread._onsets(bar)
 
     assert [onset for onset, _ in timed] == [Fraction(0), Fraction(1, 4)]
+
+
+def test_the_lower_staffs_second_voice_stays_on_the_lower_staff() -> None:
+    """Model 465 marks a staff's second voice `upper2` when it reads that staff alone.
+
+    Spliced back as the lower staff of the pair it has to become `lower2`;
+    left as `upper2` the bass's second voice was written into the tenor part.
+    """
+    upper = [note("note_4", "B4"), plain("chord"), note("note_4", "G4", position="upper2")]
+    lower = [note("note_4", "F3"), plain("chord"), note("note_4", "D3", position="upper2")]
+
+    spliced = reread.splice(upper, lower)
+    assert spliced is not None
+
+    assert sorted(t for t in tokens(spliced) if not t.startswith("chord")) == [
+        "note_4:B4:upper",
+        "note_4:D3:lower2",
+        "note_4:F3:lower",
+        "note_4:G4:upper2",
+    ]

@@ -97,14 +97,20 @@ def surety(symbols: list[EncodedSymbol]) -> float | None:
     return sum(probabilities) / len(probabilities)
 
 
+#: A staff read on its own is the upper staff of nothing, so both its voices come
+#: back on `upper`: model 465 writes the second one `upper2`, and that has to
+#: become `lower2` with the rest of the staff or it lands in the upper part.
+_AS_LOWER = {"upper": "lower", "upper2": "lower2"}
+
+
 def _as_lower(symbol: EncodedSymbol) -> EncodedSymbol:
     """The same symbol, read as the lower staff of a pair.
 
-    A staff read on its own comes back entirely `upper`, since there is no other
-    staff for it to be the top of. Symbols with no position at all -- a key or a
-    time signature -- keep none.
+    A staff read on its own comes back entirely `upper` (or `upper2` for its
+    second voice), since there is no other staff for it to be the top of.
+    Symbols with no position at all -- a key or a time signature -- keep none.
     """
-    if symbol.position != "upper":
+    if symbol.position not in _AS_LOWER:
         return symbol
     copy = EncodedSymbol(
         rhythm=symbol.rhythm,
@@ -112,7 +118,7 @@ def _as_lower(symbol: EncodedSymbol) -> EncodedSymbol:
         lift=symbol.lift,
         articulation=symbol.articulation,
         slur=symbol.slur,
-        position="lower",
+        position=_AS_LOWER[symbol.position],
         coordinates=symbol.coordinates,
         confidence=symbol.confidence,
         stem_direction=symbol.stem_direction,
@@ -244,6 +250,11 @@ def splice(upper: list[EncodedSymbol], lower: list[EncodedSymbol]) -> list[Encod
     return out
 
 
+#: Coverage is per printed staff, and a staff's second voice is on that staff. A
+#: note the fused pass put in `lower2` and the re-read in `lower` was not lost.
+_STAFF_OF = {"upper2": "upper", "lower2": "lower"}
+
+
 def _coverage(bar: list[EncodedSymbol]) -> dict[str, tuple[int, int]]:
     """Timed events and notes per printed staff in one bar.
 
@@ -255,8 +266,13 @@ def _coverage(bar: list[EncodedSymbol]) -> dict[str, tuple[int, int]]:
     for symbol in bar:
         if not _is_timed(symbol):
             continue
-        timed, notes = counts.get(symbol.position, (0, 0))
-        counts[symbol.position] = (timed + 1, notes + int(_is_note(symbol)))
+        staff = _STAFF_OF.get(symbol.position, symbol.position)
+        if staff not in ("upper", "lower"):
+            # A token the decoder put on no staff at all (`note_1 .`) is not a
+            # printed note, so a re-read that does not repeat it lost nothing.
+            continue
+        timed, notes = counts.get(staff, (0, 0))
+        counts[staff] = (timed + 1, notes + int(_is_note(symbol)))
     return counts
 
 

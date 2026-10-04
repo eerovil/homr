@@ -133,3 +133,42 @@ def test_coverage_is_checked_per_bar_not_only_for_the_whole_system() -> None:
 
     assert not replaced
     assert kept is fused
+
+
+def test_a_note_moving_between_a_staffs_two_voices_is_not_a_loss() -> None:
+    """Coverage is per printed staff: `lower2` is the lower staff's second voice.
+
+    On sammon-ryosto the fused pass put a bass note in `lower2` and the re-read
+    put it in `lower`; counted as two staffs, that read as a lost note and kept
+    a fused reading that had the first two bars wrong.
+    """
+    fused = [
+        event("note_4", "C5", 0.3, "upper"),
+        event("note_4", "E3", 0.3, "lower2"),
+        barline(),
+    ]
+    reread_candidate = [
+        event("note_4", "C5", 0.99, "upper"),
+        event("note_4", "E3", 0.99, "lower"),
+        barline(),
+    ]
+
+    kept, replaced = reread.better_of(fused, reread_candidate)
+
+    assert replaced
+    assert kept is reread_candidate
+
+
+def test_a_token_on_no_staff_is_not_a_printed_note() -> None:
+    """The decoder can write `note_1 .`: a duration with no pitch and no staff."""
+    fused = [
+        event("note_4", "C5", 0.3, "upper"),
+        EncodedSymbol("note_1", ".", position="."),
+        barline(),
+    ]
+    reread_candidate = [event("note_4", "C5", 0.99, "upper"), barline()]
+
+    kept, replaced = reread.better_of(fused, reread_candidate)
+
+    assert replaced
+    assert kept is reread_candidate
