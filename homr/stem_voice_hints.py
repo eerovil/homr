@@ -486,10 +486,32 @@ def _pair_by_attention(
     return 1
 
 
+def _read_by_another(
+    read_at: list[tuple[int, str, float, int]], index: int, symbol: EncodedSymbol, head: Note
+) -> bool:
+    """Whether a head at another position is what a different decoded note reads."""
+    staff = _staff(symbol.position)
+    return any(
+        other != index
+        and other_staff == staff
+        and position == head.position
+        and abs(x - head.center[0]) <= _MATCH_X_TOLERANCE
+        for other, other_staff, x, position in read_at
+    )
+
+
 def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
     """Set ``stem_direction`` on safely matched decoded notes and return its count."""
     hinted = 0
     clefs = _clefs_in_force(symbols)
+    read_at: list[tuple[int, str, float, int]] = []
+    for index, symbol in enumerate(symbols):
+        coordinates = _note_coordinates(symbol)
+        clef = clefs[index]
+        if symbol.rhythm.startswith("note") and coordinates is not None and clef is not None:
+            position = expected_position(symbol.pitch, clef)
+            if position is not None:
+                read_at.append((index, _staff(symbol.position), coordinates[0], position))
     for index, symbol in enumerate(symbols):
         if not symbol.rhythm.startswith("note"):
             continue
@@ -503,6 +525,13 @@ def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int
             note = _at_position(notes, *coordinates, position)
         if note is None:
             note = _nearest(notes, *coordinates)
+            if note is not None and _read_by_another(read_at, index, symbol, note):
+                # The nearest head is another note's, not this one's: its stem
+                # says nothing about this note. Sangerhilsen bar 47
+                # (eerovil/musescore-choir-plugins#240): the lower tenor's D has no
+                # head the segmentation found, borrowed the upper voice's E's up
+                # stem, and the two tenor parts swapped for the bar.
+                note = None
         if note is None or not note.stem_directions:
             continue
         if len(note.stem_directions) > 1:

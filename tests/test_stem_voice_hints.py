@@ -739,3 +739,19 @@ def test_a_chord_with_a_head_for_every_note_is_kept() -> None:
     heads = [*_ONE_HEAD_EACH, _head(160.0, 60.0, 8, [StemDirection.DOWN])]
 
     assert drop_unprinted_chord_notes(symbols, heads) == 0
+
+
+def test_a_note_does_not_borrow_the_stem_of_a_head_another_note_reads() -> None:
+    """Sangerhilsen bar 47: the lower D has no head found; the E beside it is the upper's."""
+    heads = [_head(476.0, 64.0, 8, [StemDirection.UP])]
+    symbols = [
+        EncodedSymbol("clef_G2", position="upper", coordinates=(0.0, 60.0)),
+        _read("E5", "upper", (476.0, 62.0), "note_4"),
+        _chord(),
+        _read("D5", "upper2", (474.0, 70.0), "note_4"),
+    ]
+
+    add_stem_voice_hints(symbols, heads)
+
+    assert symbols[1].stem_direction == "up"
+    assert symbols[3].stem_direction is None
