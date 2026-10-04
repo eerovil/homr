@@ -43,7 +43,7 @@ def probe(image_path: Path) -> list[list[dict]]:
         coreml_encoder=False,
         title_detection=False,
     )
-    _, _, _, _, staffs = detect_staffs_in_image(str(image_path), processing)
+    _, _, _, _, staffs, _ = detect_staffs_in_image(str(image_path), processing)
     return [staff_notes(staff) for staff in sorted(staffs, key=lambda staff: staff.min_y)]
 
 

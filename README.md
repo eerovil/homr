@@ -1,6 +1,6 @@
 # homr
 
-homr is an Optical Music Recognition (OMR) software designed to transform camera pictures of sheet music into
+homr is an Optical Music Recognition (OMR) software designed to transform camera pictures or PDFs of sheet music into
 machine-readable MusicXML format. The resulting [MusicXML](https://www.w3.org/2021/06/musicxml40/) files can be further
 processed using tools such as [musescore](https://musescore.com/).
 
@@ -58,9 +58,7 @@ The easiest way to get started is using `uvx` (`uv` must be installed). Select a
 - NVIDIA CUDA: `uvx --from 'homr[cuda]' homr <image>`
 - AMD ROCm: `uvx --python 3.12 --from 'homr[rocm]' homr <image>`
 
-Then see the resulting MusicXML:
-- It will be saved in the same directory as the input image
-- To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
+- The resulting MusicXML file will be saved in the same directory as the input image
 
 ## Getting started (poetry)
 
@@ -71,7 +69,11 @@ Then see the resulting MusicXML:
   - If using GPU, replace `--extras cpu` to `--extras cuda` / `--extras rocm`
 - Run the program using `poetry run homr <image>`
 - The resulting MusicXML file will be saved in the same directory as the input image
-- To combine the MusicXML results from multiple images, you can use [relieur](https://github.com/papoteur-mga/relieur)
+
+## Run on multiple images
+- Just add your image to the command, for example: `poetry run homr <image_1> <image_2>`
+- This produces one file named `merged_image_1.musicxml`
+- To combine MusicXML files, you can use [relieur](https://github.com/papoteur-mga/relieur)
 
 ### Optional score settings
 
@@ -273,7 +275,7 @@ Each staff is dewarped (perspective-corrected) and passed through a transformer-
 
 The transformer model generates these predictions in sequence, processing the dewarped staff image to understand the spatial and temporal relationships between musical symbols.
 
-**Note**: The transformer output provides the sequence of symbols but does not include explicit positional information (horizontal or vertical coordinates). However, the model computes the center of attention as a byproduct of the attention mechanism, which can be used to estimate the focus point on the staff image.
+**Note**: The transformer output provides the sequence of symbols but does not include explicit positional information (horizontal or vertical coordinates). However, the model computes the center of attention as a byproduct of the attention mechanism, which is used to estimate the focus point on the staff image. homr maps this point back to the input image and writes it as a comment into each note of the MusicXML output, e.g. `<!-- imgpos: 45, 231 -->`. These are rough positions: they point at or near the symbol, but aren't pixel-exact.
 
 ### Stage 4: MusicXML Output
 

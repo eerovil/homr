@@ -15,7 +15,7 @@ import numpy as np
 import onnxruntime as ort
 
 from homr import color_adjust, download_utils
-from homr.autocrop import autocrop
+from homr.autocrop import autocrop_with_offset
 from homr.bar_line_detection import detect_bar_lines
 from homr.bounding_boxes import create_rotated_bounding_boxes
 from homr.brace_dot_detection import (
@@ -36,6 +36,8 @@ from homr.note_detection import (
 )
 from homr.onnx_providers import coreml_available, cuda_available, rocm_available
 from homr.pdf_utils import render_pdf_to_image
+from homr.point_mapping import PointMapping, chain, undo_crop, undo_resize
+from homr.relieur import process_concat
 from homr.resize import resize_image
 from homr.score_reconstruction import ReconstructionChange
 from homr.segmentation.config import segnet_path_onnx, segnet_path_onnx_fp16
@@ -52,7 +54,7 @@ from homr.system_crops import (
 )
 from homr.system_finder import bounds_payload, find_system_bounds
 from homr.title_detection import detect_title, download_ocr_weights
-from homr.transformer.configs import Config, default_config
+from homr.transformer.configs import Config, default_config, root_dir
 from homr.transformer.score_settings import RhythmSettings
 from homr.transformer.vocabulary import EncodedSymbol
 from homr.type_definitions import NDArray
@@ -149,16 +151,23 @@ def process_system_bounds(
 
 def load_and_preprocess_predictions(
     image_path: str, enable_debug: bool, enable_cache: bool, segnet_use_gpu: bool
-) -> tuple[InputPredictions, Debug]:
+) -> tuple[InputPredictions, Debug, PointMapping]:
+    """
+    The returned mapping takes coordinates of the predictions back to the input image.
+    """
     image = cv2.imread(image_path)
     if image is None:
         raise InvalidProgramArgumentException(
             "The file format is not supported, please provide a JPG or PNG image file:" + image_path
         )
-    image = autocrop(image)
+    image, crop_top_left = autocrop_with_offset(image)
+    cropped_shape = image.shape
     image = resize_image(image)
     preprocessed = color_adjust.apply_clahe(image)
     predictions = get_predictions(image, preprocessed, image_path, enable_cache, segnet_use_gpu)
+    to_input_image = chain(
+        undo_resize(cropped_shape, predictions.preprocessed.shape), undo_crop(*crop_top_left)
+    )
     debug = Debug(predictions.original, image_path, enable_debug)
     debug.write_image("color_adjust", preprocessed)
 
@@ -174,7 +183,7 @@ def load_and_preprocess_predictions(
     debug.write_threshold_image("stems_rest", predictions.stems_rest)
     debug.write_threshold_image("notehead", predictions.notehead)
     debug.write_threshold_image("clefs_keys", predictions.clefs_keys)
-    return predictions, debug
+    return predictions, debug, to_input_image
 
 
 @dataclass
@@ -201,11 +210,8 @@ def process_image(
     image_path: str,
     config: ProcessingConfig,
     xml_generator_args: XmlGeneratorArguments,
-) -> None:
+) -> str:
     eprint("Processing " + image_path)
-    if image_path.lower().endswith(".pdf"):
-        render_pdf_to_image(image_path)
-        image_path = replace_extension(image_path, ".png")
     xml_file = replace_extension(image_path, ".musicxml")
     debug_cleanup: Debug | None = None
     try:
@@ -213,7 +219,9 @@ def process_image(
             image = cv2.imread(image_path)
             if image is None:
                 raise ValueError("Failed to read " + image_path)
+            original_shape = image.shape
             image = resize_image(image)
+            to_input_image = undo_resize(original_shape, image.shape)
             debug = Debug(image, image_path, config.enable_debug)
             staff_position_files = replace_extension(image_path, ".txt")
             multi_staffs = load_staff_positions(
@@ -226,7 +234,9 @@ def process_image(
             # two code paths feed the symbol-recognition encoder consistent input.
             image = color_adjust.apply_clahe(image)
         else:
-            multi_staffs, image, debug, title_future, _ = detect_staffs_in_image(image_path, config)
+            multi_staffs, image, debug, title_future, _, to_input_image = detect_staffs_in_image(
+                image_path, config
+            )
         debug_cleanup = debug
 
         transformer_config = Config()
@@ -245,6 +255,7 @@ def process_image(
             image,
             selected_staff=config.selected_staff,
             config=transformer_config,
+            page_to_input_image=to_input_image,
         )
 
         if not config.read_staff_positions:
@@ -283,6 +294,7 @@ def process_image(
     finally:
         if debug_cleanup is not None:
             debug_cleanup.clean_debug_files_from_previous_runs()
+    return xml_file
 
 
 def _write_confidence(
@@ -364,14 +376,14 @@ def _load_score_settings(path: str) -> RhythmSettings:
 
 def detect_staffs_in_image(
     image_path: str, config: ProcessingConfig
-) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], list[Staff]]:
+) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], list[Staff], PointMapping]:
     """Detect staffs and their symbols.
 
-    The last element is the printed staffs as they were detected, before grand
+    The fifth element is the printed staffs as they were detected, before grand
     staffs are merged, so a caller can still tell which printed staff a note was
-    assigned to.
+    assigned to. The last maps coordinates of the returned image back to the input image.
     """
-    predictions, debug = load_and_preprocess_predictions(
+    predictions, debug, to_input_image = load_and_preprocess_predictions(
         image_path, config.enable_debug, config.enable_cache, config.segnet_use_gpu
     )
     symbols = predict_symbols(debug, predictions)
@@ -445,7 +457,7 @@ def detect_staffs_in_image(
 
     debug.write_all_bounding_boxes_alternating_colors("notes", multi_staffs, notes)
 
-    return multi_staffs, predictions.preprocessed, debug, title_future, staffs
+    return multi_staffs, predictions.preprocessed, debug, title_future, staffs, to_input_image
 
 
 def get_all_image_files_in_folder(folder: str) -> list[str]:
@@ -508,11 +520,45 @@ def download_weights(
                     os.remove(downloaded_zip)
 
 
+def run_homr(
+    images: list, config: ProcessingConfig, xml_generator_args: XmlGeneratorArguments
+) -> None:
+    """
+    Runs homr on all images in a list and merges them into musicxml using relieur
+    """
+    eprint("Merging", len(images), "files:", images)
+    xml_paths = []
+    filename = os.path.splitext(os.path.basename(images[0]))[0]
+    for image_file in images:
+        eprint("=========================================")
+        try:
+            xml_paths.append(process_image(image_file, config, xml_generator_args))
+            eprint("Finished", image_file)
+        except Exception as e:
+            eprint(f"An error occurred while processing {image_file}: {e}")
+            return  # Don't need to continue (save time)
+
+    if len(xml_paths) == len(images) and len(xml_paths) > 1:
+        output_path = os.path.join(root_dir, f"{filename}_merged.musicxml")
+        m, _, _ = process_concat(xml_paths)
+        ET.ElementTree(m).write(output_path, encoding="UTF-8", xml_declaration=True)
+
+        for path in xml_paths:
+            if os.path.exists(path):
+                os.remove(path)
+
+        eprint(f"Saved the generated musicxml at {output_path}")
+
+
+def _one_pdf(images: list[str]) -> bool:
+    return len(images) == 1 and images[0].lower().endswith(".pdf")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="homer", description="An optical music recognition (OMR) system"
     )
-    parser.add_argument("image", type=str, nargs="?", help="Path to the image to process")
+    parser.add_argument("image", type=str, nargs="*", help="Path to the image to process")
     parser.add_argument(
         "--init",
         action="store_true",
@@ -612,10 +658,10 @@ def main() -> None:
             parser.error("--system-page requires --find-system-bounds")
         if args.system_bounds and args.find_system_bounds:
             parser.error("--system-bounds and --find-system-bounds are mutually exclusive")
-        if args.system_bounds and (not args.image or not args.image.lower().endswith(".pdf")):
-            parser.error("--system-bounds requires a PDF input")
-        if args.find_system_bounds and (not args.image or not args.image.lower().endswith(".pdf")):
-            parser.error("--find-system-bounds requires a PDF input")
+        if args.system_bounds and not _one_pdf(args.image):
+            parser.error("--system-bounds requires one PDF input")
+        if args.find_system_bounds and not _one_pdf(args.image):
+            parser.error("--find-system-bounds requires one PDF input")
         if args.system_page is not None and args.system_page < 1:
             parser.error("--system-page must be at least 1")
         if args.system_dpi < 1:
@@ -637,7 +683,8 @@ def main() -> None:
 
     if args.init:
         download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
-        download_ocr_weights()
+        if not args.no_title:
+            download_ocr_weights()
         eprint("Init finished")
         return
 
@@ -651,7 +698,7 @@ def main() -> None:
             ort.set_default_logger_severity(3)
         try:
             proposal = find_system_bounds(
-                args.image,
+                args.image[0],
                 use_gpu=segnet_use_gpu,
                 dpi=args.system_dpi,
                 log=eprint,
@@ -665,6 +712,8 @@ def main() -> None:
         return
 
     download_weights(segnet_use_gpu, transformer_use_gpu, coreml_encoder)
+    if not args.no_title:
+        download_ocr_weights()
 
     config = ProcessingConfig(
         args.debug,
@@ -693,44 +742,79 @@ def main() -> None:
         eprint("No image provided")
         parser.print_help()
         sys.exit(1)
-    elif os.path.isfile(args.image):
+
+    if args.system_bounds:
         try:
-            if args.system_bounds:
-                process_system_bounds(
-                    args.image,
-                    args.system_bounds,
-                    config,
-                    xml_generator_args,
-                    dpi=args.system_dpi,
-                    system_index=args.system_index,
-                    pad=args.system_pad,
-                )
-            else:
-                process_image(args.image, config, xml_generator_args)
+            process_system_bounds(
+                args.image[0],
+                args.system_bounds,
+                config,
+                xml_generator_args,
+                dpi=args.system_dpi,
+                system_index=args.system_index,
+                pad=args.system_pad,
+            )
         except InvalidProgramArgumentException as e:
             eprint(str(e))
             sys.exit(2)
         except IncompleteRecognitionError as e:
-            eprint(f"Incomplete recognition for {args.image}: {e}")
+            eprint(f"Incomplete recognition for {args.image[0]}: {e}")
             sys.exit(1)
-    elif os.path.isdir(args.image):
-        image_files = get_all_image_files_in_folder(args.image)
-        eprint("Processing", len(image_files), "files:", image_files)
-        error_files = []
-        for image_file in image_files:
-            eprint("=========================================")
-            try:
-                process_image(image_file, config, xml_generator_args)
-                eprint("Finished", image_file)
-            except Exception as e:
-                eprint(f"An error occurred while processing {image_file}: {e}")
-                error_files.append(image_file)
-        if len(error_files) > 0:
-            eprint("Errors occurred while processing the following files:", error_files)
+        return
+
+    images_to_combine = []
+    folder_errors = False
+    for image in args.image:
+        if os.path.isfile(image):
+            # Multiple files are getting merged
+            if image.lower().endswith(".pdf"):
+                images_to_combine += render_pdf_to_image(image)
+            else:
+                images_to_combine.append(image)
+
+        elif os.path.isdir(image):
+            # Directories are never merged
+            image_files = get_all_image_files_in_folder(image)
+            eprint("Processing", len(image_files), "files:", image_files)
+            error_files = []
+            for image_file in image_files:
+                eprint("=========================================")
+                try:
+                    if image_file.lower().endswith(".pdf"):
+                        rendered_images = render_pdf_to_image(image_file)
+                        run_homr(rendered_images, config, xml_generator_args)
+                    else:
+                        process_image(image_file, config, xml_generator_args)
+                    eprint("Finished", image_file)
+                except Exception as e:
+                    eprint(f"An error occurred while processing {image_file}: {e}")
+                    error_files.append(image_file)
+            if len(error_files) > 0:
+                eprint("Errors occurred while processing the following files:", error_files)
+                folder_errors = True
+
+        else:
+            eprint(f"{image} is not a valid file or directory")
+            sys.exit(2)
+
+    # Check if we have any images
+    if images_to_combine:
+        # After collectiong all images we run homr on them
+        try:
+            if len(images_to_combine) == 1:
+                # One image is read on its own, so a failure keeps its own exit code
+                # rather than being logged and swallowed by run_homr.
+                process_image(images_to_combine[0], config, xml_generator_args)
+            else:
+                run_homr(images_to_combine, config, xml_generator_args)
+        except InvalidProgramArgumentException as e:
+            eprint(str(e))
+            sys.exit(2)
+        except IncompleteRecognitionError as e:
+            eprint(f"Incomplete recognition for {images_to_combine[0]}: {e}")
             sys.exit(1)
-    else:
-        eprint(f"{args.image} is not a valid file or directory")
-        sys.exit(2)
+    if folder_errors:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ def main(image_path: str) -> None:
         coreml_encoder=False,
         title_detection=False,
     )
-    multi_staffs, image, debug, _, _ = detect_staffs_in_image(image_path, processing)
+    multi_staffs, image, debug, _, _, _ = detect_staffs_in_image(image_path, processing)
     multi_staffs = _ensure_same_number_of_staffs(multi_staffs)
     regions = StaffRegions(multi_staffs)
     config = Config()
@@ -58,7 +58,7 @@ def main(image_path: str) -> None:
     for voice_index in range(_get_number_of_voices(multi_staffs)):
         for system_index, multi_staff in enumerate(multi_staffs):
             staff = multi_staff.staffs[voice_index]
-            staff_image, transformed_staff = prepare_staff_image(
+            staff_image, transformed_staff, _ = prepare_staff_image(
                 debug, len(records), staff, image, regions
             )
             detected = [symbol for symbol in transformed_staff.symbols if isinstance(symbol, Note)]

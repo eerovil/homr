@@ -12,6 +12,7 @@ replaced without silently changing what homr believes the music is.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -19,6 +20,10 @@ import numpy as np
 
 from homr.simple_logging import eprint
 from homr.transformer.vocabulary import EncodedSymbol, SymbolDuration, sort_token_chords
+
+#: The order a moment's positions are written in. Anything unexpected is read as the
+#: lower staff, which is what the old upper/lower split did.
+_POSITION_ORDER = ("upper", "upper2", "lower", "lower2")
 
 
 @dataclass(frozen=True)
@@ -67,22 +72,24 @@ class SymbolChord:
         return len(sounding) > 0 and all(s.rhythm.startswith("rest") for s in sounding)
 
     def into_positions(self) -> list[SymbolChord]:
-        upper = []
-        lower = []
-        lower_is_only_rest = True
+        """One chord per position (upper, upper2, lower, lower2), in that order.
+
+        A position holding only rests goes first: the last chord is the one which
+        advances time, so a rest written last would push the notes beside it later.
+        """
+        buckets: dict[str, list[EncodedSymbol]] = defaultdict(list)
         for symbol in self.symbols:
-            if symbol.position == "upper":
-                upper.append(symbol)
-            else:
-                lower.append(symbol)
-                lower_is_only_rest = lower_is_only_rest and symbol.rhythm.startswith("rest")
-        chords = (
-            SymbolChord(upper, self.tuplet_mark),
-            SymbolChord(lower, self.tuplet_mark),
+            position = symbol.position if symbol.position in _POSITION_ORDER else "lower"
+            buckets[position].append(symbol)
+        chords = [
+            SymbolChord(buckets[position], self.tuplet_mark)
+            for position in _POSITION_ORDER
+            if buckets[position]
+        ]
+        chords.sort(
+            key=lambda chord: all(s.rhythm.startswith("rest") for s in chord.symbols), reverse=True
         )
-        if lower_is_only_rest:
-            chords = (chords[1], chords[0])
-        return [chord for chord in chords if len(chord.symbols) > 0]
+        return chords
 
 
 def find_common_division(durations: list[Fraction]) -> int:
@@ -119,9 +126,11 @@ def _bar_boundaries(voice: list[SymbolChord]) -> list[tuple[int, int]]:
 def _staff_lengths(voice: list[SymbolChord], span: tuple[int, int]) -> dict[str, Fraction]:
     """How long each staff of this bar measures, each on its own cursor.
 
-    A moment costs a staff the shortest of *its* notes there, which is what
-    `MeasureCursors` does when it writes the bar out, so a staff holding a whole
-    note against four quarters measures a whole.
+    A moment costs a staff the shortest of *its* notes there, so a staff holding a
+    whole note against four quarters measures a whole. (The writer used to keep a
+    cursor per staff the same way; since eerovil/musescore-choir-plugins#220 it runs
+    upstream's one clock for the part, and this stays the per-staff measure the
+    meter is inferred from.)
     """
     by_position: dict[str, Fraction] = {}
     for chord in voice[span[0] : span[1]]:
@@ -344,7 +353,7 @@ def _holds_a_rest(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
     liebharc/homr#126 -- so a printed rest and the notes of the voice engraved
     **beside** it come out in one stream. A rest is therefore the least
     trustworthy thing in the bar: it may not be the silence of the stream it
-    stands in, which is the whole reason `disown_silence` exists, and a staff
+    stands in, and a staff
     whose length is mostly a rest's is a length about the rest.
 
     That is not a reason to distrust the arithmetic -- it is why `hanget-soi`
@@ -383,7 +392,7 @@ def _moments_agree(
 
     There is other evidence, and homr has already read it. The tokens are read
     across the page, so the symbols of one moment are printed above one another
-    and **sound together** -- the claim `disown_silence` already rests on. The
+    and **sound together**. The
     treble of that bar adds up, and it dates the moment the bass's last note
     stands in at beat 1.5. Only the page's own reading puts it there; the dotted
     eighth puts it at 1.25, in a column the other staff says is 1.5. So the
@@ -651,9 +660,15 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
             measure_duration.append(duration_in_measure)
             duration_in_measure = Fraction(0)
         else:
+            # Every note's own value, not only the chord's shortest: a value the
+            # division cannot express is written as zero divisions.
+            for symbol in chord.symbols:
+                if symbol.rhythm.startswith(("note", "rest")):
+                    frac = symbol.get_duration().fraction
+                    if frac > Fraction(0):
+                        durations.append(frac)
             duration = chord.get_duration()
             if duration > Fraction(0):
-                durations.append(duration)
                 duration_in_measure += duration
 
     if duration_in_measure > Fraction(0):

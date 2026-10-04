@@ -27,8 +27,13 @@ from homr.stem_voice_hints import SHARED
 from homr.transformer.vocabulary import (
     EncodedSymbol,
     empty,
+    is_lower_position,
+    is_second_voice_position,
     nonote,
 )
+
+#: Marks a note the model placed in a staff's second voice until the rebalancer reads it.
+VOICE_TOKEN = "voice-token"
 
 __all__ = [
     "SymbolChord",
@@ -135,7 +140,7 @@ def xml_to_string(element: ET.Element) -> str:
 
 def _voice_has_two_staves(voice: list[EncodedSymbol]) -> bool:
     """True if any symbol uses the lower staff (e.g. piano left hand / bass clef)."""
-    return any(s.position == "lower" for s in voice)
+    return any(is_lower_position(s.position) for s in voice)
 
 
 def build_part(
@@ -168,12 +173,18 @@ def build_measures(
     reconstruction_changes: list[ReconstructionChange] | None = None,
 ) -> list[ET.Element]:
     clefs: dict[int, tuple[str, int, int]] = {}
+    # Tokens say which notes start together, not when each group starts. A group starts
+    # when the earliest still-sounding note ends (that is how training data is grouped),
+    # so track the end times of sounding notes instead of only the last group's shortest note.
+    clock = Fraction(0)
+    sounding: list[Fraction] = []
 
     def close_current_measure() -> None:
+        nonlocal clock, sounding
         read_clefs(current_measure, clefs)
         rebalance_measure_voices(current_measure, clefs)
         measures.append(current_measure)
-        cursors.reset()
+        clock, sounding = Fraction(0), []
 
     measure_number = 1
     reconstructed = reconstruct_voice(voice)
@@ -182,7 +193,6 @@ def build_measures(
     groups = reconstructed.groups
     division = reconstructed.division
     state = ConversionState(division, reconstructed.nominator, reconstructed.nominators)
-    cursors = MeasureCursors(state)
     measures: list[ET.Element] = []
     current_measure = ET.Element("measure", number=str(measure_number))
     first_attributes = build_or_get_attributes(current_measure, None)
@@ -205,16 +215,14 @@ def build_measures(
                 attributes = build_or_get_attributes(current_measure, last_attributes)
                 build_multi_measure_rest(symbol, attributes)
             else:
-                cursors.begin_moment()
-                for staff_pos in group.into_positions():
-                    lane = lane_of(staff_pos)
-                    is_silence = staff_pos.is_only_rests()
-                    for seek_xml in cursors.seek(cursors.disown_silence(lane, is_silence)):
-                        current_measure.append(seek_xml)
-                    duration = staff_pos.get_duration()
-                    for note_xml in build_note_chord(staff_pos, state, duration):
+                staff_positions = group.into_positions()
+                advance = _advance_to_next_group(group, clock, sounding)
+                clock += advance
+                sounding = [end for end in sounding if end > clock]
+                for pos_no, staff_pos in enumerate(staff_positions):
+                    chord_duration = advance if pos_no == len(staff_positions) - 1 else Fraction(0)
+                    for note_xml in build_note_chord(staff_pos, state, chord_duration):
                         current_measure.append(note_xml)
-                    cursors.advance(lane, duration, is_silence)
             continue
         if rhythm == "newline":
             is_last_measure = group_no == len(groups) - 1
@@ -285,6 +293,20 @@ def build_measures(
         ET.SubElement(time_el, "beats").text = str(beats)
         ET.SubElement(time_el, "beat-type").text = "4"
     return measures
+
+
+def _advance_to_next_group(
+    group: SymbolChord, clock: Fraction, sounding: list[Fraction]
+) -> Fraction:
+    """How far the next group starts after this one, updating the sounding notes in place."""
+    durations = [
+        s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
+    ]
+    timed = [d for d in durations if d > 0]  # grace notes have no duration and take no time
+    if not timed:
+        return Fraction(0)
+    sounding.extend(clock + d for d in timed)
+    return min(end for end in sounding if end > clock) - clock
 
 
 def build_work(title_text: str) -> ET.Element:
@@ -360,7 +382,7 @@ def build_key(model_key: EncodedSymbol, attributes: ET.Element) -> None:
 
 
 def get_staff(symbol: EncodedSymbol) -> int:
-    return 2 if symbol.position == "lower" else 1
+    return 2 if is_lower_position(symbol.position) else 1
 
 
 def get_xml_voice(staff_num: int, rhythmic_layer: int) -> int:
@@ -536,6 +558,7 @@ def rebalance_measure_voices(
     for staff_num, events in by_staff.items():
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
         two_voices = _staff_carries_two_voices(sorted_events, (clefs or {}).get(staff_num))
+        voice_tokens = any(note.get(VOICE_TOKEN) for event in events for note in event.notes)
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -554,6 +577,12 @@ def rebalance_measure_voices(
                 if two_voices and len(directions) == 1
                 else None
             )
+            if voice_tokens:
+                # The model said which voice each note is on a staff it read two voices
+                # on, and that reading outranks a stem: it is the newer evidence.
+                tokens = {note.get(VOICE_TOKEN) == "2" for note in event.notes}
+                if len(tokens) == 1:
+                    preferred_voice = 2 if tokens.pop() else 1
             voice_no = preferred_voice if preferred_voice is not None else 1
             while voice_no in used_voices:
                 if preferred_voice is not None:
@@ -569,6 +598,7 @@ def rebalance_measure_voices(
     double_shared_noteheads(measure, assignments)
     for note in measure.findall("note"):
         note.attrib.pop("stem-shared", None)
+        note.attrib.pop(VOICE_TOKEN, None)
 
 
 def double_shared_noteheads(
@@ -902,6 +932,8 @@ def build_articulations(
             ET.SubElement(notation, "arpeggiate")
         elif articulation == "accent":
             xml_articulations.append(ET.Element("accent"))
+        elif articulation == "mordent":
+            xml_articulations.append(ET.Element("mordent"))
         elif articulation == "staccato":
             xml_articulations.append(ET.Element("staccato"))
         elif articulation == "staccatissimo":
@@ -1005,7 +1037,9 @@ def build_note_or_rest(
         ET.SubElement(note, "type").text = DURATION_NAMES[base_duration]
     elif model_duration.fraction.numerator > 0:
         base_duration = 1 if model_duration.kern == 0 else model_duration.kern
-        ET.SubElement(note, "duration").text = str(int(model_duration.fraction * state.division))
+        ET.SubElement(note, "duration").text = str(
+            max(1, int(model_duration.fraction * state.division))
+        )
         ET.SubElement(note, "type").text = DURATION_NAMES[base_duration]
     else:
         ET.SubElement(note, "duration").text = str(state.beats)
@@ -1030,10 +1064,28 @@ def build_note_or_rest(
         # rebalancer and removed again once it has been read.
         note.set("stem-shared", "yes")
 
+    if is_second_voice_position(model_note.position):
+        # The model read this note as the staff's second voice (upper2/lower2). Left as
+        # a mark for the voice rebalancer, which ranks it above any stem, and removed
+        # again once it has been read.
+        note.set(VOICE_TOKEN, "2")
+
     build_articulations(note, model_note.articulation, tuplet_mark, state)
     build_slurs(note, model_note.slur, slur_number)
+    build_image_position(note, model_note)
 
     return note
+
+
+def build_image_position(xml: ET.Element, symbol: EncodedSymbol) -> None:
+    """
+    Adds the position of the symbol on the input image as comment. The position is estimated
+    from the attention of the transformer, it points roughly at the symbol but isn't precise.
+    """
+    if symbol.image_coordinates is None:
+        return
+    x, y = symbol.image_coordinates
+    xml.append(ET.Comment(f" imgpos: {round(x)}, {round(y)} "))
 
 
 def build_multi_measure_rest(symbol: EncodedSymbol, attributes: ET.Element) -> None:
@@ -1048,7 +1100,7 @@ def build_multi_measure_rest(symbol: EncodedSymbol, attributes: ET.Element) -> N
 def build_backup(duration: Fraction, state: ConversionState) -> ET.Element:
     assert duration > Fraction(0), "Backup duration must be positive"
     backup = ET.Element("backup")
-    ET.SubElement(backup, "duration").text = str(int(duration * state.division))
+    ET.SubElement(backup, "duration").text = str(max(1, int(duration * state.division)))
     return backup
 
 
@@ -1057,141 +1109,6 @@ def build_forward(duration: Fraction, state: ConversionState) -> ET.Element:
     forward = ET.Element("forward")
     ET.SubElement(forward, "duration").text = str(int(duration * state.division))
     return forward
-
-
-class MeasureCursors:
-    """Where each stream of this bar has got to, and where the document is.
-
-    The generator used to have one cursor for the whole part and advance it by
-    `SymbolChord.get_duration()` -- the **shortest** note in the moment -- backing
-    the longer ones out again. That is right whenever the shortest note is the
-    one that really ends first, and wrong in two ways when it is not:
-
-    - **One staff's misread duration moves the other staff's later notes.** A
-      moment holding a correctly-read treble eighth and a bass sixteenth the page
-      prints as an eighth advanced the shared cursor a sixteenth, so the treble's
-      next note landed a sixteenth early on a staff nothing had misread.
-    - **Some correct music cannot be expressed at all.** A moment whose only
-      symbol is a quarter can only advance a quarter, so a bar whose printed
-      moments fall at 0, 1.0 (a lone quarter), 1.5 and 1.75 has no arrangement of
-      its true tokens that places them.
-
-    So each stream keeps its own cursor and advances by *its own* shortest note.
-    MusicXML has one cursor, so a bar whose streams stand at different points is
-    written by seeking between them: `<backup>` and `<forward>` are exactly how
-    the format says "go back and write the other one". Cursors reset at the
-    barline, so a stream that drifts on a misread duration drifts within its bar
-    and no further.
-    """
-
-    def __init__(self, state: ConversionState) -> None:
-        self.state = state
-        self.lanes: dict[tuple[str, ...], Fraction] = {}
-        self.doc = Fraction(0)
-        #: The run of rests each lane has written since its last note, as the
-        #: span it is currently claiming as that stream's silence.
-        self.silences: dict[tuple[str, ...], tuple[Fraction, Fraction]] = {}
-        #: Where every lane stood when this moment began. Lanes are written one
-        #: after another inside a moment, so reading `lanes` directly would
-        #: compare a lane against another lane's *end* rather than its start.
-        self.moment: dict[tuple[str, ...], Fraction] = {}
-
-    def reset(self) -> None:
-        self.lanes.clear()
-        self.silences.clear()
-        self.moment.clear()
-        self.doc = Fraction(0)
-
-    def begin_moment(self) -> None:
-        self.moment = dict(self.lanes)
-
-    def at(self, lane: tuple[str, ...]) -> Fraction:
-        return self.lanes.get(lane, Fraction(0))
-
-    def disown_silence(self, lane: tuple[str, ...], is_silence: bool) -> Fraction:
-        """Where this lane really stands, once a rest that is not its silence goes.
-
-        homr's token language has no voice (upstream say so themselves in
-        liebharc/homr#126), so a printed rest and the notes of the voice
-        engraved **beside** it come out in one stream. Under the old shared
-        cursor that mis-encoding was harmless: the cursor advanced by the
-        shortest symbol in each moment, so a rest never got to monopolise the
-        bar. Give each staff its own cursor and it does -- the rest eats its
-        whole length and the notes engraved beside it are written after it,
-        past the end of the bar.
-
-        The rule is one sentence: **a rest that shares a stream with notes
-        sounding inside its own span is not their silence.** It is not confined
-        to whole-bar rests, which is what the narrow version of this got wrong
-        -- the worst case in this repertoire is a *half* rest.
-
-        What says a note sounds inside the span is the rest of the bar. The
-        tokens are read across the page, so the symbols of one moment are
-        printed above one another and sound together; if another stream is
-        still standing inside this rest when this lane is handed a note, then
-        the tokens place that note inside the rest. The rest keeps its own
-        length and its own place in the document -- it is real ink on the page
-        -- and this lane goes back to where the music is, which leaves the two
-        overlapping, which is exactly how `rebalance_measure_voices` comes to
-        put them in two voices.
-
-        A lane with nothing to compare itself against is left alone. A part of
-        one staff has one stream and therefore no evidence, so its output is
-        byte for byte what it was.
-        """
-        span = self.silences.get(lane)
-        if span is None or is_silence:
-            return self.at(lane)
-        start, end = span
-        beside = [
-            stood for other, stood in self.moment.items() if other != lane and start <= stood < end
-        ]
-        if not beside:
-            return self.at(lane)
-        self.lanes[lane] = min(beside)
-        del self.silences[lane]
-        return self.lanes[lane]
-
-    def seek(self, target: Fraction) -> list[ET.Element]:
-        """Move the document cursor to `target`, saying so in the measure."""
-        step: list[ET.Element] = []
-        if target > self.doc:
-            step.append(build_forward(target - self.doc, self.state))
-        elif target < self.doc:
-            step.append(build_backup(self.doc - target, self.state))
-        self.doc = target
-        return step
-
-    def advance(self, lane: tuple[str, ...], duration: Fraction, is_silence: bool = False) -> None:
-        """This lane has just written `duration` of music, and so has the document.
-
-        `build_note_chord` is handed the same figure and comes out that much
-        further on, so the two stay in step without the caller measuring what it
-        wrote.
-
-        A rest extends the span this lane is claiming as its silence, and a note
-        ends it: only a rest can turn out not to be the silence of the stream it
-        was written into.
-        """
-        start = self.at(lane)
-        self.lanes[lane] = start + duration
-        self.doc += duration
-        if is_silence and duration > 0:
-            begun = self.silences.get(lane, (start, start))[0]
-            self.silences[lane] = (begun, start + duration)
-        else:
-            self.silences.pop(lane, None)
-
-
-def lane_of(staff_position: SymbolChord) -> tuple[str, ...]:
-    """Which stream this staff's share of a moment belongs to.
-
-    The staff, which is what `into_positions` has just split on. A part homr
-    fused into a grand staff carries two of them, and they are two printed
-    staves of music that keep their own time.
-    """
-    position = staff_position.symbols[0].position if staff_position.symbols else "upper"
-    return (position,)
 
 
 def build_note_chord(

@@ -70,7 +70,7 @@ def detect(image: Path) -> list[list[dict]]:
         coreml_encoder=False,
         title_detection=False,
     )
-    _, _, _, _, staffs = detect_staffs_in_image(str(image), config)
+    _, _, _, _, staffs, _ = detect_staffs_in_image(str(image), config)
     return [staff_notes(staff) for staff in sorted(staffs, key=lambda staff: staff.min_y)]
 
 

@@ -4,7 +4,7 @@
    "image": "068b31fc1ff37214",
    "meter": 0,
    "reference": "17062fdda97de069",
-   "score": 100.0,
+   "score": 94.44,
    "structure": 0
   },
   "heraa-suomi-final-s1": {
@@ -452,7 +452,7 @@
    "image": "b95e747c6ce251b8",
    "meter": 0,
    "reference": "fd08d7d9b346058d",
-   "score": 100.0,
+   "score": 98.53,
    "structure": 0
   },
   "laulun-aika-3-s1": {
@@ -569,9 +569,9 @@
   },
   "sammon-ryosto": {
    "image": "76fae301b00ef10e",
-   "meter": 0,
+   "meter": 3,
    "reference": "713a7ff1394ffc44",
-   "score": 98.0,
+   "score": 41.46,
    "structure": 0
   },
   "system4": {
