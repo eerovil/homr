@@ -255,6 +255,10 @@ def repair_tuplet_overlaps(
     for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
         onsets = _onsets(voice, span)
         moments = list(range(span[0], span[1]))
+        # The first moment where some voice is out of time. Before it the clock
+        # can be trusted; at and after it a value read off the clock may only be
+        # fitting another note's mistake, so `_inside_its_triplet` waits for it.
+        trouble_from: int | None = None
         for offset, chord_index in enumerate(moments):
             chord = voice[chord_index]
             for symbol_index, symbol in enumerate(chord.symbols):
@@ -272,8 +276,15 @@ def repair_tuplet_overlaps(
                     # Its voice's last note in the bar: it must end with the bar.
                     len(moments),
                 )
-                if onsets[offset] + symbol.get_duration().fraction <= onsets[following]:
+                ends_now = onsets[offset] + symbol.get_duration().fraction
+                overlaps = ends_now > onsets[following]
+                # A gap before its voice's next note, with nothing of its own filling it.
+                leaves_gap = ends_now < onsets[following] and following < len(moments)
+                if not overlaps and not leaves_gap:
                     continue
+                clock_trusted = trouble_from is None or trouble_from == offset
+                if trouble_from is None:
+                    trouble_from = offset
                 beside = {
                     other.rhythm for other in chord.symbols if other is not symbol and _timed(other)
                 }
@@ -281,8 +292,16 @@ def repair_tuplet_overlaps(
                 for candidate in _all_alternatives(symbol) + _same_head_values(chord, symbol):
                     if candidate in fits:
                         continue
-                    if not _tuplet_twin(symbol.rhythm, candidate) or candidate not in beside:
-                        continue
+                    twin_beside = _tuplet_twin(symbol.rhythm, candidate) and candidate in beside
+                    if not twin_beside:
+                        if not clock_trusted or not _inside_its_triplet(chord, symbol, candidate):
+                            continue
+                        # Read only off the moments as they stand: shortening a note
+                        # also moves the clock, and a value that "fits" only by
+                        # dragging its voice's next note along with it fits nothing.
+                        lasts = EncodedSymbol(candidate).get_duration().fraction
+                        if onsets[offset] + lasts != onsets[following]:
+                            continue
                     swapped = _onsets(voice, span, (chord_index, symbol_index, candidate))
                     ends = swapped[offset] + EncodedSymbol(candidate).get_duration().fraction
                     if ends == swapped[following]:
@@ -318,6 +337,32 @@ def repair_tuplet_overlaps(
             symbols[symbol_index] = symbol.change_rhythm(rhythm)
         out.append(SymbolChord(symbols, chord.tuplet_mark))
     return out
+
+
+def _inside_its_triplet(chord: SymbolChord, symbol: EncodedSymbol, candidate: str) -> bool:
+    """Whether `candidate` is a tuplet value of the kind already sounding in this moment.
+
+    On Legenda system 2 (eerovil/musescore-choir-plugins#245) every voice of the bar
+    sings triplets, but a head read as a plain quarter shares its moment only with
+    triplet eighths, so its own twin is nowhere beside it. That the moment is inside
+    a triplet of the same kind is the evidence instead -- read together with the
+    decoder offering the value and the note then ending exactly where its voice
+    goes on.
+    """
+    if not candidate.startswith(symbol.rhythm.split("_", 1)[0] + "_"):
+        return False
+    if not _plain_value(EncodedSymbol(candidate).remove_tuplet().rhythm):
+        return False
+    wanted = EncodedSymbol(candidate).get_duration()
+    if not EncodedSymbol(candidate).is_tuplet():
+        return False
+    for other in chord.symbols:
+        if other is symbol or not _timed(other) or not other.is_tuplet():
+            continue
+        theirs = other.get_duration()
+        if (theirs.actual_notes, theirs.normal_notes) == (wanted.actual_notes, wanted.normal_notes):
+            return True
+    return False
 
 
 def _staff_of(position: str) -> str:
@@ -364,7 +409,7 @@ def repair_tuplet_overlaps_until_settled(
     return voice
 
 
-_MAX_REPAIR_PASSES = 64
+_MAX_REPAIR_PASSES = 256
 
 
 def _all_alternatives(symbol: EncodedSymbol) -> list[str]:

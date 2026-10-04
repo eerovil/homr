@@ -286,3 +286,81 @@ def test_brackets_the_tokens_wrote_are_replaced_rather_than_added_to() -> None:
         ET.SubElement(ET.SubElement(item, "notations"), "tuplet", type="start")
     bracket_tuplets(measure, 48)
     assert marks(measure) == ["start", "", "stop"]
+
+
+def test_a_triplet_eighth_leaving_a_gap_is_read_as_the_triplet_quarter_that_fills_it() -> None:
+    """System 2, bar 2: the lower bass's G was read note_12 where the page prints note_6."""
+    bar = [
+        moment(note("rest_12", "lower"), note("note_12", "lower2", "G2", ("note_4", "note_6"))),
+        moment(note("rest_12", "lower")),
+        moment(note("note_12", "lower", "E3"), note("note_12", "lower2", "C3")),
+        moment(note("note_6", "lower", "E3"), note("note_6", "lower2", "D3")),
+        moment(note("note_12", "lower", "E3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    changes: list[ReconstructionChange] = []
+    voice = repair_tuplet_overlaps_until_settled(bar, changes)
+    assert rhythms(voice, "lower2")[0] == "note_6"
+    assert [(c.pitch, c.before, c.after) for c in changes] == [("G2", "note_12", "note_6")]
+
+
+def test_a_gap_is_not_filled_with_a_value_the_decoder_never_offered() -> None:
+    bar = [
+        moment(note("rest_12", "lower"), note("note_12", "lower2", "G2", ("note_4",))),
+        moment(note("rest_12", "lower")),
+        moment(note("note_12", "lower", "E3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    assert rhythms(repair_tuplet_overlaps_until_settled(bar), "lower2")[0] == "note_12"
+
+
+def test_a_plain_quarter_among_triplet_eighths_is_read_as_a_triplet_quarter() -> None:
+    """System 2, bar 2: the lower bass's last D was read note_4 among triplet eighths."""
+    bar = [
+        moment(note("note_6", "lower", "F3"), note("note_6", "lower2", "E3")),
+        moment(note("note_12", "lower", "F3"), note("note_12", "lower2", "C3")),
+        moment(
+            note("note_12", "lower", "F3"), note("note_4", "lower2", "D3", ("note_6", "note_12"))
+        ),
+        moment(note("note_12", "lower", "F3")),
+        moment(note("note_12", "lower", "F3"), note("note_12", "lower2", "C3")),
+        barline(),
+    ]
+    voice = repair_tuplet_overlaps_until_settled(bar)
+    assert rhythms(voice, "lower2") == ["note_6", "note_12", "note_6", "note_12"]
+
+
+def test_a_value_is_not_read_off_a_clock_an_earlier_note_has_put_out() -> None:
+    """System 1 once lost a quarter to a 16th: an earlier misread moved the clock under it.
+
+    Read one at a time from the left, the earlier note is mended first and the
+    later one then fits the value the page prints.
+    """
+    voice = complete_open_triplets(opening_bar() + legenda_bar_2())
+    voice = triplets_onto_the_beat(voice)
+    with_sixteenth = []
+    for chord in voice:
+        symbols = [
+            (
+                s.change_rhythm(s.rhythm)
+                if s.confidence is None
+                else EncodedSymbol(
+                    s.rhythm,
+                    s.pitch,
+                    position=s.position,
+                    confidence={
+                        "rhythm": {
+                            "alternatives": [
+                                *s.confidence["rhythm"]["alternatives"],
+                                {"value": "note_24", "probability": 0.01},
+                            ]
+                        }
+                    },
+                )
+            )
+            for s in chord.symbols
+        ]
+        with_sixteenth.append(SymbolChord(symbols))
+    repaired = repair_tuplet_overlaps_until_settled(with_sixteenth)
+    assert "note_24" not in rhythms(repaired, "lower2")
+    assert rhythms(repaired, "lower2")[1:4] == ["note_12", "note_6", "note_12"]
