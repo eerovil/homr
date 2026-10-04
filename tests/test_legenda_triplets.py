@@ -27,10 +27,13 @@ from homr.music_xml_generator import (
 from homr.score_reconstruction import (
     ReconstructionChange,
     SymbolChord,
+    advance_to_next_group,
     complete_open_triplets,
     fill_unison_copies,
     repair_tuplet_overlaps_until_settled,
+    retime_onto_steady_voices,
     triplets_onto_the_beat,
+    triplets_to_match_the_other_staff,
 )
 from homr.transformer.vocabulary import EncodedSymbol
 
@@ -468,3 +471,102 @@ def test_the_copy_may_be_either_voice_of_the_staff() -> None:
     voice = repair_tuplet_overlaps_until_settled(filled)
     assert rhythms(voice, "lower") == ["note_12"] * 3
     assert rhythms(voice, "lower2") == ["note_12"] * 3
+
+
+def legenda_system_3_bar_7() -> list[SymbolChord]:
+    """System 3, bar 7: basses read as triplets, tenors as plain after the first triplet.
+
+    The tenor eighths also sit one moment late, in the moment of the bass note
+    after the one printed under them, as the decoder grouped them.
+    """
+    return [
+        moment(
+            note("rest_12", "upper", "_"),
+            note("rest_12", "lower", "_"),
+            note("note_6", "lower2", "G2"),
+        ),
+        moment(note("rest_12", "upper", "_"), note("rest_12", "lower", "_")),
+        moment(
+            note("note_12", "upper", "E5"),
+            note("note_12", "lower", "G3"),
+            note("note_12", "lower2", "C3"),
+        ),
+        moment(
+            note("note_4", "upper", "E5"),
+            note("note_6", "lower", "G3"),
+            note("note_6", "lower2", "D3"),
+        ),
+        moment(note("note_12", "lower", "G3"), note("note_12", "lower2", "C3")),
+        moment(
+            note("note_8", "upper", "E5"),
+            note("note_6", "lower", "A3"),
+            note("note_6", "lower2", "E3"),
+        ),
+        moment(note("note_4", "upper", "F5")),
+        moment(note("note_12", "lower", "A3"), note("note_12", "lower2", "C3")),
+        moment(note("note_12", "lower", "A3"), note("note_6", "lower2", "D3")),
+        moment(note("note_8", "upper", "F5")),
+        moment(note("note_12", "lower", "A3")),
+        moment(
+            note("note_8", "upper", "F5"),
+            note("note_12", "lower", "A3"),
+            note("note_12", "lower2", "C3"),
+        ),
+        moment(note("note_8", "upper", "G5")),
+        moment(note("note_8", "upper", "A5")),
+        barline(),
+    ]
+
+
+def test_the_plain_run_the_other_staff_measures_out_is_read_as_triplets() -> None:
+    changes: list[ReconstructionChange] = []
+    voice = triplets_to_match_the_other_staff(legenda_system_3_bar_7(), changes)
+    assert rhythms(voice, "upper") == ["rest_12", "rest_12", "note_12", "note_6", "note_12"] + [
+        "note_6",
+        "note_12",
+        "note_12",
+        "note_12",
+        "note_12",
+    ]
+    assert {c.staff for c in changes} == {"upper"}
+
+
+def test_two_runs_that_would_each_match_the_other_staff_are_left_alone() -> None:
+    """Nine eighths against a whole: the first quarter-and-eighth or the last would do."""
+    bar = [
+        moment(note("note_4", "upper", "C5"), note("note_1", "lower", "C3")),
+        moment(note("note_8", "upper", "C5")),
+        moment(note("note_4.", "upper", "C5")),
+        moment(note("note_4", "upper", "C5")),
+        moment(note("note_8", "upper", "C5")),
+        barline(),
+    ]
+    voice = triplets_to_match_the_other_staff(bar)
+    assert rhythms(voice, "upper") == ["note_4", "note_8", "note_4.", "note_4", "note_8"]
+
+
+def onsets_of(voice: list[SymbolChord], position: str) -> list[Fraction]:
+    times: list[Fraction] = []
+    clock = Fraction(0)
+    sounding: list[Fraction] = []
+    for chord in voice:
+        if chord.is_barline():
+            break
+        if any(s.position == position for s in chord.symbols):
+            times.append(clock)
+        clock += advance_to_next_group(chord, clock, sounding)
+        sounding[:] = [end for end in sounding if end > clock]
+    return times
+
+
+def test_a_voice_grouped_a_moment_late_is_moved_to_where_its_values_put_it() -> None:
+    voice = triplets_to_match_the_other_staff(legenda_system_3_bar_7())
+    voice = retime_onto_steady_voices(voice)
+    twelfths = [t * 12 for t in onsets_of(voice, "upper")]
+    assert twelfths == [0, 1, 2, 3, 5, 6, 8, 9, 10, 11]
+    assert [t * 12 for t in onsets_of(voice, "lower")] == [0, 1, 2, 3, 5, 6, 8, 9, 10, 11]
+
+
+def test_a_bar_whose_voices_do_not_end_together_is_not_regrouped() -> None:
+    bar = legenda_system_3_bar_7()  # tenors still plain: 11/8 against the basses' whole
+    assert retime_onto_steady_voices(bar) == bar
