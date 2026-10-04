@@ -140,7 +140,9 @@ def _staff_lengths(voice: list[SymbolChord], span: tuple[int, int]) -> dict[str,
                 continue
             sounding.setdefault(symbol.position, []).append(symbol.get_duration().fraction)
         for position, durations in sounding.items():
-            by_position[position] = by_position.get(position, Fraction(0)) + min(durations)
+            timed = [duration for duration in durations if duration > 0]
+            if timed:
+                by_position[position] = by_position.get(position, Fraction(0)) + min(timed)
     return by_position
 
 
@@ -157,6 +159,162 @@ def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fra
         return None
     lengths = set(by_position.values())
     return lengths.pop() if len(lengths) == 1 else None
+
+
+def advance_to_next_group(
+    group: SymbolChord, clock: Fraction, sounding: list[Fraction]
+) -> Fraction:
+    """How far the next group starts after this one, updating the sounding notes in place.
+
+    Tokens say which notes start together, not when each group starts: a group starts
+    when the earliest still-sounding note ends. The writer keeps time with this, and so
+    does `repair_tuplet_overlaps`, so the two cannot disagree about when a note sounds.
+    """
+    durations = [
+        s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
+    ]
+    timed = [d for d in durations if d > 0]  # grace notes have no duration and take no time
+    if not timed:
+        return Fraction(0)
+    sounding.extend(clock + d for d in timed)
+    return min(end for end in sounding if end > clock) - clock
+
+
+def _onsets(
+    voice: list[SymbolChord],
+    span: tuple[int, int],
+    swap: tuple[int, int, str] | None = None,
+) -> list[Fraction]:
+    """When each moment of this bar starts on the writer's clock, one symbol optionally reread."""
+    clock = Fraction(0)
+    sounding: list[Fraction] = []
+    onsets = []
+    for chord_index in range(span[0], span[1]):
+        chord = voice[chord_index]
+        if swap is not None and swap[0] == chord_index:
+            symbols = list(chord.symbols)
+            symbols[swap[1]] = symbols[swap[1]].change_rhythm(swap[2])
+            chord = SymbolChord(symbols, chord.tuplet_mark)
+        onsets.append(clock)
+        clock += advance_to_next_group(chord, clock, sounding)
+        sounding[:] = [end for end in sounding if end > clock]
+    return onsets
+
+
+def _timed(symbol: EncodedSymbol) -> bool:
+    return symbol.rhythm.startswith(("note", "rest")) and symbol.get_duration().fraction > 0
+
+
+def _tuplet_twin(rhythm: str, alternative: str) -> bool:
+    """Whether two readings differ only in whether the note is a tuplet's."""
+    if rhythm == alternative:
+        return False
+    return (
+        EncodedSymbol(alternative).remove_tuplet().rhythm == rhythm
+        or EncodedSymbol(rhythm).remove_tuplet().rhythm == alternative
+    )
+
+
+def repair_tuplet_overlaps(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Read a note as a tuplet's (or not) when that is what lets its own voice go on.
+
+    One voice cannot sound a new note while its last one is still sounding. On
+    Sangerhilsen bars 21 and 37 (eerovil/musescore-choir-plugins#240) both voices of
+    each staff sing a triplet of eighths in unison; the decoder read three of its
+    four heads at the first moment as triplet eighths and the fourth as a plain
+    eighth. That eighth was still sounding when its own voice's second triplet note
+    began, the writer's clock started the third note late to make room, and the bar
+    came out 9/8 long under 4/4 -- in every part, once the voices were split.
+
+    So a note still sounding when the next note of its own voice starts is read the
+    other way round -- as its tuplet value, or its tuplet value as plain -- when all
+    three hold:
+
+    - **the decoder offered that reading** among its own alternatives;
+    - **the same moment already holds that value**, read by another head: the
+      triplet is on the page, this head merely lost it;
+    - **it ends the note exactly when its voice next sounds**, on the writer's own
+      clock re-run with the change.
+
+    Nothing else about the note changes, and no other value is tried: a voice that
+    overlaps itself for any other reason -- two voices sharing one position label,
+    which happens -- is left alone rather than shortened to fit.
+    """
+    repairs: dict[tuple[int, int], tuple[str, int]] = {}
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        onsets = _onsets(voice, span)
+        moments = list(range(span[0], span[1]))
+        for offset, chord_index in enumerate(moments):
+            chord = voice[chord_index]
+            for symbol_index, symbol in enumerate(chord.symbols):
+                if not _timed(symbol):
+                    continue
+                following = next(
+                    (
+                        later
+                        for later in range(offset + 1, len(moments))
+                        if any(
+                            _timed(other) and other.position == symbol.position
+                            for other in voice[moments[later]].symbols
+                        )
+                    ),
+                    None,
+                )
+                if following is None:
+                    continue
+                if onsets[offset] + symbol.get_duration().fraction <= onsets[following]:
+                    continue
+                beside = {
+                    other.rhythm for other in chord.symbols if other is not symbol and _timed(other)
+                }
+                fits = []
+                for candidate in _all_alternatives(symbol):
+                    if not _tuplet_twin(symbol.rhythm, candidate) or candidate not in beside:
+                        continue
+                    swapped = _onsets(voice, span, (chord_index, symbol_index, candidate))
+                    ends = swapped[offset] + EncodedSymbol(candidate).get_duration().fraction
+                    if ends == swapped[following]:
+                        fits.append(candidate)
+                if len(fits) == 1:
+                    repairs[(chord_index, symbol_index)] = (fits[0], bar_number)
+    if not repairs:
+        return voice
+    out = []
+    for chord_index, chord in enumerate(voice):
+        symbols = list(chord.symbols)
+        for symbol_index, symbol in enumerate(symbols):
+            repair = repairs.get((chord_index, symbol_index))
+            if repair is None:
+                continue
+            rhythm, bar_number = repair
+            why = "it was still sounding when its own voice next sounds"
+            if changes is not None:
+                changes.append(
+                    ReconstructionChange(
+                        kind="tuplet_repair",
+                        bar=bar_number,
+                        group=chord_index,
+                        symbol=symbol_index,
+                        staff=symbol.position,
+                        pitch=symbol.pitch,
+                        before=symbol.rhythm,
+                        after=rhythm,
+                        reason=why,
+                    )
+                )
+            eprint(f"Tuplet: reading {symbol.pitch} as {rhythm} rather than {symbol.rhythm}, {why}")
+            symbols[symbol_index] = symbol.change_rhythm(rhythm)
+        out.append(SymbolChord(symbols, chord.tuplet_mark))
+    return out
+
+
+def _all_alternatives(symbol: EncodedSymbol) -> list[str]:
+    """Every other reading the decoder ranked under this symbol."""
+    confidence = symbol.confidence or {}
+    alternatives = confidence.get("rhythm", {}).get("alternatives", [])
+    return [alternative["value"] for alternative in alternatives]
 
 
 def repair_bar_arithmetic(
@@ -186,9 +344,11 @@ def repair_bar_arithmetic(
       system printing one staff is never repaired -- the same rule
       `_corroborated_length` follows, and for the same reason.
     - **Never the bar that opens a span**, which is where an anacrusis is.
-    - **Never a bar this cannot measure** -- a tuplet, a grace note or a
-      multi-measure rest anywhere in it, since its length would be arithmetic
-      this does not do.
+    - **Never a bar this cannot measure** -- a tuplet or a multi-measure rest
+      anywhere in it, since its length would be arithmetic this does not do. A
+      grace note takes no time and is measured as taking none; one read alone in
+      front of a moment its own voice is missing from may be read as that voice's
+      note there (`_grace_joins`), and then sounds with that moment.
     - **Never a note the page may have drawn as part of a chord.** Two notes of
       one moment drawn with the same stem are one chord and share a value;
       shortening one of them would take a printed chord apart. Only a note
@@ -224,12 +384,17 @@ def repair_bar_arithmetic(
     if not repairs:
         return voice
     out = []
+    carried: list[EncodedSymbol] = []
     for chord_index, chord in enumerate(voice):
-        symbols = list(chord.symbols)
-        for symbol_index, symbol in enumerate(symbols):
-            accepted_repair = repairs.get((chord_index, symbol_index))
+        symbols = carried + list(chord.symbols)
+        offset = len(carried)
+        carried = []
+        joins = False
+        for symbol_index, symbol in enumerate(symbols[offset:], start=offset):
+            accepted_repair = repairs.get((chord_index, symbol_index - offset))
             if accepted_repair is None:
                 continue
+            joins = _is_grace(symbol)
             rhythm, why, bar_number = accepted_repair
             if changes is not None:
                 changes.append(
@@ -237,7 +402,7 @@ def repair_bar_arithmetic(
                         kind="rhythm_repair",
                         bar=bar_number,
                         group=chord_index,
-                        symbol=symbol_index,
+                        symbol=symbol_index - offset,
                         staff=symbol.position,
                         pitch=symbol.pitch,
                         before=symbol.rhythm,
@@ -250,6 +415,10 @@ def repair_bar_arithmetic(
                 f"{symbol.rhythm}, {why}"
             )
             symbols[symbol_index] = symbol.change_rhythm(rhythm)
+        if joins:
+            # A grace note read as the note it is sounds with the moment after it.
+            carried = symbols
+            continue
         out.append(SymbolChord(symbols, chord.tuplet_mark))
     return out
 
@@ -316,9 +485,15 @@ def _repair_for_bar(
     if len(adrift) != 1:
         return None
     position = adrift[0]
+    if _shared_rests(voice, span, position) == target - lengths[position]:
+        return None
     for chord in voice[span[0] : span[1]]:
         for symbol in chord.symbols:
-            if symbol.rhythm.startswith(("note", "rest")) and not _plain_value(symbol.rhythm):
+            if (
+                symbol.rhythm.startswith(("note", "rest"))
+                and not _plain_value(symbol.rhythm)
+                and not _is_grace(symbol)
+            ):
                 return None
     found = []
     for chord_index in range(span[0], span[1]):
@@ -327,6 +502,8 @@ def _repair_for_bar(
             if symbol.position != position or not symbol.rhythm.startswith(("note", "rest")):
                 continue
             if not _stands_alone(chord, symbol):
+                continue
+            if _is_grace(symbol) and _grace_joins(voice, span, chord_index) is None:
                 continue
             for candidate in _rhythm_alternatives(symbol):
                 swapped = _length_with(voice, span, position, chord_index, symbol_index, candidate)
@@ -344,6 +521,29 @@ def _repair_for_bar(
         f"the only one of {len(found)} that make its bar add up which also leaves "
         "the staves agreeing about when each shared moment sounds",
     )
+
+
+def _shared_rests(voice: list[SymbolChord], span: tuple[int, int], position: str) -> Fraction:
+    """How long the other voice of this staff rests where this voice has nothing.
+
+    A choir page prints a rest both voices of a staff keep once, and the model files
+    it under one of them. The other voice is then short by exactly that rest, and
+    lengthening one of its notes to fill it would hold a note through a printed
+    rest: on Sangerhilsen bar 20 (eerovil/musescore-choir-plugins#240) the lower
+    voice's tied eighth became a half and sang on through the bar's two rests. A
+    voice short by exactly what its partner rests here is not misread; it rests.
+    """
+    staff = position[:-1] if position.endswith("2") else position
+    partner = staff if position.endswith("2") else staff + "2"
+    total = Fraction(0)
+    for chord in voice[span[0] : span[1]]:
+        timed = [s for s in chord.symbols if s.rhythm.startswith(("note", "rest"))]
+        if any(s.position == position for s in timed):
+            continue
+        theirs = [s for s in timed if s.position == partner]
+        if theirs and all(s.rhythm.startswith("rest") for s in theirs):
+            total += min(s.get_duration().fraction for s in theirs)
+    return total
 
 
 def _holds_a_rest(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
@@ -431,6 +631,38 @@ def _plain_value(rhythm: str) -> bool:
     return not EncodedSymbol(rhythm).is_tuplet()
 
 
+def _is_grace(symbol: EncodedSymbol) -> bool:
+    return symbol.rhythm.startswith("note") and "G" in symbol.rhythm.split("_", 1)[1]
+
+
+def _grace_joins(voice: list[SymbolChord], span: tuple[int, int], chord_index: int) -> int | None:
+    """The moment a grace note read alone would sound in, were it a real note.
+
+    A grace note leads into the next note of its own voice, so a "grace note" whose
+    voice has nothing in the moment after it leads into nothing: it is that voice's
+    note *of* that moment, read small. On Sangerhilsen bars 15 and 31
+    (eerovil/musescore-choir-plugins#240) the upper voice's accented quarter on beat
+    four came out `note_4G`, alone, in front of a moment holding every other voice
+    but not its own -- and the voice measured three beats of four.
+
+    None when the grace note shares its moment with anything, or the next moment is
+    not in this bar, or its own voice does sound there: then it is an ordinary
+    grace note and stays one.
+    """
+    chord = voice[chord_index]
+    if len(chord.symbols) != 1 or chord_index + 1 >= span[1]:
+        return None
+    position = chord.symbols[0].position
+    following = voice[chord_index + 1]
+    if following.is_barline() or not any(
+        symbol.rhythm.startswith(("note", "rest")) for symbol in following.symbols
+    ):
+        return None
+    if any(symbol.position == position for symbol in following.symbols):
+        return None
+    return chord_index + 1
+
+
 def _stands_alone(chord: SymbolChord, symbol: EncodedSymbol) -> bool:
     """Whether this note can have a value of its own, or is a head of a chord.
 
@@ -485,8 +717,9 @@ def _length_with(
                 durations.append(EncodedSymbol(rhythm).get_duration().fraction)
             else:
                 durations.append(symbol.get_duration().fraction)
-        if durations:
-            total += min(durations)
+        timed = [duration for duration in durations if duration > 0]
+        if timed:
+            total += min(timed)
     return total
 
 
@@ -769,6 +1002,7 @@ def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     """Apply homr's musical reconstruction passes in their established order."""
     changes: list[ReconstructionChange] = []
     groups = group_into_chords(voice)
+    groups = repair_tuplet_overlaps(groups, changes)
     groups = repair_bar_arithmetic(groups, changes)
     groups = add_tuplet_start_stop(groups)
     groups = infer_meter_changes(groups, changes)

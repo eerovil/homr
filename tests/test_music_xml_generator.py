@@ -656,6 +656,63 @@ barline . . . . ."""
         # the outer slur is untouched
         self.assertEqual(_slurs(xml), ["start", "stop"])
 
+    def test_a_unison_tie_read_across_the_two_voices_ties_both(self) -> None:
+        """Sangerhilsen bars 10-11: one tie on a shared head, start and stop filed apart.
+
+        Both voices sing the held E, so each is tied, and nothing is left behind
+        as a slur running from one singer into the other.
+        """
+        unison = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_2 C4 _ _ _ upper&note_2 C4 _ _ _ upper2
+note_2 E4 _ _ slurStart upper&note_2 E4 _ _ _ upper2
+barline . . . . .
+note_2 E4 _ _ _ upper&note_2 E4 _ _ slurStop upper2
+note_2 G4 _ _ _ upper&note_2 G4 _ _ _ upper2
+barline . . . . ."""
+        tokens = read_token_lines(unison.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_slurs(xml), [])
+        tied = [(_voice(n), t.get("type")) for n in xml.iter("note") for t in n.findall("tie")]
+        self.assertEqual(
+            sorted(tied), [("1", "start"), ("1", "stop"), ("2", "start"), ("2", "stop")]
+        )
+
+    def test_a_tie_in_one_voice_of_a_unison_is_the_other_voices_too(self) -> None:
+        """Sangerhilsen's basses in the same bars: both ends filed under one voice."""
+        unison = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_2 C4 _ _ _ upper&note_2 C4 _ _ _ upper2
+note_2 E4 _ _ _ upper&note_2 E4 _ _ slurStart upper2
+barline . . . . .
+note_2 E4 _ _ _ upper&note_2 E4 _ _ slurStop upper2
+note_2 G4 _ _ _ upper&note_2 G4 _ _ _ upper2
+barline . . . . ."""
+        tokens = read_token_lines(unison.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        tied = [(_voice(n), t.get("type")) for n in xml.iter("note") for t in n.findall("tie")]
+        self.assertEqual(
+            sorted(tied), [("1", "start"), ("1", "stop"), ("2", "start"), ("2", "stop")]
+        )
+
+    def test_a_slur_between_voices_that_part_stays_a_slur(self) -> None:
+        """Unison at the start only: the curve is not a tie, and nothing is tied."""
+        parting = """clef_G2 . . . . upper
+timeSignature/4 . . . . .
+note_2 C4 _ _ _ upper&note_2 C4 _ _ _ upper2
+note_2 E4 _ _ slurStart upper&note_2 E4 _ _ _ upper2
+barline . . . . .
+note_2 G4 _ _ _ upper&note_2 E4 _ _ slurStop upper2
+note_2 G4 _ _ _ upper&note_2 G4 _ _ _ upper2
+barline . . . . ."""
+        tokens = read_token_lines(parting.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+
+        self.assertEqual(_ties(xml), [])
+        self.assertEqual(_slurs(xml), ["start", "stop"])
+
     def test_next_group_starts_when_the_earliest_sounding_note_ends(self) -> None:
         """
         Tokens tell which notes start together, not when each group starts. Here the left

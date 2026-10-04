@@ -10,6 +10,7 @@ rebalancer rather than read as a voice.
 """
 
 import re
+import statistics
 from numbers import Real
 
 from homr.model import Note, StemDirection
@@ -241,6 +242,14 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         spelled = pitch_at(other, clef)
         if spelled is None:
             continue
+        owner = next((note for note in here if note.position == other), None)
+        if owner is not None and _claimed_elsewhere(symbols, members, clefs, owner):
+            # The head is not free: it is the next or previous note of the staff,
+            # set close enough to fall in this column. Sangerhilsen bar 1: the
+            # triplet's last E is one head both voices share, and its second
+            # reading was moved onto the C sharp the triplet's middle note had
+            # already read -- an E sung as a C natural.
+            continue
         # The lower head takes the lower pitch: re-pitch whichever of the two is
         # drawn on the side the free position sits.
         target = (
@@ -251,11 +260,37 @@ def rescue_duplicate_pitches(symbols: list[EncodedSymbol], notes: list[Note]) ->
         # to say which line it belongs to and lands in whichever voice the chord
         # is assigned -- a note present but in the wrong part, which is what the
         # first version of this produced.
-        owner = next((note for note in here if note.position == other), None)
         if owner is not None and len(owner.stem_directions) == 1:
             target.stem_direction = "up" if owner.stem_directions[0] == StemDirection.UP else "down"
         rescued += 1
     return rescued
+
+
+def _claimed_elsewhere(
+    symbols: list[EncodedSymbol],
+    members: list[int],
+    clefs: list[tuple[str, int] | None],
+    head: Note,
+) -> bool:
+    """Whether a decoded note outside this column already reads this head.
+
+    A head is only free to rescue a note onto if nobody has read it. A note of the
+    neighbouring moment at that head's position, within the matching tolerance of
+    it, has.
+    """
+    staff = _staff(symbols[members[0]].position)
+    for index, symbol in enumerate(symbols):
+        if index in members or not symbol.rhythm.startswith("note"):
+            continue
+        clef = clefs[index]
+        if _staff(symbol.position) != staff or clef is None:
+            continue
+        coordinates = _note_coordinates(symbol)
+        if coordinates is None or abs(coordinates[0] - head.center[0]) > _MATCH_X_TOLERANCE:
+            continue
+        if expected_position(symbol.pitch, clef) == head.position:
+            return True
+    return False
 
 
 def pair_unison_stems(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
@@ -451,10 +486,32 @@ def _pair_by_attention(
     return 1
 
 
+def _read_by_another(
+    read_at: list[tuple[int, str, float, int]], index: int, symbol: EncodedSymbol, head: Note
+) -> bool:
+    """Whether a head at another position is what a different decoded note reads."""
+    staff = _staff(symbol.position)
+    return any(
+        other != index
+        and other_staff == staff
+        and position == head.position
+        and abs(x - head.center[0]) <= _MATCH_X_TOLERANCE
+        for other, other_staff, x, position in read_at
+    )
+
+
 def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
     """Set ``stem_direction`` on safely matched decoded notes and return its count."""
     hinted = 0
     clefs = _clefs_in_force(symbols)
+    read_at: list[tuple[int, str, float, int]] = []
+    for index, symbol in enumerate(symbols):
+        coordinates = _note_coordinates(symbol)
+        clef = clefs[index]
+        if symbol.rhythm.startswith("note") and coordinates is not None and clef is not None:
+            position = expected_position(symbol.pitch, clef)
+            if position is not None:
+                read_at.append((index, _staff(symbol.position), coordinates[0], position))
     for index, symbol in enumerate(symbols):
         if not symbol.rhythm.startswith("note"):
             continue
@@ -468,6 +525,13 @@ def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int
             note = _at_position(notes, *coordinates, position)
         if note is None:
             note = _nearest(notes, *coordinates)
+            if note is not None and _read_by_another(read_at, index, symbol, note):
+                # The nearest head is another note's, not this one's: its stem
+                # says nothing about this note. Sangerhilsen bar 47
+                # (eerovil/musescore-choir-plugins#240): the lower tenor's D has no
+                # head the segmentation found, borrowed the upper voice's E's up
+                # stem, and the two tenor parts swapped for the bar.
+                note = None
         if note is None or not note.stem_directions:
             continue
         if len(note.stem_directions) > 1:
@@ -480,3 +544,207 @@ def add_stem_voice_hints(symbols: list[EncodedSymbol], notes: list[Note]) -> int
         symbol.stem_direction = "up" if direction == StemDirection.UP else "down"
         hinted += 1
     return hinted
+
+
+def _moments(symbols: list[EncodedSymbol]) -> list[list[int]]:
+    """The indices of each moment's members, in order: `chord` joins a symbol to the last."""
+    moments: list[list[int]] = []
+    joined = False
+    for index, symbol in enumerate(symbols):
+        if symbol.rhythm == "chord":
+            joined = True
+            continue
+        if joined and moments:
+            moments[-1].append(index)
+        else:
+            moments.append([index])
+        joined = False
+    return moments
+
+
+def _column_x(
+    symbols: list[EncodedSymbol], members: list[int], staff: str, skip: int
+) -> float | None:
+    """Where on the page a moment's notes on one staff stand, leaving one note out."""
+    xs = [
+        coordinates[0]
+        for index in members
+        if index != skip
+        and symbols[index].rhythm.startswith("note")
+        and _staff(symbols[index].position) == staff
+        for coordinates in [_note_coordinates(symbols[index])]
+        if coordinates is not None
+    ]
+    if not xs:
+        return None
+    return float(statistics.median(xs))
+
+
+def _head_near(notes: list[Note], x: float, position: int) -> Note | None:
+    return next(
+        (
+            note
+            for note in notes
+            if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE and note.position == position
+        ),
+        None,
+    )
+
+
+def move_notes_to_their_heads(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
+    """Move a note read a moment early (or late) to the moment its head is printed in.
+
+    Sangerhilsen bar 33 (eerovil/musescore-choir-plugins#240): a triplet both tenors
+    sing in unison, A C sharp E. The decoder wrote the upper voice's C sharp into
+    the triplet's first moment, beside the A, so the tenors sang A and C sharp at
+    once. Its attention was on the middle note, and the segmentation agrees: there
+    is no head at C sharp in the first column and there is one in the second, where
+    the upper voice had nothing.
+
+    So a note is moved to the neighbouring moment of its staff when all of this
+    holds: no head at its pitch stands in its own moment's column; a head at its
+    pitch stands in the neighbour's column, where the note's own attention points;
+    its voice has nothing in the neighbouring moment; and that moment's notes on the
+    staff are read with the same value. Each is evidence the page gives, and the
+    note itself is kept -- only its moment changes.
+    """
+    clefs = _clefs_in_force(symbols)
+    moments = _moments(symbols)
+    moved = 0
+    for where, members in enumerate(moments):
+        for index in list(members):
+            symbol = symbols[index]
+            coordinates = _note_coordinates(symbol)
+            clef = clefs[index]
+            if not symbol.rhythm.startswith("note") or coordinates is None or clef is None:
+                continue
+            position = expected_position(symbol.pitch, clef)
+            staff = _staff(symbol.position)
+            own = _column_x(symbols, members, staff, index)
+            if position is None or own is None or _head_near(notes, own, position) is not None:
+                continue
+            for step in (1, -1):
+                if not 0 <= where + step < len(moments):
+                    continue
+                target = moments[where + step]
+                there = _column_x(symbols, target, staff, -1)
+                if there is None or abs(coordinates[0] - there) > _MATCH_X_TOLERANCE:
+                    continue
+                if _head_near(notes, there, position) is None:
+                    continue
+                staff_notes = [
+                    symbols[other]
+                    for other in target
+                    if symbols[other].rhythm.startswith("note")
+                    and _staff(symbols[other].position) == staff
+                ]
+                if any(other.position == symbol.position for other in staff_notes):
+                    continue
+                if any(other.rhythm != symbol.rhythm for other in staff_notes):
+                    continue
+                members.remove(index)
+                target.append(index)
+                moved += 1
+                break
+    if moved:
+        chord = next((s for s in symbols if s.rhythm == "chord"), EncodedSymbol("chord"))
+        rebuilt: list[EncodedSymbol] = []
+        for members in moments:
+            for offset, index in enumerate(members):
+                if offset:
+                    rebuilt.append(chord)
+                rebuilt.append(symbols[index])
+        symbols[:] = rebuilt
+    return moved
+
+
+def drop_unprinted_chord_notes(symbols: list[EncodedSymbol], notes: list[Note]) -> int:
+    """Drop a chord note of one voice where the page prints one head fewer for it.
+
+    Sangerhilsen bar 15 (eerovil/musescore-choir-plugins#240): the lower tenor holds
+    a D, and the decoder read it as a D and an E together; the E is not on the page.
+    The segmentation found one head with that voice's stem in the column, the
+    decoder two, so one of them was never printed -- and the decoder itself was less
+    sure of the E.
+
+    Only where every condition holds: both voices of the staff sound in the moment
+    (so a stem says which voice a head is); the voice reads exactly one note more
+    than there are heads with its stem, shared heads counting for both; the voice
+    keeps a note; and the dropped note is the one the decoder was least sure of, at
+    less than `_DROP_BELOW`. A lost head is the segmentation's commonest fault, so
+    a note the decoder was sure of is never dropped on its say-so.
+    """
+    clefs = _clefs_in_force(symbols)
+    doomed: set[int] = set()
+    for members in _moments(symbols):
+        by_staff: dict[str, dict[str, list[int]]] = {}
+        for index in members:
+            symbol = symbols[index]
+            if symbol.rhythm.startswith("note") and clefs[index] is not None:
+                by_staff.setdefault(_staff(symbol.position), {}).setdefault(
+                    symbol.position, []
+                ).append(index)
+        for staff, voices in by_staff.items():
+            if set(voices) != {staff, staff + "2"}:
+                continue
+            places = [
+                coordinates
+                for indices in voices.values()
+                for index in indices
+                for coordinates in [_note_coordinates(symbols[index])]
+                if coordinates is not None
+            ]
+            if not places:
+                continue
+            x = float(statistics.median(place[0] for place in places))
+            y = float(statistics.median(place[1] for place in places))
+            # This staff's heads only: the other staff's stand in the same column.
+            column = [
+                note
+                for note in notes
+                if abs(note.center[0] - x) <= _MATCH_X_TOLERANCE
+                and abs(note.center[1] - y) <= _COLUMN_REACH
+            ]
+            for voice, indices in voices.items():
+                direction = StemDirection.DOWN if voice.endswith("2") else StemDirection.UP
+                heads = sum(1 for note in column if direction in note.stem_directions)
+                if heads == 0 or len(indices) != heads + 1:
+                    continue
+                sureness = {index: _sureness(symbols[index]) for index in indices}
+                weakest = min(indices, key=lambda index: sureness[index])
+                if sureness[weakest] >= _DROP_BELOW:
+                    continue
+                if sorted(sureness.values())[1] == sureness[weakest]:
+                    continue
+                doomed.add(weakest)
+    if not doomed:
+        return 0
+    moments = _moments(symbols)
+    chord = next((s for s in symbols if s.rhythm == "chord"), EncodedSymbol("chord"))
+    rebuilt: list[EncodedSymbol] = []
+    for members in moments:
+        kept = [index for index in members if index not in doomed]
+        for offset, index in enumerate(kept):
+            if offset:
+                rebuilt.append(chord)
+            rebuilt.append(symbols[index])
+    symbols[:] = rebuilt
+    return len(doomed)
+
+
+#: A chord note the decoder was at least this sure of is never dropped for a
+#: missing head. Sangerhilsen bar 15's phantom E: 0.95 pitch, 0.79 value.
+_DROP_BELOW = 0.85
+
+
+def _sureness(symbol: EncodedSymbol) -> float:
+    """How sure the decoder was of a note: its value and its pitch together."""
+    confidence = symbol.confidence or {}
+    total = 1.0
+    for key in ("rhythm", "pitch"):
+        entry = confidence.get(key)
+        if isinstance(entry, dict) and isinstance(entry.get("probability"), int | float):
+            total *= float(entry["probability"])
+        else:
+            return 1.0
+    return total
