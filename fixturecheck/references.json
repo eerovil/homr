@@ -584,8 +584,8 @@
   "talviuni-s1": {
    "image": "809bebb2c8dcd008",
    "meter": 0,
-   "reference": "cf75561370c39236",
-   "score": 93.62,
+   "reference": "1349f0ecd635ce57",
+   "score": 100.0,
    "structure": 0
   },
   "talviuni-s2": {
@@ -598,21 +598,21 @@
   "talviuni-s3": {
    "image": "27c9ad2019ccab28",
    "meter": 0,
-   "reference": "a52a6a2974e46384",
+   "reference": "4e1cac8fb8cfa73f",
    "score": 98.67,
    "structure": 0
   },
   "talviuni-s4": {
    "image": "ca509c3930e5d1b2",
    "meter": 0,
-   "reference": "b752c30e48172063",
+   "reference": "3ff6795dc8aae9e2",
    "score": 100.0,
    "structure": 0
   },
   "talviuni-s5": {
    "image": "0811cd4d5ab68ed7",
    "meter": 0,
-   "reference": "0f3f4eddbb0462eb",
+   "reference": "58863e2b5ea6c779",
    "score": 92.59,
    "structure": 0
   },
@@ -722,6 +722,6 @@
    "structure": 0
   }
  },
- "digest": "5c1c6d63604b9876",
+ "digest": "f26eeff6c43ce42b",
  "why": "A fingerprint per case and the score it was last accepted at \u2014 not the music: this repository is public and the songs are not ours. A reference changing, or a case being accepted lower than it stood, is then a deliberate commit rather than a silent drift under a number. See fixturecheck/references.py."
 }
