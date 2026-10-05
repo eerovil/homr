@@ -21,7 +21,12 @@ from fractions import Fraction
 import numpy as np
 
 from homr.simple_logging import eprint
-from homr.transformer.vocabulary import EncodedSymbol, SymbolDuration, sort_token_chords
+from homr.transformer.vocabulary import (
+    EncodedSymbol,
+    SymbolDuration,
+    printed_meter,
+    sort_token_chords,
+)
 
 #: The order a moment's positions are written in. Anything unexpected is read as the
 #: lower staff, which is what the old upper/lower split did.
@@ -161,6 +166,78 @@ def _corroborated_length(voice: list[SymbolChord], span: tuple[int, int]) -> Fra
         return None
     lengths = set(by_position.values())
     return lengths.pop() if len(lengths) == 1 else None
+
+
+def _signature_in(voice: list[SymbolChord], span: tuple[int, int]) -> EncodedSymbol | None:
+    signatures = [
+        chord.symbols[0]
+        for chord in voice[span[0] : span[1]]
+        if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature")
+    ]
+    return signatures[-1] if signatures else None
+
+
+def _accepted_printed_length(
+    signature: EncodedSymbol, voice: list[SymbolChord], bars: list[tuple[int, int]]
+) -> Fraction | None:
+    """The bar length the page's digits give this span, when the evidence allows it.
+
+    The digits (`time_signature_reader`) and the bars the notes add up to are two
+    readings of one fact, and neither is trusted alone where they disagree:
+
+    - the digits count only when every staff that printed them read the same, and
+      the model's own denominator token says the same denominator;
+    - when any staff of any bar in the span adds up to the printed length, the
+      notes agree, and the digits stand;
+    - when none does, the digits still stand if more than one staff printed them
+      -- two readings of the page against a decoder that misread the rhythms the
+      same way in every bar, which is Legenda system 10's bar 22
+      (eerovil/musescore-choir-plugins#267);
+    - one staff's digits against at least two bars every staff agrees on at some
+      other length lose: that is the notes outvoting a single glance at the page.
+    """
+    printed = printed_meter(signature)
+    if printed is None:
+        return None
+    numerator, denominator = printed
+    if signature.rhythm != f"timeSignature/{denominator}":
+        return None
+    length = Fraction(numerator, denominator)
+    if any(length in _staff_lengths(voice, span).values() for span in bars):
+        return length
+    if len(signature.printed_meters) >= 2:  # noqa: PLR2004
+        return length
+    agreed = [_corroborated_length(voice, span) for span in bars]
+    if any(other is not None and agreed.count(other) >= 2 for other in agreed):  # noqa: PLR2004
+        eprint(
+            f"Printed {numerator}/{denominator} is one staff's reading against the bars: not used"
+        )
+        return None
+    return length
+
+
+def printed_bar_lengths(voice: list[SymbolChord]) -> list[Fraction | None]:
+    """Per bar, the length the printed time signature in force gives it, where accepted."""
+    bars = _bar_boundaries(voice)
+    lengths: list[Fraction | None] = [None] * len(bars)
+    for first, last in _meter_spans(voice, bars):
+        signature = _signature_in(voice, bars[first])
+        if signature is None:
+            continue
+        length = _accepted_printed_length(signature, voice, bars[first:last])
+        lengths[first:last] = [length] * (last - first)
+    return lengths
+
+
+def _printed_per_signature(voice: list[SymbolChord]) -> list[Fraction | None]:
+    """`printed_bar_lengths` taken once per time signature, in stream order."""
+    per_bar = printed_bar_lengths(voice)
+    out: list[Fraction | None] = []
+    for bar, span in enumerate(_bar_boundaries(voice)):
+        for chord in voice[span[0] : span[1]]:
+            if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
+                out.append(per_bar[bar])
+    return out
 
 
 def advance_to_next_group(
@@ -635,7 +712,15 @@ def _bar_targets(voice: list[SymbolChord], bars: list[tuple[int, int]]) -> list[
         spans.append(current)
 
     targets: list[Fraction | None] = [None] * len(bars)
+    printed = printed_bar_lengths(voice)
     for span in spans:
+        if printed[span[0]] is not None:
+            # The page says it: every bar of the span, the opening one too, except
+            # the very first bar of the system, which may be a pickup.
+            for index in span:
+                if index > 0:
+                    targets[index] = printed[span[0]]
+            continue
         agreed = [
             length
             for length in (_corroborated_length(voice, bars[index]) for index in span)
@@ -937,6 +1022,9 @@ def infer_meter_changes(
     bars = _bar_boundaries(voice)
     if not declared or len(bars) < 2:
         return voice
+    # A bar under digits the page prints and the notes allow is a misread bar,
+    # not a change of meter.
+    printed = printed_bar_lengths(voice)
 
     denominator = "4"
     span_no = -1
@@ -954,6 +1042,8 @@ def infer_meter_changes(
             opens_span = True
         if opens_span or span_no < 0 or span_no >= len(declared):
             opens_span = False
+            continue
+        if printed[bar_number - 1] is not None:
             continue
         length = _corroborated_length(voice, (start, end))
         if length is None or length == declared[span_no]:
@@ -1045,7 +1135,13 @@ def find_nominator_per_time_signature(
         current.append(in_measure)
     if started:
         spans.append(current)
-    return [prevailing_length(span) if span else fallback for span in spans]
+    measured = [prevailing_length(span) if span else fallback for span in spans]
+    printed = _printed_per_signature(voice)
+    if len(printed) != len(measured):
+        return measured
+    return [
+        page if page is not None else bars for page, bars in zip(printed, measured, strict=True)
+    ]
 
 
 def prevailing_length(lengths: list[Fraction]) -> Fraction:
@@ -1434,7 +1530,9 @@ def triplets_onto_the_beat(
         for chord in voice[span[0] : span[1]]:
             if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
                 denominator = int(chord.symbols[0].rhythm.split("/")[1])
-                opens_span = True
+                # A signature read off the page after a barline opens a full bar
+                # of the new meter; only the system's first bar may be a pickup.
+                opens_span = bar_number == 1 or printed_meter(chord.symbols[0]) is None
         if denominator is None or opens_span:
             opens_span = False
             continue
@@ -1735,9 +1833,17 @@ def solve_bar_rhythms(
     was.
     """
     bars = _bar_boundaries(voice)
-    found = [_bar_solutions(voice, span) for span in bars]
+    printed = printed_bar_lengths(voice)
+    found = [
+        _bar_solutions(voice, span, length) for span, length in zip(bars, printed, strict=True)
+    ]
     lengths: list[Fraction | None] = [None] * len(bars)
     for first, last in _meter_spans(voice, bars):
+        if printed[first] is not None:
+            # The printed digits, weighed against the notes, settle it -- for a
+            # span of one bar too, which bars alone never can.
+            lengths[first:last] = [printed[first]] * (last - first)
+            continue
         # The music before this system says nothing about bars after a time
         # signature printed in it: Legenda system 10 goes 3/4, 4/4, 3/4.
         hint = bar_length if first == 0 and not _declares_meter(voice, bars[0]) else None
@@ -1802,11 +1908,24 @@ Reading = tuple[tuple[str, ...], list[Fraction], Fraction]
 
 
 def _bar_solutions(
-    voice: list[SymbolChord], span: tuple[int, int]
+    voice: list[SymbolChord], span: tuple[int, int], printed: Fraction | None = None
 ) -> dict[Fraction, dict[str, Reading]] | None:
     """For each bar length, the one consistent reading of every voice, if there is one.
 
     None when the bar is already consistent or cannot be searched at all.
+
+    `printed` is the bar length the page's time signature gives this bar, where
+    one was read and the notes did not outvote it (`printed_bar_lengths`). At that
+    length two guards are lifted, because they exist to stop the search inventing
+    a length and the page has now said what it is: a unison copy is re-read with
+    the voice it copies instead of being held as read, and a voice may have more
+    than one triplet read back as plain. On Legenda system 10's bar 20
+    (eerovil/musescore-choir-plugins#267) the basses' second voice is a unison copy
+    of the first, held at its 7/8 as read, so no reading of the bar could reach
+    the 3/4 the page prints; it now does. Bar 22 still has two equally good
+    readings of one voice at 3/4 and is left as read: the rule that every note
+    must start where one on the other staff can is what rejects the page's own
+    reading there, and changing it is beyond this pass.
     """
     span = (_bar_head(voice, span), span[1])
     chords = voice[span[0] : span[1]]
@@ -1860,9 +1979,10 @@ def _bar_solutions(
         # A voice already ending there as read keeps its reading: only the voices
         # that do not fit the bar are re-read.
         at_end: dict[str, list[Reading]] = {}
+        known = end == printed
         for p, rs in readings.items():
-            fits = [r for r in rs if r[2] == end and _lengthened(r, current[p]) <= 1]
-            if (as_read[p] and as_read[p][0][2] == end) or p in copies:
+            fits = [r for r in rs if r[2] == end and (known or _lengthened(r, current[p]) <= 1)]
+            if (as_read[p] and as_read[p][0][2] == end) or (p in copies and not known):
                 at_end[p] = as_read[p]
             elif fits:
                 at_end[p] = fits

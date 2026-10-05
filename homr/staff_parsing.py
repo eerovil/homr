@@ -21,6 +21,7 @@ from homr.stem_voice_hints import (
     pair_unison_stems,
     rescue_duplicate_pitches,
 )
+from homr.time_signature_reader import attach_printed_meters
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
@@ -502,6 +503,7 @@ def parse_staffs(
             result_staff = _reread_if_doubtful(
                 debug, i, staff, result_staff, image, config, page_to_input_image
             )
+            result_staff = attach_printed_meters(result_staff, image, staff, page_to_input_image)
             if len(result_staff) == 0:
                 raise IncompleteRecognitionError(f"Staff {i}: no symbols were recognized")
             if not any(symbol.rhythm.startswith(("note", "rest")) for symbol in result_staff):
