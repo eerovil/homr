@@ -330,6 +330,10 @@ class EncodedSymbol:
         # chord it took apart: their one value was read for the chord as a whole,
         # so it is evidence about at most one of them.
         self.split_from_chord = False
+        # Set on a time signature by `time_signature_reader.attach_printed_meters`:
+        # the (numerator, denominator) each printed staff shows there, read off the
+        # page. The model's vocabulary has no numerator at all.
+        self.printed_meters: tuple[tuple[int, int], ...] = ()
         # The coordinates mapped back to the image which was given to homr as input
         self.image_coordinates: tuple[float, float] | None = None
         self._duration: SymbolDuration | None = None
@@ -496,6 +500,14 @@ class EncodedSymbol:
         return str(self) > str(other)
 
 
+def printed_meter(symbol: EncodedSymbol) -> tuple[int, int] | None:
+    """The meter every printed staff agrees a time signature shows, if they agree."""
+    readings = set(symbol.printed_meters)
+    if len(readings) != 1:
+        return None
+    return next(iter(readings))
+
+
 def _remove_redudant_clefs_keys_and_time_signatures(
     chords: list[list[EncodedSymbol]],
 ) -> list[list[EncodedSymbol]]:
@@ -520,8 +532,12 @@ def _remove_redudant_clefs_keys_and_time_signatures(
                     key = symbol.rhythm
                     result.append(symbol)
             elif symbol.rhythm.startswith("timeSignature"):
-                if symbol.rhythm != time:
-                    time = symbol.rhythm
+                # Two signatures with one denominator are still two meters when
+                # the page prints different numerators (3/4 then 4/4).
+                printed = printed_meter(symbol)
+                current = symbol.rhythm + ("" if printed is None else f"={printed}")
+                if current != time:
+                    time = current
                     result.append(symbol)
             else:
                 result.append(symbol)

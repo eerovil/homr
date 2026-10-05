@@ -292,7 +292,10 @@ def build_measures(
 
     if len(list(current_measure)) > 0:
         close_current_measure()
-    if first_attributes.find("time") is None:
+    # A signature the stream declares can land in a second attributes block of
+    # the first measure (after the clefs); a fallback written beside it would be
+    # a second, contradicting meter for the same bar.
+    if not measures or measures[0].find(".//time") is None:
         time_el = ET.SubElement(first_attributes, "time")
         # Rounded rather than truncated: the nominator is the *median* of the
         # bars' measured lengths, so over an even number of bars it is an
