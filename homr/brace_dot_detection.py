@@ -277,3 +277,75 @@ def find_braces_brackets_and_grand_staff_lines(
             result.append(MultiStaff([staff], []))
 
     return _create_grandstaffs(_merge_multi_staff_if_they_share_a_staff(result), brace_dot)
+
+
+#: How close two barlines must stand, as a share of the staff's width, to count
+#: as the same barline on two staves. The system finder's measured tolerance.
+_BARLINE_TOLERANCE = 0.008
+#: Barlines this close to either end of a staff are its opening and closing
+#: lines, which every system has wherever its bars fall, so they say nothing.
+_BARLINE_EDGE = 0.02
+#: Fewer interior barlines than this is too little evidence to join on.
+_MIN_SHARED_BARLINES = 2
+
+
+def record_bar_lines(staffs: list[Staff], bar_lines: list[RotatedBoundingBox]) -> None:
+    """Note on each staff where the barlines crossing it stand."""
+    for staff in staffs:
+        staff.bar_line_xs = sorted(
+            float(bar.center[0])
+            for bar in bar_lines
+            if bar.center[1] + bar.size[1] / 2 >= staff.min_y
+            and bar.center[1] - bar.size[1] / 2 <= staff.max_y
+        )
+
+
+def interior_bar_lines(staff: Staff) -> list[float]:
+    """Where a staff's interior barlines stand, a double barline counted once."""
+    width = staff.max_x - staff.min_x
+    merged: list[float] = []
+    for x in staff.bar_line_xs:
+        if not staff.min_x + _BARLINE_EDGE * width < x < staff.max_x - _BARLINE_EDGE * width:
+            continue
+        # A double barline is two detections a few pixels apart; it is one place.
+        if merged and x - merged[-1] <= _BARLINE_TOLERANCE * width:
+            continue
+        merged.append(x)
+    return merged
+
+
+def _same_bar_lines(upper: Staff, lower: Staff) -> bool:
+    """Whether two staves carry the same bars: every interior barline of each
+    has a counterpart on the other."""
+    a = interior_bar_lines(upper)
+    b = interior_bar_lines(lower)
+    if len(a) < _MIN_SHARED_BARLINES or len(a) != len(b):
+        return False
+    tolerance = _BARLINE_TOLERANCE * max(upper.max_x - upper.min_x, lower.max_x - lower.min_x)
+    return all(abs(x - y) <= tolerance for x, y in zip(a, b, strict=True))
+
+
+def join_rows_sharing_bar_lines(rows: list[MultiStaff]) -> list[MultiStaff]:
+    """Join vertically adjacent staff groups that are one printed system.
+
+    A system printed under two brackets -- the tenors bracketed apart from the
+    basses, say -- has no symbol that spans the break between the groups, so
+    the bracket rules leave it as two groups, and two groups are read as two
+    systems one after the other: the lower staves' bars come out appended to
+    the upper staves' parts (Finlandia arr. Morgan, eerovil/musescore-choir-plugins#274,
+    whose eight staves came back as four parts of ten bars).
+
+    What the bracket cannot say the music does: staves of one system carry the
+    same bars, so every barline stands at the same x, while staves of two
+    systems carry different bars. The rule is the system finder's
+    (homr/system_finder.py), tightened from a majority of barlines to all of
+    them in equal number, because a false join here fuses two systems.
+    """
+    ordered = sorted(rows, key=lambda row: row.staffs[0].min_y)
+    result: list[MultiStaff] = []
+    for row in ordered:
+        if result and _same_bar_lines(result[-1].staffs[-1], row.staffs[0]):
+            result[-1] = result[-1].merge(row)
+        else:
+            result.append(row)
+    return result

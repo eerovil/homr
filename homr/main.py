@@ -22,7 +22,9 @@ from homr.bar_readings import bar_readings, embed_readings
 from homr.bounding_boxes import create_rotated_bounding_boxes
 from homr.brace_dot_detection import (
     find_braces_brackets_and_grand_staff_lines,
+    join_rows_sharing_bar_lines,
     prepare_brace_dot_image,
+    record_bar_lines,
 )
 from homr.debug import Debug
 from homr.doubt import find_doubts, mark_doubts
@@ -500,6 +502,7 @@ def detect_staffs_in_image(
     )
     if len(staffs) == 0:
         raise Exception("No staffs found")
+    record_bar_lines(staffs, bar_line_boxes)
     if config.title_detection:
         title_future = detect_title(debug, staffs[0])
     else:
@@ -517,6 +520,7 @@ def detect_staffs_in_image(
     )
 
     multi_staffs = find_braces_brackets_and_grand_staff_lines(debug, staffs, brace_dot)
+    multi_staffs = join_rows_sharing_bar_lines(multi_staffs)
     eprint(
         "Found",
         len(multi_staffs),
