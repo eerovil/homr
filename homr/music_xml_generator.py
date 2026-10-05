@@ -90,11 +90,17 @@ class ConversionState:
 
 class XmlGeneratorArguments:
     def __init__(
-        self, large_page: bool | None = None, metronome: int | None = None, tempo: int | None = None
+        self,
+        large_page: bool | None = None,
+        metronome: int | None = None,
+        tempo: int | None = None,
+        bar_length: Fraction | None = None,
     ):
         self.large_page = large_page
         self.metronome = metronome
         self.tempo = tempo
+        #: The bar length the music before this image was in, when the caller knows it.
+        self.bar_length = bar_length
 
 
 def build_identification() -> ET.Element:
@@ -190,7 +196,7 @@ def build_measures(
         clock, sounding = Fraction(0), []
 
     measure_number = 1
-    reconstructed = reconstruct_voice(voice)
+    reconstructed = reconstruct_voice(voice, args.bar_length)
     if reconstruction_changes is not None:
         reconstruction_changes.extend(reconstructed.changes)
     groups = reconstructed.groups

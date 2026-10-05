@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import Future
 from dataclasses import dataclass
 from enum import Enum
+from fractions import Fraction
 
 import cv2
 import numpy as np
@@ -358,6 +359,18 @@ def _write_confidence(
         file.write("\n")
 
 
+def _parse_bar_length(parser: argparse.ArgumentParser, value: str | None) -> Fraction | None:
+    if value is None:
+        return None
+    try:
+        length = Fraction(value)
+    except (ValueError, ZeroDivisionError):
+        parser.error("--bar-length must be a fraction of a whole note, such as 1 or 3/4")
+    if length <= 0:
+        parser.error("--bar-length must be positive")
+    return length
+
+
 def _load_score_settings(path: str) -> RhythmSettings:
     try:
         with open(path) as file:
@@ -619,6 +632,12 @@ def main() -> None:
         "--no-title", action="store_true", help="Don't detect title for faster inference"
     )
     parser.add_argument(
+        "--bar-length",
+        help="The bar length the music before this image was in, as a fraction of a whole "
+        + "note (e.g. 1 for 4/4, 3/4 for 3/4). Used only to choose between readings of a "
+        + "bar's rhythm that the image alone cannot tell apart.",
+    )
+    parser.add_argument(
         "--system-bounds",
         help="JSON .systems bounds for reading a PDF one printed system at a time",
     )
@@ -730,7 +749,10 @@ def main() -> None:
     )
 
     xml_generator_args = XmlGeneratorArguments(
-        args.output_large_page, args.output_metronome, args.output_tempo
+        args.output_large_page,
+        args.output_metronome,
+        args.output_tempo,
+        bar_length=_parse_bar_length(parser, args.bar_length),
     )
     if args.debug:
         eprint(f"Using Log Level {2} for OnnxRuntime")
