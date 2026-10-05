@@ -893,17 +893,64 @@ def _staff_carries_two_voices(
                 return True
     if clef is None:
         return False
+    for direction, unit in _stem_units(events):
+        positions = [
+            position
+            for event in unit
+            for note in event.notes
+            if (position := _staff_position(note, clef)) is not None
+        ]
+        if not positions:
+            continue
+        # A lone voice stems a chord, and a beamed run, by the note furthest
+        # from the middle line: D5 over A4 stems down although A4 alone would
+        # stem up. Judging each note on its own took such chords and beams for
+        # a second voice and moved them there, leaving voice 1 the rests around
+        # them or every other eighth (eerovil/musescore-choir-plugins#276).
+        above = max(positions) - _MIDDLE_LINE
+        below = _MIDDLE_LINE - min(positions)
+        if direction == "up" and above > below:
+            return True
+        if direction == "down" and below > above:
+            return True
+    return False
+
+
+#: Note values that can share a beam, so share one stem direction.
+_BEAMABLE = {"eighth", "16th", "32nd", "64th", "128th"}
+
+
+def _stem_units(events: list[TimedNoteEvent]) -> list[tuple[str, list[TimedNoteEvent]]]:
+    """The events a lone voice would stem together, with the stem they carry.
+
+    A chord is one unit. So is a run of beamable notes following one another
+    without a gap, all stemmed the same way or with no stem read: that is what
+    a beam looks like here, since the beam itself is not in the reading. A
+    rest, a longer note, a gap or a stem the other way ends the run.
+    """
+    units: list[tuple[str | None, list[TimedNoteEvent]]] = []
     for event in events:
         direction = _direction(event)
-        for note in event.notes:
-            position = _staff_position(note, clef)
-            if position is None:
+        if units and _beamable(event):
+            run_direction, run = units[-1]
+            if (
+                run[-1].end == event.start
+                and _beamable(run[-1])
+                and (direction is None or run_direction is None or direction == run_direction)
+            ):
+                run.append(event)
+                if run_direction is None:
+                    units[-1] = (direction, run)
                 continue
-            if direction == "up" and position > _MIDDLE_LINE:
-                return True
-            if direction == "down" and position < _MIDDLE_LINE:
-                return True
-    return False
+        units.append((direction, [event]))
+    return [(direction, unit) for direction, unit in units if direction is not None]
+
+
+def _beamable(event: TimedNoteEvent) -> bool:
+    return all(
+        note.find("pitch") is not None and note.findtext("type") in _BEAMABLE
+        for note in event.notes
+    )
 
 
 def _shares_a_notehead(note: ET.Element) -> bool:
