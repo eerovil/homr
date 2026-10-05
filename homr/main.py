@@ -7,7 +7,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from fractions import Fraction
 
@@ -24,6 +24,7 @@ from homr.brace_dot_detection import (
     prepare_brace_dot_image,
 )
 from homr.debug import Debug
+from homr.doubt import find_doubts, mark_doubts
 from homr.errors import IncompleteRecognitionError
 from homr.image_prediction import get_predictions, predict_symbols
 from homr.model import InputPredictions, MultiStaff, Staff
@@ -205,6 +206,9 @@ class ProcessingConfig:
     # Only helps across many images (slow one-time MLProgram compile).
     coreml_encoder: bool
     title_detection: bool
+    # Opt-in (--mark-doubt): read the image a second time and put a red mark on
+    # every bar this reading is probably wrong about (homr/doubt.py).
+    mark_doubt: bool = False
 
 
 def process_image(
@@ -273,6 +277,12 @@ def process_image(
             title,
             reconstruction_changes=reconstruction_changes,
         )
+        if config.mark_doubt and config.read_staff_positions:
+            eprint("--mark-doubt needs a second reading of the image; skipped with staff positions")
+        elif config.mark_doubt:
+            second = _second_reading(image_path, config, xml_generator_args)
+            marked = mark_doubts(xml, find_doubts(result_staffs, xml, second))
+            eprint(f"Marked {marked} bar(s) to check against the page")
         ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
         if config.write_confidence:
             confidence_file = replace_extension(image_path, ".confidence.json")
@@ -296,6 +306,47 @@ def process_image(
         if debug_cleanup is not None:
             debug_cleanup.clean_debug_files_from_previous_runs()
     return xml_file
+
+
+SECOND_READING_SCALE = 0.8
+
+
+def _second_reading(
+    image_path: str, config: ProcessingConfig, xml_generator_args: XmlGeneratorArguments
+) -> ET.Element | None:
+    """The same image read again at 80% of its size, or None if that read fails.
+
+    A misreading the decoder is sure of is often not a stable one: a slightly
+    different picture of the same music is read differently where the first
+    reading was wrong (eerovil/musescore-choir-plugins#245).
+    """
+    image = cv2.imread(image_path)
+    if image is None:
+        return None
+    height, width = image.shape[:2]
+    smaller = cv2.resize(
+        image,
+        (round(width * SECOND_READING_SCALE), round(height * SECOND_READING_SCALE)),
+        interpolation=cv2.INTER_LANCZOS4,
+    )
+    with tempfile.TemporaryDirectory(prefix="homr-second-") as scratch:
+        path = os.path.join(scratch, "second.png")
+        cv2.imwrite(path, smaller)
+        second_config = replace(
+            config,
+            mark_doubt=False,
+            write_confidence=False,
+            write_staff_positions=False,
+            enable_debug=False,
+            enable_cache=False,
+            title_detection=False,
+        )
+        try:
+            result = process_image(path, second_config, xml_generator_args)
+            return ET.parse(result).getroot()  # noqa: S314 - our own output
+        except Exception as error:  # noqa: BLE001 - any failure means "not checked"
+            eprint("The second reading failed:", error)
+            return None
 
 
 def _write_confidence(
@@ -586,6 +637,11 @@ def main() -> None:
         help="Writes decoder token confidences to a .confidence.json sidecar",
     )
     parser.add_argument(
+        "--mark-doubt",
+        action="store_true",
+        help="Read the image twice and mark in red every bar the reading is probably wrong about",
+    )
+    parser.add_argument(
         "--score-settings",
         help="JSON file with opt-in decoder constraints, such as no 32nd notes",
     )
@@ -746,6 +802,7 @@ def main() -> None:
         segnet_use_gpu,
         coreml_encoder,
         not args.no_title,
+        args.mark_doubt,
     )
 
     xml_generator_args = XmlGeneratorArguments(
