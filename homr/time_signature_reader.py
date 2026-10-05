@@ -186,7 +186,9 @@ def _line_thickness(ink: NDArray[np.bool_], line_rows: list[NDArray[np.float64]]
     return max(1, int(np.bincount(lengths).argmax()))
 
 
-def _runs(columns: NDArray[np.bool_], gap: int) -> list[tuple[int, int]]:
+def _runs(columns: NDArray[np.bool_] | np.bool_, gap: int) -> list[tuple[int, int]]:
+    """The stretches of True in `columns`, joined across gaps of up to `gap`."""
+    columns = np.atleast_1d(np.asarray(columns, dtype=bool))
     runs: list[tuple[int, int]] = []
     start = None
     last = -(10**9)
