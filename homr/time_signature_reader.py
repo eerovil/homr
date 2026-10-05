@@ -433,6 +433,12 @@ def attach_printed_meters(
     reconstruction can tell digits every staff agrees on from digits one staff
     alone showed (`printed_meter`).
     """
+    if (
+        not isinstance(staff, Staff) or not isinstance(image, np.ndarray) or image.ndim < 2
+    ):  # noqa: PLR2004
+        # Nothing to read the digits off: a caller that hands in no detected staff
+        # or no page gets the stream back as decoded.
+        return symbols
     found: list[tuple[float, PrintedMeter]] = []
     for part in printed_staffs(staff):
         for meter in find_time_signatures(image, part):
