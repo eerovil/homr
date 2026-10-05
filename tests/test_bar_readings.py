@@ -26,14 +26,14 @@ PAGE = ["note_12", "note_12", "note_12", "note_6", "note_12", "note_4", "note_6"
 WRITTEN = ["note_12", "note_12", "note_12", "note_4", "note_12", "note_6", "note_6", "note_12"]
 
 
-def _legenda():
+def _legenda() -> tuple[ET.Element, list[dict]]:
     staffs = _symbols_from_sidecar(DATA / "legenda-s11.confidence.json")
     xml = ET.parse(DATA / "legenda-s11.musicxml").getroot()
     second = ET.parse(DATA / "legenda-s11.second.musicxml").getroot()
     return xml, bar_readings(xml, staffs, find_doubts(staffs, xml, second))
 
 
-def test_legenda_bar_25_offers_the_page_reading():
+def test_legenda_bar_25_offers_the_page_reading() -> None:
     _, readings = _legenda()
     bass = [r for r in readings if (r["part"], r["staff"], r["bar"]) == (0, 2, 3)]
     assert bass, "the doubted bass bar has no readings"
@@ -55,7 +55,7 @@ def test_legenda_bar_25_offers_the_page_reading():
     assert bass[0]["moments"][3]["pitches"] == [{"step": "E", "alter": -1, "octave": 3}]
 
 
-def test_readings_are_ranked_best_first():
+def test_readings_are_ranked_best_first() -> None:
     _, readings = _legenda()
     for entry in readings:
         scores = [r["score"] for r in entry["readings"]]
@@ -63,7 +63,7 @@ def test_readings_are_ranked_best_first():
         assert len(entry["readings"]) >= 2
 
 
-def test_readings_travel_inside_the_musicxml():
+def test_readings_travel_inside_the_musicxml() -> None:
     xml, readings = _legenda()
     embed_readings(xml, readings)
     embed_readings(xml, readings)  # replaced, not added twice
@@ -73,7 +73,7 @@ def test_readings_travel_inside_the_musicxml():
     assert read_readings(ET.fromstring("<score-partwise/>")) == []
 
 
-def test_values_are_spelled_as_the_vocabulary_spells_them():
+def test_values_are_spelled_as_the_vocabulary_spells_them() -> None:
     assert value_of(Fraction(1, 4)) == "note_4"
     assert value_of(Fraction(1, 12)) == "note_12"
     assert value_of(Fraction(3, 8)) == "note_4."
@@ -82,7 +82,7 @@ def test_values_are_spelled_as_the_vocabulary_spells_them():
     assert value_of(Fraction(5, 16)) is None
 
 
-def test_a_plain_note_never_starts_inside_a_triplet():
+def test_a_plain_note_never_starts_inside_a_triplet() -> None:
     beat = Fraction(1, 4)
     assert not _can_follow("note_4", Fraction(1, 12), True, beat)
     assert _can_follow("note_4", Fraction(1, 4), True, beat)
@@ -92,7 +92,7 @@ def test_a_plain_note_never_starts_inside_a_triplet():
     assert _can_follow("note_12", Fraction(1, 2), False, beat)
 
 
-def test_five_triplet_eighths_and_a_quarter_is_not_offered():
+def test_five_triplet_eighths_and_a_quarter_is_not_offered() -> None:
     # Six moments in a 2/4 bar; arithmetic alone also allows 5 x 1/12 + ... nonsense.
     options = [[("note_12", -0.1), ("note_8", -1.0)]] * 3 + [[("note_4", -0.1), ("note_12", -0.5)]]
     found = [values for values, _ in best_readings(options, Fraction(1, 2), top=10)]
@@ -102,6 +102,6 @@ def test_five_triplet_eighths_and_a_quarter_is_not_offered():
         assert len(triplets) % 3 == 0
 
 
-def test_a_voice_with_one_reading_offers_nothing():
+def test_a_voice_with_one_reading_offers_nothing() -> None:
     options = [[("note_4", -0.1)], [("note_4", -0.1)]]
     assert len(best_readings(options, Fraction(1, 2))) == 1

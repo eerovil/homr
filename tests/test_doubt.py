@@ -11,6 +11,7 @@ import math
 import xml.etree.ElementTree as ET
 from fractions import Fraction
 from pathlib import Path
+from typing import Any
 
 from homr.doubt import (
     ACCIDENTAL_UNSURE,
@@ -33,7 +34,15 @@ from homr.transformer.vocabulary import EncodedSymbol
 DATA = Path(__file__).resolve().parent.parent / "fixtures" / "doubt"
 
 
-def _note(rhythm, pitch="C4", position="upper", ranked=None, pitch_p=1.0, lift_p=1.0, pos_p=1.0):
+def _note(
+    rhythm: str,
+    pitch: str = "C4",
+    position: str = "upper",
+    ranked: dict[str, float] | None = None,
+    pitch_p: float = 1.0,
+    lift_p: float = 1.0,
+    pos_p: float = 1.0,
+) -> EncodedSymbol:
     ranked = ranked or {rhythm: 0.95}
     return EncodedSymbol(
         rhythm,
@@ -55,29 +64,30 @@ def _note(rhythm, pitch="C4", position="upper", ranked=None, pitch_p=1.0, lift_p
     )
 
 
-def _sure(rhythm, **kw):
+def _sure(rhythm: str, **kw: Any) -> EncodedSymbol:
     return _note(rhythm, ranked={rhythm: 0.95}, **kw)
 
 
 # ----------------------------------------------------------- the decoder's doubt
 
 
-def test_two_readings_nearly_as_likely_is_a_close_call():
+def test_two_readings_nearly_as_likely_is_a_close_call() -> None:
     # Two notes in a 2/4 bar: quarter+quarter or (dotted quarter+eighth), about equally liked.
     unsure = [
         [_note("note_4", ranked={"note_4": 0.5, "note_4.": 0.45})],
         [_note("note_4", ranked={"note_4": 0.5, "note_8": 0.45})],
     ]
-    assert reading_gap(unsure, Fraction(1, 2)) < 2.0
+    gap = reading_gap(unsure, Fraction(1, 2))
+    assert gap is not None and gap < 2.0
     sure = [[_sure("note_4")], [_sure("note_4")]]
     assert reading_gap(sure, Fraction(1, 2)) == math.inf
 
 
-def test_no_reading_that_fills_the_bar_is_not_a_close_call():
+def test_no_reading_that_fills_the_bar_is_not_a_close_call() -> None:
     assert reading_gap([[_sure("note_4")]], Fraction(1, 1)) is None
 
 
-def test_a_close_call_marks_its_staff_and_names_the_voice():
+def test_a_close_call_marks_its_staff_and_names_the_voice() -> None:
     staffs = [
         [
             _note("note_4", position="lower2", ranked={"note_4": 0.5, "note_4.": 0.45}),
@@ -90,7 +100,7 @@ def test_a_close_call_marks_its_staff_and_names_the_voice():
     assert doubts == {(0, 2, 1): {f"voice 2: {RHYTHM_CLOSE}"}}
 
 
-def test_an_unsure_pitch_or_accidental_marks_the_bar():
+def test_an_unsure_pitch_or_accidental_marks_the_bar() -> None:
     staffs = [
         [
             _sure("note_4", pitch_p=0.6),
@@ -106,7 +116,7 @@ def test_an_unsure_pitch_or_accidental_marks_the_bar():
     assert (0, 1, 3) not in doubts
 
 
-def test_two_voices_giving_one_notehead_different_lengths_is_a_doubt():
+def test_two_voices_giving_one_notehead_different_lengths_is_a_doubt() -> None:
     staffs = [
         [
             _sure("note_4", pitch="E3", position="lower"),
@@ -117,7 +127,7 @@ def test_two_voices_giving_one_notehead_different_lengths_is_a_doubt():
     assert COPIES_DISAGREE in confidence_doubts(staffs, [[Fraction(1, 4)]])[(0, 2, 1)]
 
 
-def test_a_confident_clean_bar_is_not_marked():
+def test_a_confident_clean_bar_is_not_marked() -> None:
     staffs = [[_sure("note_4"), _sure("note_4"), EncodedSymbol("barline")]]
     assert not confidence_doubts(staffs, [[Fraction(1, 2)]])
 
@@ -125,7 +135,7 @@ def test_a_confident_clean_bar_is_not_marked():
 # --------------------------------------------------------------- the score itself
 
 
-def _score(bars, staves=1):
+def _score(bars: Any, staves: int = 1) -> ET.Element:
     """bars: per bar, list of (staff, voice, step, duration in 16ths) or ('backup', 16ths)."""
     root = ET.Element("score-partwise")
     part = ET.SubElement(root, "part", id="P1")
@@ -153,20 +163,20 @@ def _score(bars, staves=1):
     return root
 
 
-def test_a_second_reading_that_differs_marks_only_that_bar_and_staff():
+def test_a_second_reading_that_differs_marks_only_that_bar_and_staff() -> None:
     first = _score([[(1, 1, "C", 8), ("backup", 8), (2, 1, "E", 8)], [(1, 1, "D", 8)]], staves=2)
     second = _score([[(1, 1, "C", 8), ("backup", 8), (2, 1, "F", 8)], [(1, 1, "D", 8)]], staves=2)
     assert reading_doubts(first, second) == {(0, 2, 1): {SECOND_READING}}
     assert not reading_doubts(first, copy.deepcopy(first))
 
 
-def test_a_second_reading_with_another_bar_count_doubts_every_bar():
+def test_a_second_reading_with_another_bar_count_doubts_every_bar() -> None:
     first = _score([[(1, 1, "C", 8)], [(1, 1, "D", 8)]])
     second = _score([[(1, 1, "C", 8)]])
     assert set(reading_doubts(first, second)) == {(0, 1, 1), (0, 1, 2)}
 
 
-def test_no_second_reading_means_nothing_was_checked():
+def test_no_second_reading_means_nothing_was_checked() -> None:
     first = _score([[(1, 1, "C", 8)], [(1, 1, "D", 8)]])
     assert reading_doubts(first, None) == {
         (0, 1, 1): {SECOND_READING_FAILED},
@@ -174,22 +184,27 @@ def test_no_second_reading_means_nothing_was_checked():
     }
 
 
-def test_a_note_at_an_odd_time_is_a_doubt():
+def test_a_note_at_an_odd_time_is_a_doubt() -> None:
     # A 32nd-note offset: the third note starts at 3/32, on no sixteenth or triplet sixteenth.
     root = _score([[(1, 1, "C", 1), (1, 1, "D", 7)]])
     note = root.findall(".//note")[0]
-    note.find("duration").text = "1"  # a 32nd, so D starts at 1/32
+    duration = note.find("duration")
+    assert duration is not None
+    duration.text = "1"  # a 32nd, so D starts at 1/32
     assert odd_time_doubts(root) == {(0, 1, 1): {ODD_TIME}}
     assert not odd_time_doubts(_score([[(1, 1, "C", 4), (1, 1, "D", 4)]]))
 
 
-def test_marks_are_red_words_on_their_staff_at_the_head_of_the_bar():
+def test_marks_are_red_words_on_their_staff_at_the_head_of_the_bar() -> None:
     root = _score([[(1, 1, "C", 8), ("backup", 8), (2, 1, "E", 8)]], staves=2)
     assert mark_doubts(root, {(0, 2, 1): {SECOND_READING, f"voice 2: {RHYTHM_CLOSE}"}}) == 1
     measure = root.find(".//measure")
+    assert measure is not None
     direction = measure.find("direction")
+    assert direction is not None
     assert [c.tag for c in measure][:2] == ["attributes", "direction"]
     words = direction.find("direction-type/words")
+    assert words is not None
     assert words.get("color") == "#FF0000"
     assert words.text == (
         MARK_PREFIX + f"check against the page: voice 2: {RHYTHM_CLOSE}; {SECOND_READING}"
@@ -200,7 +215,7 @@ def test_marks_are_red_words_on_their_staff_at_the_head_of_the_bar():
 # --------------------------------------------------- the bar that started it
 
 
-def _symbols_from_sidecar(path):
+def _symbols_from_sidecar(path: Path) -> list[list[EncodedSymbol]]:
     """Rebuild the decoded symbols, chord links included, from a --output-confidence sidecar."""
     records = json.loads(path.read_text())["symbols"]
     staffs: dict[int, list[EncodedSymbol]] = {}
@@ -226,7 +241,7 @@ def _symbols_from_sidecar(path):
     return [staffs[k] for k in sorted(staffs)]
 
 
-def test_legenda_system_11_bar_25_bass_is_marked():
+def test_legenda_system_11_bar_25_bass_is_marked() -> None:
     staffs = _symbols_from_sidecar(DATA / "legenda-s11.confidence.json")
     xml = ET.parse(DATA / "legenda-s11.musicxml").getroot()
     second = ET.parse(DATA / "legenda-s11.second.musicxml").getroot()
