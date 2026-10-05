@@ -143,7 +143,7 @@ def _heads_for(moment: _Moment, occurrence: int, heads: list[EncodedSymbol]) -> 
     voices share was decoded once per voice, and either copy may be the one
     that offered the right length. A rest is matched the same way among rests.
     """
-    targets = (
+    targets: list[tuple[str, int] | None] = (
         [(p["step"], p["octave"]) for p in moment.pitches] if moment.kind == "note" else [None]
     )
     by_position: dict[str, list[EncodedSymbol]] = defaultdict(list)
