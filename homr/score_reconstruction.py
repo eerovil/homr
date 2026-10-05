@@ -1782,8 +1782,25 @@ def _retimed_bar(
     return rebuilt
 
 
-def _rhythm_options(symbol: EncodedSymbol) -> list[str]:
-    """The value as read, and its plain/triplet twin when it has one."""
+def _rhythm_options(symbol: EncodedSymbol, as_decoded: bool = False) -> list[str]:
+    """The value as read, and its plain/triplet twin when it has one.
+
+    With `as_decoded`, the value the decoder itself read and its twin are offered
+    too, where an earlier pass changed it: on Legenda system 11's bar 24
+    (eerovil/musescore-choir-plugins#245) the passes before this one had turned
+    the basses' first note into a triplet eighth, whose twin is a plain eighth,
+    and the page's triplet quarter -- the twin of the quarter the decoder read --
+    was no longer among the choices. Only where the page prints the bar length:
+    there the length cannot be bent to fit the extra choices.
+    """
+    options = _plain_and_twin(symbol)
+    decoded = _decoded_rhythm(symbol) if as_decoded else None
+    if decoded is not None and decoded != symbol.rhythm and decoded.startswith(("note", "rest")):
+        options += [o for o in _plain_and_twin(symbol.change_rhythm(decoded)) if o not in options]
+    return options
+
+
+def _plain_and_twin(symbol: EncodedSymbol) -> list[str]:
     options = [symbol.rhythm]
     twin = _triplet_twin_of(symbol.rhythm)
     if twin is None and symbol.is_tuplet() and "." not in symbol.rhythm:
@@ -1834,8 +1851,10 @@ def solve_bar_rhythms(
     """
     bars = _bar_boundaries(voice)
     printed = printed_bar_lengths(voice)
+    beats = _beat_per_bar(voice, bars)
     found = [
-        _bar_solutions(voice, span, length) for span, length in zip(bars, printed, strict=True)
+        _bar_solutions(voice, span, length, beat)
+        for span, length, beat in zip(bars, printed, beats, strict=True)
     ]
     lengths: list[Fraction | None] = [None] * len(bars)
     for first, last in _meter_spans(voice, bars):
@@ -1908,7 +1927,10 @@ Reading = tuple[tuple[str, ...], list[Fraction], Fraction]
 
 
 def _bar_solutions(
-    voice: list[SymbolChord], span: tuple[int, int], printed: Fraction | None = None
+    voice: list[SymbolChord],
+    span: tuple[int, int],
+    printed: Fraction | None = None,
+    beat: Fraction | None = None,
 ) -> dict[Fraction, dict[str, Reading]] | None:
     """For each bar length, the one consistent reading of every voice, if there is one.
 
@@ -1944,7 +1966,7 @@ def _bar_solutions(
     current: dict[str, tuple[str, ...]] = {}
     for position, steps in moments.items():
         options = [
-            _rhythm_options(_moment_value(voice, chord_index, indices))
+            _rhythm_options(_moment_value(voice, chord_index, indices), printed is not None)
             for chord_index, indices in steps
         ]
         current[position] = tuple(o[0] for o in options)
@@ -1962,7 +1984,13 @@ def _bar_solutions(
                 cursor += EncodedSymbol(rhythm).get_duration().fraction
             readings[position].append((choice, times, cursor))
     as_read = {p: [r for r in readings[p] if r[0] == current[p]] for p in moments}
-    if _consistent(as_read):
+    as_read_ends = {rs[0][2] for rs in as_read.values() if rs}
+    split = (
+        beat is not None
+        and as_read_ends == {printed}
+        and any(rs and not _triplets_fill_beats(rs[0], beat) for rs in as_read.values())
+    )
+    if _consistent(as_read) and not split:
         chosen_as_read = {p: rs[0] for p, rs in as_read.items()}
         length = next(iter(chosen_as_read.values()))[2]
         if _total_unaligned(chosen_as_read) == 0:
@@ -1971,7 +1999,15 @@ def _bar_solutions(
         refit = _refit_one_staff(readings, chosen_as_read, current)
         return {length: refit if refit is not None else {}}
     copies = _unison_copies(voice, moments)
-    ends = set.intersection(*({r[2] for r in rs} for rs in readings.values()))
+    # Where the page prints the length, that is the one length tried: a voice
+    # sharing a rest printed once for both may stop short of it, and a copy that
+    # doubles its partner pitch for pitch may take the partner's readings
+    # (`_doubled`) where its own values cannot reach it.
+    doubled = _doubled(voice, moments, copies) if printed is not None else {}
+    if printed is not None:
+        ends = {printed}
+    else:
+        ends = set.intersection(*({r[2] for r in rs} for rs in readings.values()))
     solutions: dict[Fraction, dict[str, Reading]] = {}
     for end in sorted(ends):
         if not _plain_length(end):
@@ -1982,10 +2018,20 @@ def _bar_solutions(
         known = end == printed
         for p, rs in readings.items():
             fits = [r for r in rs if r[2] == end and (known or _lengthened(r, current[p]) <= 1)]
-            if (as_read[p] and as_read[p][0][2] == end) or (p in copies and not known):
+            whole_beats = (
+                not known
+                or beat is None
+                or not as_read[p]
+                or _triplets_fill_beats(as_read[p][0], beat)
+            )
+            if (as_read[p] and as_read[p][0][2] == end and whole_beats) or (
+                p in copies and not known
+            ):
                 at_end[p] = as_read[p]
             elif fits:
                 at_end[p] = fits
+            elif known and p in doubled:
+                at_end[p] = [r for r in readings[doubled[p]] if r[2] == end]
             elif as_read[p] and as_read[p][0][2] < end:
                 # Short, and only reachable by stretching several notes: it has
                 # lost notes, and stays as read with the hole showing.
@@ -1997,9 +2043,19 @@ def _bar_solutions(
             for p, rs in at_end.items()
         ):
             continue  # some voice can neither end there nor be left short
-        remaining = _align(at_end)
-        if remaining is not None:
-            remaining = {p: _fewest_changes(rs, current[p]) for p, rs in remaining.items()}
+        if known:
+            if beat is not None:
+                at_end = {
+                    p: [r for r in rs if _triplets_fill_beats(r, beat)] or rs
+                    for p, rs in at_end.items()
+                }
+            remaining: dict[str, list[Reading]] | None = _likeliest_readings(
+                voice, moments, at_end, copies
+            )
+        else:
+            remaining = _align(at_end)
+            if remaining is not None:
+                remaining = {p: _fewest_changes(rs, current[p]) for p, rs in remaining.items()}
         if remaining is not None and all(len(rs) == 1 for rs in remaining.values()):
             solutions[end] = {p: rs[0] for p, rs in remaining.items()}
     return solutions or None
@@ -2083,6 +2139,162 @@ def _lengthened(reading: Reading, current: tuple[str, ...]) -> int:
         for new, old in zip(reading[0], current, strict=True)
         if EncodedSymbol(new).get_duration().fraction > EncodedSymbol(old).get_duration().fraction
     )
+
+
+def _beat_per_bar(voice: list[SymbolChord], bars: list[tuple[int, int]]) -> list[Fraction | None]:
+    """The beat each bar counts in: one over the denominator of the time signature in force."""
+    beats: list[Fraction | None] = []
+    beat: Fraction | None = None
+    for span in bars:
+        for chord in voice[span[0] : span[1]]:
+            if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
+                beat = Fraction(1, int(chord.symbols[0].rhythm.split("/")[1]))
+        beats.append(beat)
+    return beats
+
+
+def _triplets_fill_beats(reading: Reading, beat: Fraction) -> bool:
+    """Whether every run of triplet notes in this reading starts and ends on a beat.
+
+    A page prints a triplet bracket over whole beats: Legenda system 11's bar 24
+    (eerovil/musescore-choir-plugins#245) was read in the basses as two triplet
+    eighths and a triplet quarter from the barline, five twelfths of a bar that
+    no bracket can print, where the page has a quarter-and-eighth triplet on each
+    beat. A run of shorter triplets (sixteenths) need only fill its own third.
+    """
+    values, times, end = reading
+    run_start: Fraction | None = None
+    shortest = Fraction(0)
+    for value, at in [*zip(values, times, strict=True), (None, end)]:
+        symbol = EncodedSymbol(value) if value is not None else None
+        if symbol is not None and symbol.is_tuplet():
+            duration = symbol.get_duration().fraction
+            if run_start is None:
+                run_start, shortest = at, duration
+            shortest = min(shortest, duration)
+            continue
+        if run_start is not None:
+            unit = min(beat, 3 * shortest)
+            if run_start % unit or at % unit:
+                return False
+            run_start = None
+    return True
+
+
+def _likeliest_readings(
+    voice: list[SymbolChord],
+    moments: dict[str, list[tuple[int, list[int]]]],
+    at_end: dict[str, list[Reading]],
+    copies: set[str],
+) -> dict[str, list[Reading]]:
+    """Per voice, the reading of a bar of printed length the decoder itself found likeliest.
+
+    Where the page's digits say how long the bar is, lining the staves up is the
+    wrong question: Legenda system 10's bar 20 (eerovil/musescore-choir-plugins#245)
+    sets a quarter-and-eighth triplet in the basses against plain quarters and an
+    eighth triplet above, so the page's own reading leaves two bass notes starting
+    where no tenor does, and the reading that lines up best puts the basses' last
+    triplet under the tenors' one, which the page does not print. The decoder
+    ranked every value it could have read for each head; the reading whose values
+    it ranked highest, all heads together, is the one kept. A value it did not
+    rank at all counts as half its least likely one.
+
+    A unison copy whose pitches follow its partner's moment for moment takes the
+    partner's reading: bar 22's lower bass voice was read with a value whose twin
+    is not the page's, so no reading of its own can reach the page.
+    """
+    chosen: dict[str, list[Reading]] = {}
+    heads_of: dict[str, list[list[EncodedSymbol]]] = {}
+    for position, readings in at_end.items():
+        heads = [
+            [
+                voice[chord_index].symbols[i]
+                for i in indices
+                if voice[chord_index].symbols[i].rhythm
+                == _moment_value(voice, chord_index, indices).rhythm
+            ]
+            for chord_index, indices in moments[position]
+        ]
+        heads_of[position] = heads
+        scores = [_decoder_likelihood(heads, reading[0]) for reading in readings]
+        best = max(scores)
+        chosen[position] = [r for r, score in zip(readings, scores, strict=True) if score == best]
+    for position in sorted(copies):
+        partner = position[:-1] if position.endswith("2") else position + "2"
+        if partner not in chosen or position not in chosen:
+            continue
+        if _pitches(voice, moments[position]) != _pitches(voice, moments[partner]):
+            continue
+        # One line read twice: of the readings either voice settled on, the one
+        # the decoder found likeliest across both voices' heads is the line's.
+        candidates = {r[0]: r for r in chosen[position] + chosen[partner]}
+        scored = sorted(
+            candidates.values(),
+            key=lambda r: _decoder_likelihood(heads_of[position], r[0])
+            + _decoder_likelihood(heads_of[partner], r[0]),
+            reverse=True,
+        )
+        best = _decoder_likelihood(heads_of[position], scored[0][0]) + _decoder_likelihood(
+            heads_of[partner], scored[0][0]
+        )
+        top = [
+            r
+            for r in scored
+            if _decoder_likelihood(heads_of[position], r[0])
+            + _decoder_likelihood(heads_of[partner], r[0])
+            == best
+        ]
+        chosen[position] = list(top)
+        chosen[partner] = list(top)
+    return chosen
+
+
+def _doubled(
+    voice: list[SymbolChord],
+    moments: dict[str, list[tuple[int, list[int]]]],
+    copies: set[str],
+) -> dict[str, str]:
+    """The unison copies that sing their partner's pitches moment for moment, and that partner.
+
+    Legenda system 11's bar 25 (eerovil/musescore-choir-plugins#245): the lower
+    bass voice was read with a triplet eighth whose twin is not the page's
+    triplet quarter, so no reading of its own fills the 4/4 the page prints,
+    and the whole bar was left as read. The upper bass voice can, and the two
+    are one line.
+    """
+    out = {}
+    for position in copies:
+        partner = position[:-1] if position.endswith("2") else position + "2"
+        if partner in moments and _pitches(voice, moments[position]) == _pitches(
+            voice, moments[partner]
+        ):
+            out[position] = partner
+    return out
+
+
+def _pitches(voice: list[SymbolChord], steps: list[tuple[int, list[int]]]) -> list[set[str]]:
+    return [
+        {voice[chord_index].symbols[i].pitch for i in indices} for chord_index, indices in steps
+    ]
+
+
+def _decoder_likelihood(heads: list[list[EncodedSymbol]], values: tuple[str, ...]) -> float:
+    """How likely the decoder found these values for these moments, in log probability."""
+    total = 0.0
+    for moment, value in zip(heads, values, strict=True):
+        for symbol in moment:
+            ranked = {
+                alternative["value"]: alternative["probability"]
+                for alternative in (
+                    (symbol.confidence or {}).get("rhythm", {}).get("alternatives", [])
+                )
+            }
+            floor = min(ranked.values()) / 2 if ranked else _UNRANKED_PROBABILITY
+            total += math.log(max(ranked.get(value, floor), _UNRANKED_PROBABILITY))
+    return total
+
+
+_UNRANKED_PROBABILITY = 1e-6
 
 
 def _fewest_changes(readings: list[Reading], current: tuple[str, ...]) -> list[Reading]:
