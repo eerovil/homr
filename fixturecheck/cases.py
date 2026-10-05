@@ -48,6 +48,14 @@ PIN_FILES = FIXTURES / "pins"
 #: host state: a fresh clone of this fork has fixtures and no songs, and must
 #: still be able to run the committed ones.
 CHOIR = Path(os.environ.get("CHOIR_REPO", Path.home() / "musescore-choir-plugins"))
+#: The private songs repository, whose `homr-fixtures/` holds cases cut from
+#: songs that cannot be committed here: a crop and a hand-checked reference
+#: each, listed in `cases.json`. Absent on a clone without access, which then
+#: simply has no private cases.
+PRIVATE = (
+    Path(os.environ.get("CHOIR_SONGS_REPO", Path.home() / "musescore-choir-songs"))
+    / "homr-fixtures"
+)
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,27 @@ def pinned_cases() -> list[Case]:
             why=entry.get("why", ""),
         )
         for name, entry in sorted(listed.get("pins", {}).items())
+    ]
+
+
+def private_cases() -> list[Case]:
+    """Cases from the private songs repository, when it is checked out here."""
+    register = PRIVATE / "cases.json"
+    if not register.exists():
+        return []
+    try:
+        listed = json.loads(register.read_text())
+    except ValueError:
+        return []
+    return [
+        Case(
+            name=name,
+            image=PRIVATE / entry["image"],
+            reference=PRIVATE / entry["reference"],
+            origin="private",
+            why=entry.get("why", ""),
+        )
+        for name, entry in sorted(listed.get("cases", {}).items())
     ]
 
 
@@ -200,7 +229,7 @@ def sample() -> list[str]:
 
 def resolve(names: list[str]) -> list[Case]:
     """Turn case names into cases, building song systems where needed."""
-    committed = {case.name: case for case in committed_cases()}
+    committed = {case.name: case for case in committed_cases() + private_cases()}
     found: list[Case] = []
     for name in names:
         if name in committed:
@@ -295,6 +324,6 @@ def pin(name: str, source: Case, first: int, last: int, why: str,
 
 def every() -> list[str]:
     """Every case this host can offer: the fixtures, then the songs."""
-    return [case.name for case in committed_cases()] + [
+    return [case.name for case in committed_cases() + private_cases()] + [
         f"{slug}-s{index}" for slug, index in song_systems()
     ]
