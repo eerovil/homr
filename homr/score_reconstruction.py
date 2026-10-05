@@ -11,6 +11,7 @@ replaced without silently changing what homr believes the music is.
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 from collections import defaultdict
@@ -221,7 +222,9 @@ def _tuplet_twin(rhythm: str, alternative: str) -> bool:
 
 
 def repair_tuplet_overlaps(
-    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+    voice: list[SymbolChord],
+    changes: list[ReconstructionChange] | None = None,
+    restore_decoded: bool = False,
 ) -> list[SymbolChord]:
     """Read a note as a tuplet's (or not) when that is what lets its own voice go on.
 
@@ -246,6 +249,24 @@ def repair_tuplet_overlaps(
       clock re-run with the change -- or, for its voice's last note in the bar,
       exactly when the bar ends (eerovil/musescore-choir-plugins#245: Legenda
       bar 2's last triplet eighth ran an eighth past its barline).
+
+    A gap is closed one more way, for a note `voices_from_opposite_stems` took out
+    of a chord (eerovil/musescore-choir-plugins#265): its value was read for the
+    chord, so its own plain or triplet twin is tried when the decoder offered it
+    and it ends the note exactly when its voice next sounds. The other voice
+    singing in the gap does not stop this one -- that voice is the chord's other
+    half, now singing its own value.
+
+    With `restore_decoded`, which `reconstruct_voice` asks for once every other
+    pass has run, that is all it does: a note an earlier pass re-valued, which
+    still leaves a gap, gets back the value the decoder read when that is the one
+    that closes it. Only then, because before `retime_onto_steady_voices` a gap
+    can be a note grouped a moment late rather than a value read wrong (Legenda
+    system 3, bar 7). On Legenda system 9, bar 18 `complete_open_triplets` read the
+    second tenor's plain quarter as a triplet quarter, closing a "triplet" that
+    was really the tail of one the decoder had read plain, and once
+    `triplets_onto_the_beat` had mended those notes the quarter stood a third of
+    a beat short of the next.
 
     Nothing else about the note changes, and no other value is tried: a voice that
     overlaps itself for any other reason -- two voices sharing one position label,
@@ -282,8 +303,24 @@ def repair_tuplet_overlaps(
                 leaves_gap = ends_now < onsets[following] and following < len(moments)
                 if not overlaps and not leaves_gap:
                     continue
-                if leaves_gap and _partner_sings_between(
-                    voice, moments[offset + 1 : following], symbol.position
+                # A note taken out of a chord by its stem kept the chord's value,
+                # which may be its staff-mate's: the partner singing in its gap is
+                # then the reason for the gap, not a copy this voice lost.
+                own_value_in_doubt = leaves_gap and symbol.split_from_chord
+                # A note an earlier repair gave another value, and that now leaves
+                # a gap: the value the decoder read may be the one that fits.
+                decoded = _decoded_rhythm(symbol)
+                repaired_into_gap = (
+                    restore_decoded and leaves_gap and decoded not in (None, symbol.rhythm)
+                )
+                if restore_decoded and not repaired_into_gap:
+                    continue
+                if (
+                    leaves_gap
+                    and not own_value_in_doubt
+                    and _partner_sings_between(
+                        voice, moments[offset + 1 : following], symbol.position
+                    )
                 ):
                     # The other voice of the staff sings in the gap: this voice
                     # most likely lost its copy of that note, not its own length.
@@ -304,7 +341,19 @@ def repair_tuplet_overlaps(
                     twin_beside = (
                         overlaps and _tuplet_twin(symbol.rhythm, candidate) and candidate in beside
                     )
-                    if not twin_beside:
+                    own_twin = (
+                        clock_trusted
+                        and _tuplet_twin(symbol.rhythm, candidate)
+                        and (
+                            (own_value_in_doubt and candidate in _all_alternatives(symbol))
+                            or (repaired_into_gap and candidate == decoded)
+                        )
+                    )
+                    if own_twin:
+                        lasts = EncodedSymbol(candidate).get_duration().fraction
+                        if onsets[offset] + lasts != onsets[following]:
+                            continue
+                    elif not twin_beside:
                         if not clock_trusted or not _inside_its_triplet(chord, symbol, candidate):
                             continue
                         # Read only off the moments as they stand: shortening a note
@@ -430,6 +479,12 @@ def repair_tuplet_overlaps_until_settled(
 
 
 _MAX_REPAIR_PASSES = 256
+
+
+def _decoded_rhythm(symbol: EncodedSymbol) -> str | None:
+    """The value the decoder itself read for this symbol, before any repair."""
+    value = (symbol.confidence or {}).get("rhythm", {}).get("value")
+    return value if isinstance(value, str) else None
 
 
 def _all_alternatives(symbol: EncodedSymbol) -> list[str]:
@@ -1037,6 +1092,85 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
     return find_common_division(durations), nominator
 
 
+def voices_from_opposite_stems(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Move a note to the voice its stem says, where its own voice holds a second stem.
+
+    On Legenda system 9, bar 18 (eerovil/musescore-choir-plugins#265) the basses
+    cross on beat 3: the second voice's G is printed above the first voice's E,
+    stem down, and the E stem up. The decoder read the two heads as one chord of
+    the first voice and left the second voice nothing there, so its G went into
+    the wrong part, the second voice ended a beat short, and the bar was written
+    with every later note of both voices early.
+
+    A chord's heads share one stem, so two notes of one voice in one moment whose
+    heads the segmentation found with **opposite** stems are not a chord: they are
+    the staff's two voices meeting. The model's voice mark otherwise outranks a
+    stem (#225); this is the one shape where the mark is refuted by the moment
+    itself, the same argument `stem_voice_hints._pair` makes for a unison.
+
+    Moved only when every note of that voice in the moment has a stem of its own
+    (`up` or `down`, not shared, not missing), both directions are there, and the
+    staff's other voice has no note in the moment. The note whose stem names the
+    other voice -- down for a first voice, up for a second -- goes there. Values
+    are not touched here; every note of the chord is marked `split_from_chord`,
+    because the one value the decoder read for it describes at most one of them,
+    and `repair_tuplet_overlaps` may then give another its own.
+    """
+    out = list(voice)
+    for bar_number, span in enumerate(_bar_boundaries(voice), start=1):
+        for chord_index in range(span[0], span[1]):
+            symbols = list(out[chord_index].symbols)
+            moved = False
+            for staff in ("upper", "lower"):
+                for position, other, foreign in (
+                    (staff, staff + "2", "down"),
+                    (staff + "2", staff, "up"),
+                ):
+                    notes = [
+                        i
+                        for i, symbol in enumerate(symbols)
+                        if symbol.position == position and symbol.rhythm.startswith("note")
+                    ]
+                    if any(
+                        symbol.position == other and symbol.rhythm.startswith("note")
+                        for symbol in symbols
+                    ):
+                        continue
+                    directions = [symbols[i].stem_direction for i in notes]
+                    if set(directions) != {"up", "down"}:
+                        continue
+                    for i in notes:
+                        symbol = copy.copy(symbols[i])
+                        symbol.split_from_chord = True
+                        if symbol.stem_direction == foreign:
+                            symbol.position = other
+                            why = f"its stem is {foreign} and its voice holds the other stem here"
+                            if changes is not None:
+                                changes.append(
+                                    ReconstructionChange(
+                                        kind="voice_from_stem",
+                                        bar=bar_number,
+                                        group=chord_index,
+                                        symbol=i,
+                                        staff=position,
+                                        pitch=symbol.pitch,
+                                        before=position,
+                                        after=other,
+                                        reason=why,
+                                    )
+                                )
+                            eprint(
+                                f"Voice: moving {symbol.pitch} from {position} to {other}, {why}"
+                            )
+                        symbols[i] = symbol
+                        moved = True
+            if moved:
+                out[chord_index] = SymbolChord(symbols, out[chord_index].tuplet_mark)
+    return out
+
+
 def group_into_chords(voice: list[EncodedSymbol]) -> list[SymbolChord]:
     return [SymbolChord(s) for s in sort_token_chords(voice)]
 
@@ -1582,13 +1716,17 @@ def reconstruct_voice(voice: list[EncodedSymbol]) -> ReconstructedVoice:
     """Apply homr's musical reconstruction passes in their established order."""
     changes: list[ReconstructionChange] = []
     groups = group_into_chords(voice)
+    groups = voices_from_opposite_stems(groups, changes)
+    # Before the triplets: a unison copy's skipped note leaves a gap that would
+    # otherwise read as a triplet still open (#265, Legenda system 9, bar 19).
+    groups = fill_unison_copies(groups, changes)
     groups = complete_open_triplets(groups, changes)
     groups = triplets_onto_the_beat(groups, changes)
-    groups = fill_unison_copies(groups, changes)
     groups = repair_tuplet_overlaps_until_settled(groups, changes)
     groups = triplets_to_match_the_other_staff(groups, changes)
     groups = repair_tuplet_overlaps_until_settled(groups, changes)
     groups = retime_onto_steady_voices(groups, changes)
+    groups = repair_tuplet_overlaps(groups, changes, restore_decoded=True)
     groups = repair_bar_arithmetic(groups, changes)
     groups = add_tuplet_start_stop(groups)
     groups = infer_meter_changes(groups, changes)

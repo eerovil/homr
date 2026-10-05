@@ -326,6 +326,10 @@ class EncodedSymbol:
         # transformer prediction and intentionally does not affect equality or
         # token serialization.
         self.stem_direction = stem_direction
+        # Set by `score_reconstruction.voices_from_opposite_stems` on the notes of a
+        # chord it took apart: their one value was read for the chord as a whole,
+        # so it is evidence about at most one of them.
+        self.split_from_chord = False
         # The coordinates mapped back to the image which was given to homr as input
         self.image_coordinates: tuple[float, float] | None = None
         self._duration: SymbolDuration | None = None
