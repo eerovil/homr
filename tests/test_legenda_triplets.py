@@ -32,6 +32,7 @@ from homr.score_reconstruction import (
     fill_unison_copies,
     repair_tuplet_overlaps_until_settled,
     retime_onto_steady_voices,
+    solve_bar_rhythms,
     triplets_onto_the_beat,
     triplets_to_match_the_other_staff,
 )
@@ -570,3 +571,212 @@ def test_a_voice_grouped_a_moment_late_is_moved_to_where_its_values_put_it() -> 
 def test_a_bar_whose_voices_do_not_end_together_is_not_regrouped() -> None:
     bar = legenda_system_3_bar_7()  # tenors still plain: 11/8 against the basses' whole
     assert retime_onto_steady_voices(bar) == bar
+
+
+def legenda_system_5() -> list[SymbolChord]:
+    """System 5 as the decoder read it: bar 10 plain throughout, bar 11 half right.
+
+    The page prints quarter-and-eighth triplets in every voice of bar 10. In bar
+    11 the tenors' and B1's second beat is a quarter-and-eighth triplet, B2 sings
+    triplets throughout, and B1's third beat is a plain quarter the decoder read
+    as a triplet one.
+    """
+    bar_10 = []
+    for beat in range(4):
+        last = beat == 3  # the decoder did read the tenor's last pair as a triplet
+        bar_10.append(
+            moment(
+                note("note_6" if last else "note_4", "upper", "F5"),
+                note("note_4", "upper2", "D5"),
+                note("note_4", "lower", "G3"),
+                note("note_4", "lower2", "G2"),
+            )
+        )
+        bar_10.append(
+            moment(
+                note("note_12" if last else "note_8", "upper", "F5"),
+                note("note_8", "upper2", "D5"),
+                note("note_8", "lower", "G3"),
+                note("note_8", "lower2", "C3"),
+            )
+        )
+    bar_11 = [
+        moment(
+            note("note_4", "upper", "B4"),
+            note("note_4", "upper2", "G4"),
+            note("note_4", "lower", "F3"),
+            note("note_6", "lower2", "G2"),
+        ),
+        moment(note("note_12", "lower2", "C3")),
+        moment(
+            note("note_6", "upper", "B4"),
+            note("note_6", "upper2", "G4"),
+            note("note_6", "lower", "F3"),
+            note("note_12", "lower2", "D3"),
+        ),
+        moment(note("note_12", "lower2", "E3")),
+        moment(
+            note("note_12", "upper", "A4"),
+            note("note_8", "upper2", "A4"),
+            note("note_12", "lower", "F3"),
+            note("note_12", "lower2", "F3"),
+        ),
+        moment(
+            note("note_4", "upper", "G4"),
+            note("note_4", "upper2", "G4"),
+            note("note_6", "lower", "E3"),
+            note("note_6", "lower2", "G3"),
+        ),
+        moment(note("note_12", "lower2", "C3")),
+        moment(
+            note("note_4", "upper", "C5"),
+            note("note_4", "upper2", "G4"),
+            note("note_4", "lower", "E3"),
+            note("note_6", "lower2", "B2"),
+        ),
+        moment(note("note_12", "lower2", "A2")),
+    ]
+    return [*bar_10, barline(), *bar_11, barline()]
+
+
+def test_a_system_read_plain_where_the_page_prints_triplets_is_solved_bar_by_bar() -> None:
+    voice = solve_bar_rhythms(legenda_system_5())
+    assert rhythms(voice, "upper")[:8] == ["note_6", "note_12"] * 4
+    assert rhythms(voice, "lower2")[:8] == ["note_6", "note_12"] * 4
+    assert rhythms(voice, "upper2")[8:] == ["note_4", "note_6", "note_12", "note_4", "note_4"]
+    assert rhythms(voice, "lower")[8:] == ["note_4", "note_6", "note_12", "note_4", "note_4"]
+
+
+def test_a_single_bar_is_never_solved_on_its_own_length() -> None:
+    only_bar_10 = legenda_system_5()[:9]
+    assert solve_bar_rhythms(only_bar_10) == only_bar_10
+
+
+def test_a_bar_whose_voices_already_agree_is_left_alone() -> None:
+    """A bar every voice reads at one length is a meter, even if not the others'."""
+    system = legenda_system_5()
+    for chord in system[:8]:
+        chord.symbols = [
+            s.change_rhythm({"note_6": "note_4", "note_12": "note_8"}.get(s.rhythm, s.rhythm))
+            for s in chord.symbols
+        ]
+    assert rhythms(solve_bar_rhythms(system), "upper")[:8] == ["note_4", "note_8"] * 4
+
+
+def legenda_system_4_bar_9() -> list[SymbolChord]:
+    """System 4, bar 9 after the note-by-note rules: it adds up, but the tenors are wrong.
+
+    The page: tenors and B1 sing a triplet of eighths, two plain eighths, a
+    quarter-and-eighth triplet and two plain eighths; B2 sings triplets
+    throughout. The decoder read the basses right and the tenors as four plain
+    eighths and a run of triplets -- which ends on the barline too.
+    """
+    tenor = ["note_8"] * 4 + ["note_12", "note_6", "note_12", "note_12", "note_12"]
+    bass_1 = ["note_12"] * 3 + ["note_8", "note_8", "note_6", "note_12", "note_8", "note_8"]
+    bass_2 = ["note_6"] + ["note_12"] * 4 + ["note_6", "note_12", "note_6", "note_12"]
+    bar = []
+    for rhythms_at in zip(tenor, bass_1, bass_2, strict=True):
+        bar.append(
+            moment(
+                note(rhythms_at[0], "upper", "G5"),
+                note(rhythms_at[0], "upper2", "C5"),
+                note(rhythms_at[1], "lower", "G3"),
+                note(rhythms_at[2], "lower2", "C3"),
+            )
+        )
+    whole = [
+        moment(
+            note("note_2", "upper", "D5"),
+            note("note_2", "upper2", "B4"),
+            note("note_2", "lower", "F3"),
+            note("note_2", "lower2", "B2"),
+        ),
+        moment(
+            note("note_2", "upper", "B4"),
+            note("note_2", "upper2", "B4"),
+            note("note_2", "lower", "F3"),
+            note("note_2", "lower2", "B2"),
+        ),
+    ]
+    return [*whole, barline(), *bar, barline()]
+
+
+def test_a_staff_that_adds_up_but_does_not_line_up_is_read_against_the_other() -> None:
+    voice = solve_bar_rhythms(legenda_system_4_bar_9())
+    expected_tenor = ["note_12"] * 3 + ["note_8", "note_8", "note_6", "note_12", "note_8", "note_8"]
+    assert rhythms(voice, "upper")[2:] == expected_tenor
+    assert rhythms(voice, "upper2")[2:] == expected_tenor
+    assert rhythms(voice, "lower")[2:] == ["note_12"] * 3 + [
+        "note_8",
+        "note_8",
+        "note_6",
+        "note_12",
+        "note_8",
+        "note_8",
+    ]
+
+
+def test_a_voice_that_doubles_its_staff_mate_is_never_stretched_over_a_lost_copy() -> None:
+    """Sangerhilsen system 6, bar 1: each tenor copy lost a different triplet note."""
+    bar = [
+        moment(
+            note("note_2", "upper", "C5"),
+            note("note_2", "upper2", "C5"),
+            note("note_2", "lower", "C4"),
+            note("note_2", "lower2", "C4"),
+        ),
+        moment(
+            note("note_4", "upper", "C5"),
+            note("note_4", "upper2", "C5"),
+            note("note_4", "lower", "C4"),
+            note("note_4", "lower2", "C4"),
+        ),
+        moment(
+            note("note_12", "upper", "C4"),
+            note("note_12", "upper2", "C4"),
+            note("note_12", "lower", "C3"),
+            note("note_12", "lower2", "C3"),
+        ),
+        moment(
+            note("note_12", "upper", "E4"),
+            note("note_12", "lower", "E3"),
+            note("note_12", "lower2", "E3"),
+        ),
+        moment(
+            note("note_12", "upper2", "G4"),
+            note("note_12", "lower", "G3"),
+            note("note_12", "lower2", "G3"),
+        ),
+        barline(),
+    ]
+    system = bar + list(bar)
+    voice = solve_bar_rhythms(system)
+    assert rhythms(voice, "upper") == rhythms(system, "upper")
+    assert rhythms(voice, "upper2") == rhythms(system, "upper2")
+
+
+def legenda_system_8_bar() -> list[SymbolChord]:
+    """A bar of Legenda system 8 as read: plain eighths and quarters, both staves.
+
+    The page prints eighth-then-quarter triplets. Read as triplets it is 4/4;
+    read as written it is 6/4 -- and nothing in the image says which.
+    """
+    bar = []
+    for rhythm in ["note_8", "note_4"] * 4:
+        bar.append(
+            moment(
+                note(rhythm, "upper", "G4"),
+                note(rhythm, "upper2", "C4"),
+                note(rhythm, "lower", "G3"),
+                note(rhythm, "lower2", "C3"),
+            )
+        )
+    bar[-1].symbols[-1] = note("note_6", "lower2", "C3")  # one voice does not fit as read
+    return bar
+
+
+def test_a_system_that_fits_two_lengths_takes_the_one_the_music_was_in() -> None:
+    system = [*legenda_system_8_bar(), barline(), *legenda_system_8_bar(), barline()]
+    assert solve_bar_rhythms(system) == system
+    solved = solve_bar_rhythms(system, bar_length=Fraction(1))
+    assert rhythms(solved, "upper")[:8] == ["note_12", "note_6"] * 4
