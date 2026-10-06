@@ -23,6 +23,7 @@ from homr.doubt import (
     RHYTHM_CLOSE,
     SECOND_READING,
     SECOND_READING_FAILED,
+    SILENT_BESIDE_CHORD,
     confidence_doubts,
     find_doubts,
     interval_doubts,
@@ -30,6 +31,7 @@ from homr.doubt import (
     odd_time_doubts,
     reading_doubts,
     reading_gap,
+    silent_beside_chord_doubts,
 )
 from homr.transformer.vocabulary import EncodedSymbol
 
@@ -272,3 +274,39 @@ def test_a_doubly_diminished_fifth_is_a_doubt() -> None:
 def test_a_diminished_or_augmented_fifth_is_ordinary() -> None:
     for low, high in ((0, 0), (1, 0), (0, 1), (0, -1), (-1, 0)):
         assert not interval_doubts(_fifth(low, high)), (low, high)
+
+
+def _two_voices(upper: str, lower: str) -> ET.Element:
+    """One bar of one staff, eighth notes at 2 divisions, the two voices as written."""
+    return ET.fromstring(
+        '<score-partwise><part id="P1"><measure number="1"><attributes>'
+        "<divisions>2</divisions></attributes>"
+        f"{upper}<backup><duration>8</duration></backup>{lower}</measure></part></score-partwise>"
+    )
+
+
+def _n(step: str, voice: int, length: int = 2, chord: bool = False) -> str:
+    return (
+        "<note>"
+        + ("<chord/>" if chord else "")
+        + f"<pitch><step>{step}</step><octave>4</octave></pitch>"
+        f"<duration>{length}</duration><voice>{voice}</voice><staff>1</staff></note>"
+    )
+
+
+def test_a_voice_silent_beside_the_other_voices_chord_is_a_doubt() -> None:
+    """Finlandia system 10 (eerovil/musescore-choir-plugins#274), in made-up notes:
+    the upper voice's third note went into the lower voice as a chord, leaving the
+    upper voice nothing on that beat."""
+    upper = _n("E", 1, 4) + "<forward><duration>2</duration></forward>" + _n("E", 1)
+    lower = _n("C", 2, 4) + _n("C", 2) + _n("A", 2, chord=True) + _n("C", 2)
+    assert silent_beside_chord_doubts(_two_voices(upper, lower)) == {
+        (0, 1, 1): {SILENT_BESIDE_CHORD}
+    }
+
+
+def test_a_chord_beside_a_rest_or_a_note_is_ordinary() -> None:
+    resting = _n("E", 1, 4) + "<note><rest/><duration>2</duration><voice>1</voice></note>"
+    lower = _n("C", 2, 4) + _n("C", 2) + _n("A", 2, chord=True) + _n("C", 2)
+    assert not silent_beside_chord_doubts(_two_voices(resting + _n("E", 1), lower))
+    assert not silent_beside_chord_doubts(_two_voices(_n("E", 1, 6) + _n("E", 1), lower))

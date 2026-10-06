@@ -7,7 +7,7 @@ the score would not notice either, so it would reach the practice track. The
 owner's requirement is that no wrong bar goes unmarked; false alarms come
 second.
 
-Four rules, each catching what the others miss. The first three were measured on 38 printed
+Five rules, each catching what the others miss. The first three were measured on 38 printed
 systems (Legenda, the five recognition fixtures and four songs): on the bars
 with owner-checked references, all 9 wrong ones are marked, along with 39 of
 the 117 right ones; on the songs whose references are less certain, 26 of 27.
@@ -24,6 +24,9 @@ the 117 right ones; on the songs whose references are less certain, 26 of 27.
 - Two notes struck together make an interval music does not use
   (`interval_doubts`): a doubly augmented or diminished one, which a misread
   accidental makes and a printed score does not.
+- A voice falls silent, with no rest, where the other voice of its staff
+  strikes two heads at once (`silent_beside_chord_doubts`): a note handed to
+  the wrong voice.
 
 Each marked bar gets a red `⚠` text at its head, on its own staff, naming what
 was doubted. It is not on the page, which is why it is opt-in (`--mark-doubt`).
@@ -57,6 +60,7 @@ SECOND_READING = "a second reading came out different"
 SECOND_READING_FAILED = "the second reading failed"
 ODD_TIME = "a note starts at an odd time"
 ODD_INTERVAL = "an accidental makes an interval music does not use"
+SILENT_BESIDE_CHORD = "a voice falls silent where the other holds two notes"
 
 # (part index, staff within the part from 1, bar from 1) -> reasons
 Doubts = dict[tuple[int, int, int], set[str]]
@@ -365,6 +369,58 @@ def interval_doubts(xml: ET.Element) -> Doubts:
     return doubts
 
 
+def silent_beside_chord_doubts(xml: ET.Element) -> Doubts:
+    """The bars where a voice falls silent -- no note, no rest -- at a moment the
+    other voice of its staff strikes two heads at once.
+
+    That is a note given to the wrong voice: on Finlandia system 10
+    (eerovil/musescore-choir-plugins#274) the first tenor's A flat was written
+    into the second tenor's voice as a chord on her G, and the first tenor had a
+    hole on that beat. Printed music fills a voice's silence with a rest, so no
+    hand-checked reference of that card or the recognition fixtures shows it.
+    """
+    doubts: Doubts = defaultdict(set)
+    for part_index, part in enumerate(xml.findall("part")):
+        divisions = 1
+        for bar, measure in enumerate(part.findall("measure"), start=1):
+            at = previous = Fraction(0)
+            spans: dict[tuple[str, str], list[tuple[Fraction, Fraction]]] = defaultdict(list)
+            heads: dict[tuple[str, str, Fraction], int] = defaultdict(int)
+            for element in measure:
+                text = element.findtext("divisions")
+                if element.tag == "attributes" and text:
+                    divisions = int(text)
+                if element.tag in ("backup", "forward"):
+                    step = Fraction(int(element.findtext("duration") or 0), divisions * 4)
+                    at += -step if element.tag == "backup" else step
+                    continue
+                if element.tag != "note" or element.find("grace") is not None:
+                    continue
+                duration = Fraction(int(element.findtext("duration") or 0), divisions * 4)
+                chord = element.find("chord") is not None
+                onset = previous if chord else at
+                if not chord:
+                    previous, at = at, at + duration
+                key = (element.findtext("staff") or "1", element.findtext("voice") or "1")
+                if not chord:
+                    spans[key].append((onset, onset + duration))
+                if element.find("pitch") is not None:
+                    heads[(key[0], key[1], onset)] += 1
+            for (staff, voice), covered in spans.items():
+                start = min(a for a, _ in covered)
+                end = max(b for _, b in covered)
+                for (other_staff, other, onset), count in heads.items():
+                    if (
+                        other_staff == staff
+                        and other != voice
+                        and count >= 2  # noqa: PLR2004
+                        and start < onset < end
+                        and not any(a <= onset < b for a, b in covered)
+                    ):
+                        doubts[(part_index, int(staff), bar)].add(SILENT_BESIDE_CHORD)
+    return doubts
+
+
 def find_doubts(
     staffs: list[list[EncodedSymbol]], xml: ET.Element, second: ET.Element | None
 ) -> Doubts:
@@ -374,6 +430,7 @@ def find_doubts(
         reading_doubts(xml, second),
         odd_time_doubts(xml),
         interval_doubts(xml),
+        silent_beside_chord_doubts(xml),
     ):
         for key, reasons in found.items():
             doubts[key] |= reasons
@@ -388,6 +445,7 @@ _ORDER = [
     COPIES_DISAGREE,
     ODD_TIME,
     ODD_INTERVAL,
+    SILENT_BESIDE_CHORD,
     SECOND_READING,
     SECOND_READING_FAILED,
 ]
