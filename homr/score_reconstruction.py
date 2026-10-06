@@ -1367,6 +1367,11 @@ def fill_unison_copies(
                 continue
             copied = {chord_index for chord_index, _ in copies}
             onsets = _onsets(voice, span)
+            shared_only = all(
+                voice[chord_index].symbols[i].stem_direction == _SHARED_STEMS
+                for chord_index, indices in copies
+                for i in indices
+            )
             # When each of the copy's notes stops sounding: a moment the copy is
             # still holding a note through has nothing missing from it.
             held = [
@@ -1392,6 +1397,13 @@ def fill_unison_copies(
                 if chord_index in copied:
                     continue
                 at = onsets[chord_index - span[0]]
+                if shared_only and any(
+                    voice[chord_index].symbols[i].stem_direction in ("up", "down") for i in indices
+                ):
+                    # Finlandia s8 (eerovil/musescore-choir-plugins#274): the copy's
+                    # own heads are drawn with two stems, shared by both voices; a
+                    # head drawn with one stem is one voice's, not a skipped copy.
+                    continue
                 if any(start < at < end for start, end in held):
                     # Illan viimeinen tango s7, s8 (eerovil/musescore-choir-plugins#274):
                     # the copy holds an eighth through the lead's second sixteenth,
@@ -1426,6 +1438,8 @@ def fill_unison_copies(
 
 
 _MIN_UNISON_NOTES = 2
+#: The stem direction stem_voice_hints writes on a head drawn with two stems.
+_SHARED_STEMS = "both"
 
 
 def _plain_length(length: Fraction) -> bool:
