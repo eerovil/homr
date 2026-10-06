@@ -100,3 +100,20 @@ def test_a_note_held_over_from_an_earlier_moment_is_known_by_its_voice() -> None
     sounding[:] = [end for end in sounding if end > clock]
     clock += advance_to_next_group(second, clock, sounding, third)
     assert clock == Fraction(3, 4)
+
+
+def test_a_voice_is_free_only_when_the_longer_of_its_two_notes_ends() -> None:
+    """Two notes of one voice start together, a quarter and a half; the voice's
+    next note waits for the half, not the quarter."""
+    from fractions import Fraction
+
+    from homr.score_reconstruction import SymbolChord, advance_to_next_group
+
+    first = SymbolChord(
+        [
+            EncodedSymbol("note_4", "C5", "_", position="upper"),
+            EncodedSymbol("note_2", "A4", "_", position="upper"),
+        ]
+    )
+    following = SymbolChord([EncodedSymbol("note_4", "B4", "_", position="upper")])
+    assert advance_to_next_group(first, Fraction(0), [], following) == Fraction(1, 2)

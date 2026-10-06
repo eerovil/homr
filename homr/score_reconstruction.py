@@ -269,12 +269,12 @@ def advance_to_next_group(
     when the earliest still-sounding note ends. The writer keeps time with this, and so
     does `repair_tuplet_overlaps`, so the two cannot disagree about when a note sounds.
 
-    Given the group that ``following`` it, the next group also cannot start before
-    each of *its* voices is free: a voice's next symbol does not start inside its own
-    note. On Illan viimeinen tango s3 (eerovil/musescore-choir-plugins#274) three
-    voices hold a dotted eighth and go on, and the fourth, misread as a plain eighth,
-    is silent after it; the earliest ending alone started everyone's next note a
-    sixteenth early.
+    Given the group that ``following`` it, the next group also waits until a voice
+    it goes on in is free: a voice is free when the last of its own sounding notes
+    ends, whichever group that note started in. On Illan viimeinen tango s3
+    (eerovil/musescore-choir-plugins#274) three voices hold a dotted eighth and go
+    on, and the fourth, misread as a plain eighth, is silent after it; the earliest
+    ending alone started everyone's next note a sixteenth early.
     """
     # Grace notes have no duration and take no time.
     timed = [
@@ -290,30 +290,31 @@ def advance_to_next_group(
     advance = earliest - clock
     if following is None:
         return advance
-    # Each voice's latest note: the one it starts here, else one held over from an
-    # earlier group. A note held over in a voice that starts another here is not
-    # that voice's any more; the reading has it overlap itself, and that is left
-    # to the earliest ending alone, as before.
-    ends: dict[str, Fraction] = {}
-    for end in timed:
-        ends[end.position] = min(ends.get(end.position, end), end)
-    for held in still:
-        position = getattr(held, "position", None)
-        if position is not None and all(position != new.position for new in timed):
-            ends[position] = min(ends.get(position, held), held)
+    # A voice that starts a note here while one of its own is still sounding has
+    # been misread; the repairs find that note by where this clock puts the next
+    # group, so it is left to the earliest ending (Legenda system 9, bars 18-19).
+    started_here = {end.position for end in timed}
+    if any(
+        getattr(end, "position", None) in started_here
+        for end in still
+        if not any(end is new for new in timed)
+    ):
+        return advance
+    # When each voice is free: the end of the latest of its sounding notes, held
+    # over from an earlier group or started here. The next group starts when the
+    # earliest note ends, and once one voice it goes on in is free.
+    free: dict[str, Fraction] = {}
+    for end in still:
+        position = getattr(end, "position", None)
+        if position is not None:
+            free[position] = max(free.get(position, end), end)
     going_on = {
         symbol.position
         for symbol in following.symbols
         if symbol.rhythm.startswith(("note", "rest")) and symbol.get_duration().fraction > 0
     }
-    # Only where every voice that ends first falls silent: a voice that goes on
-    # starts its next symbol where its note ends, and that is the evidence the
-    # earliest ending gives; a voice that stops gives none.
-    enders = {position for position, end in ends.items() if end == earliest}
-    continuing = [ends[position] for position in going_on if position in ends]
-    if enders and not enders & going_on and continuing:
-        return max(advance, min(continuing) - clock)
-    return advance
+    waiting = [free[position] for position in going_on if position in free]
+    return max(earliest, min(waiting)) - clock if waiting else advance
 
 
 def _onsets(
