@@ -2971,6 +2971,96 @@ class ReconstructedVoice:
     changes: tuple[ReconstructionChange, ...]
 
 
+#: Below this, the decoder's choice of accidental is close to a coin flip.
+_UNSURE_LIFT = 0.6
+_SHARP_ORDER = "FCGDAEB"
+_LIFT_ALTER = {"#": 1, "##": 2, "b": -1, "bb": -2, "N": 0}
+
+
+def _key_alter(step: str, fifths: int) -> int:
+    if fifths > 0 and step in _SHARP_ORDER[:fifths]:
+        return 1
+    if fifths < 0 and step in _SHARP_ORDER[::-1][:-fifths]:
+        return -1
+    return 0
+
+
+def _sounding(lift: str, step: str, fifths: int) -> int | None:
+    if lift in _LIFT_ALTER:
+        return _LIFT_ALTER[lift]
+    if lift == "_":
+        return _key_alter(step, fifths)  # nothing printed: what the key gives
+    return None
+
+
+def accidentals_to_the_key_when_unsure(
+    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+) -> list[SymbolChord]:
+    """Give a note the key's own pitch when the decoder all but tossed a coin
+    between that and an accidental the key does not give.
+
+    Lempilintu s9 (eerovil/musescore-choir-plugins#274): a whole-note D3 on the
+    fourth ledger line below the staff, in D major, was read D sharp at 0.58
+    against the plain D's 0.42; the three tied D3s after it came out plain. Read
+    over the 71 hand-checked systems of that card, this was the only note given
+    an accidental the key does not give at under 0.85 with the key's own pitch
+    second -- and the page prints the plain one. Under 0.6 only, and never where
+    an earlier note of the bar at that pitch already carries the accidental,
+    since an accidental holds to the barline.
+    """
+    fifths = 0
+    seen: dict[tuple[str, str, str], int] = {}  # (position, step, octave) -> alter
+    bar = 1
+    out: list[SymbolChord] = []
+    for chord_index, chord in enumerate(voice):
+        symbols = list(chord.symbols)
+        for symbol_index, symbol in enumerate(symbols):
+            if symbol.rhythm.startswith("keySignature_"):
+                fifths = int(symbol.rhythm.split("_", 1)[1])
+            if "barline" in symbol.rhythm or symbol.rhythm.startswith("repeat"):
+                bar += 1
+                seen.clear()
+            if not symbol.rhythm.startswith("note") or len(symbol.pitch) < 2:  # noqa: PLR2004
+                continue
+            step, octave = symbol.pitch[0], symbol.pitch[1:]
+            key = (symbol.position, step, octave)
+            alter = _sounding(symbol.lift, step, fifths)
+            lift = (symbol.confidence or {}).get("lift") if symbol.confidence else None
+            alternatives = lift.get("alternatives", []) if isinstance(lift, dict) else []
+            ordinary = _key_alter(step, fifths)
+            if (
+                alter is not None
+                and alter != ordinary
+                and seen.get(key) != alter
+                and len(alternatives) >= 2  # noqa: PLR2004
+                and isinstance(alternatives[0].get("probability"), (int, float))
+                and alternatives[0]["probability"] < _UNSURE_LIFT
+                and alternatives[0].get("value") == symbol.lift
+                and _sounding(str(alternatives[1].get("value")), step, fifths) == ordinary
+            ):
+                runner_up = str(alternatives[1]["value"])
+                if changes is not None:
+                    changes.append(
+                        ReconstructionChange(
+                            kind="accidental_to_key",
+                            bar=bar,
+                            group=chord_index,
+                            symbol=symbol_index,
+                            staff=symbol.position,
+                            pitch=symbol.pitch,
+                            before=symbol.lift,
+                            after=runner_up,
+                            reason="a coin flip between this and the key's pitch",
+                        )
+                    )
+                eprint(f"Bar {bar}: {symbol.pitch} given the key's pitch (a coin flip)")
+                symbols[symbol_index] = symbol.change_lift(runner_up)
+                alter = ordinary
+            seen[key] = alter if alter is not None else ordinary
+        out.append(SymbolChord(symbols, chord.tuplet_mark))
+    return out
+
+
 def reconstruct_voice(
     voice: list[EncodedSymbol],
     bar_length: Fraction | None = None,
@@ -2979,6 +3069,7 @@ def reconstruct_voice(
     """Apply homr's musical reconstruction passes in their established order."""
     changes: list[ReconstructionChange] = []
     groups = group_into_chords(voice)
+    groups = accidentals_to_the_key_when_unsure(groups, changes)
     groups = voices_from_opposite_stems(groups, changes)
     # Before the triplets: a unison copy's skipped note leaves a gap that would
     # otherwise read as a triplet still open (#265, Legenda system 9, bar 19).
