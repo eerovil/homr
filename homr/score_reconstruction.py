@@ -271,7 +271,11 @@ def advance_to_next_group(
         return advance
     ends: dict[str, Fraction] = {}
     for symbol in group.symbols:
-        length = symbol.get_duration().fraction if symbol.rhythm.startswith(("note", "rest")) else 0
+        length = (
+            symbol.get_duration().fraction
+            if symbol.rhythm.startswith(("note", "rest"))
+            else Fraction(0)
+        )
         if length > 0:
             ends[symbol.position] = min(ends.get(symbol.position, length), length)
     going_on = {
@@ -803,10 +807,11 @@ def _one_head_apart(a: EncodedSymbol, b: EncodedSymbol) -> bool:
     return left is not None and right is not None and abs(left - right) <= 1
 
 
-def _probability(symbol: EncodedSymbol) -> float:
+def _probability(symbol: EncodedSymbol) -> float | None:
+    """The decoder's probability for the rhythm it read, if it gave one."""
     rhythm = (symbol.confidence or {}).get("rhythm") if symbol.confidence else None
     value = rhythm.get("probability") if isinstance(rhythm, dict) else None
-    return float(value) if isinstance(value, (int, float)) else 1.0
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def drop_double_reads(
@@ -880,7 +885,12 @@ def drop_double_reads(
                     # note is not always where it is printed -- and a fourth
                     # apart they are two heads.
                     continue
-                weaker = min((left, right), key=lambda item: _probability(item[2]))
+                certainty = (_probability(left[2]), _probability(right[2]))
+                if None in certainty or certainty[0] == certainty[1]:
+                    # "The less certain of the two" has to mean something: with a
+                    # probability missing, or the two equal, there is no such note.
+                    continue
+                weaker = left if certainty[0] < certainty[1] else right  # type: ignore[operator]
                 if weaker[2].get_duration().fraction == over:
                     found.append((bar_number, weaker))
         if len(found) == 1:
@@ -908,23 +918,6 @@ def drop_double_reads(
         kept = [s for i, s in enumerate(chord.symbols) if (chord_index, i) not in drop]
         if kept:
             out.append(SymbolChord(kept, chord.tuplet_mark))
-    return out
-
-
-def _printed_per_bar(
-    groups: list[SymbolChord], bars: list[tuple[int, int]]
-) -> list[Fraction | None]:
-    """The bar length a time signature read off the page sets, bar by bar, carried
-    forward from the bar it is printed in."""
-    out: list[Fraction | None] = []
-    current: Fraction | None = None
-    for span in bars:
-        for chord in groups[span[0] : span[1]]:
-            for symbol in chord.symbols:
-                if symbol.rhythm.startswith("timeSignature") and symbol.printed_meters:
-                    numerator, denominator = symbol.printed_meters[0]
-                    current = Fraction(numerator, denominator)
-        out.append(current)
     return out
 
 
@@ -972,7 +965,7 @@ def system_bar_targets(voices: list[list[EncodedSymbol]]) -> list[list[Fraction 
             lengths = set(_staff_lengths(groups, spans[index]).values())
             per_bar.append(lengths.pop() if len(lengths) == 1 else None)
         agreed.append(per_bar)
-        on_page = _printed_per_bar(groups, spans)
+        on_page = printed_bar_lengths(groups)
         printed.append([on_page[index] for index in indices])
     count = len(musical[0])
     out = empty

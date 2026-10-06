@@ -527,3 +527,30 @@ def test_staves_with_different_bar_counts_give_nothing() -> None:
         _one_voice_stream([["note_2", "note_2"]] * 4),
     ]
     assert all(t is None for staff in system_bar_targets(voices) for t in staff)
+
+
+def test_one_staffs_misread_digits_do_not_become_the_systems_bar_length() -> None:
+    """Where the staves disagree, a printed time signature may stand in for them --
+    but only digits the staff's own bars accept. Here one staff read 3/4 off the
+    page while both of its voices measure four quarters in every bar."""
+    from homr.score_reconstruction import system_bar_targets
+
+    signature = EncodedSymbol("timeSignature/4")
+    signature.printed_meters = ((3, 4),)
+    two_voices: list[EncodedSymbol] = [signature]
+    for _ in range(3):
+        two_voices += [
+            note("note_2", "upper", stem="up"),
+            EncodedSymbol("chord"),
+            note("note_2", "lower", stem="down", pitch="A3"),
+            note("note_2", "upper", stem="up"),
+            EncodedSymbol("chord"),
+            note("note_2", "lower", stem="down", pitch="A3"),
+            EncodedSymbol("barline"),
+        ]
+    voices = [
+        two_voices,
+        _one_voice_stream([["note_2", "note_2"]] * 3),
+        _one_voice_stream([["note_2", "note_4"]] * 3),
+    ]
+    assert system_bar_targets(voices)[0] == [None, None, None]

@@ -80,3 +80,16 @@ def test_two_notes_far_apart_in_pitch_are_never_one_head() -> None:
     notes = eighths_then_quarters(note("note_8", 320 + 48 * 5 + 2, 0.7, "D4"), 6)
     fixed = drop_double_reads(bar(*notes), None, [Fraction(5, 4)])
     assert "D4" in pitches(fixed)
+
+
+def test_two_reads_the_decoder_is_equally_sure_of_are_both_kept() -> None:
+    notes = eighths_then_quarters(note("note_8", 320 + 48 * 5 + 7, 0.9, "B4"), 6)
+    fixed = drop_double_reads(bar(*notes), None, [Fraction(5, 4)])
+    assert len(pitches(fixed)) == 9
+
+
+def test_a_read_with_no_probability_is_not_judged() -> None:
+    extra = note("note_8", 320 + 48 * 5 + 7, 0.7, "B4")
+    extra.confidence = None
+    fixed = drop_double_reads(bar(*eighths_then_quarters(extra, 6)), None, [Fraction(5, 4)])
+    assert len(pitches(fixed)) == 9
