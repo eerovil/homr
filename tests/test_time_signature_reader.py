@@ -151,6 +151,14 @@ def test_a_denominator_no_meter_has_is_refused() -> None:
     assert find_time_signatures(image, staff()) == []
 
 
+def test_one_over_one_is_refused_since_any_vertical_stroke_reads_so() -> None:
+    """eerovil/musescore-choir-plugins#274: three songs gained a 1/1 nobody printed."""
+    image = blank_staff()
+    draw_signature(image, 1, 1, 120)
+
+    assert find_time_signatures(image, staff()) == []
+
+
 # --- placing what was read into the decoded stream ---
 
 

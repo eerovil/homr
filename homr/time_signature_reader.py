@@ -413,6 +413,12 @@ def _read_stack(
     (numerator, top_score), (denominator, bottom_score) = numbers
     if denominator not in _DENOMINATORS or not 1 <= numerator <= _MAX_NUMERATOR:
         return None
+    if numerator == 1 and denominator == 1:
+        # A 1 is a vertical stroke, so a 1 over a 1 is any stroke crossing both
+        # halves of the staff -- a barline, a stem -- and 1/1 is a meter nobody
+        # prints. Read as one, it put a 1/1 the page does not have into three
+        # songs of eerovil/musescore-choir-plugins#274.
+        return None
     return numerator, denominator, min(top_score, bottom_score)
 
 
