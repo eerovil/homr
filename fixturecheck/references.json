@@ -1,5 +1,15 @@
 {
  "cases": {
+  "fin-s03": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s07": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "hanget-soi": {
    "image": "068b31fc1ff37214",
    "meter": 0,
@@ -315,6 +325,11 @@
    "score": 98.59,
    "structure": 0
   },
+  "kantajani-s08": {
+   "meter": 0,
+   "score": 95.06,
+   "structure": 0
+  },
   "kayttaytymisohjeita-s1": {
    "image": "ccc132874f01c652",
    "meter": 0,
@@ -571,6 +586,11 @@
    "image": "76fae301b00ef10e",
    "meter": 0,
    "reference": "713a7ff1394ffc44",
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s01": {
+   "meter": 0,
    "score": 100.0,
    "structure": 0
   },

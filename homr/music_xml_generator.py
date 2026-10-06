@@ -243,8 +243,17 @@ def build_measures(
                 if should_be_clef.rhythm.startswith("clef"):
                     build_clef(should_be_clef, attributes)
         elif rhythm.startswith("keySignature"):
-            attributes = build_or_get_attributes(current_measure, last_attributes)
-            build_key(symbol, attributes)
+            earlier = None if has_music(current_measure) else current_measure.find(".//key")
+            if earlier is not None:
+                # Two key signatures before the first note are one reading
+                # interrupted (an empty key, a start-repeat, then the real
+                # key): the later one is the key the bar is in.
+                fifths = earlier.find("fifths")
+                assert fifths is not None
+                fifths.text = rhythm.split("_")[1]
+            else:
+                attributes = build_or_get_attributes(current_measure, last_attributes)
+                build_key(symbol, attributes)
         elif rhythm.startswith("timeSignature"):
             attributes = build_or_get_attributes(current_measure, last_attributes)
             build_time_signature(symbol, attributes, state)
@@ -257,11 +266,16 @@ def build_measures(
             measure_number += 1
             current_measure = ET.Element("measure", number=str(measure_number))
         elif rhythm == "repeatStart":
-            close_current_measure()
-            measure_number += 1
-            current_measure = ET.Element("measure", number=str(measure_number))
+            # A start-repeat printed after the clef and key opens the bar it
+            # stands in; only one standing after music starts a new bar.
+            # Opening one regardless turned the clef and key in front of it
+            # into a bar of its own, a bar the page does not print.
+            if has_music(current_measure):
+                close_current_measure()
+                measure_number += 1
+                current_measure = ET.Element("measure", number=str(measure_number))
 
-            barline = build_or_get_barline(current_measure, "right")
+            barline = build_or_get_barline(current_measure, "left")
             build_repeat(symbol, barline)
         elif rhythm == "repeatEnd":
             barline = build_or_get_barline(current_measure, "right")
@@ -277,7 +291,7 @@ def build_measures(
             close_current_measure()
             measure_number += 1
             current_measure = ET.Element("measure", number=str(measure_number))
-            barline = build_or_get_barline(current_measure, "right")
+            barline = build_or_get_barline(current_measure, "left")
             build_repeat(EncodedSymbol("repeatStart"), barline)
         elif rhythm.startswith("voltaStart"):
             volta_number = state.start_volta(measure_number)
@@ -365,6 +379,11 @@ def build_or_get_attributes(
     if last_attributes is not None and not force_new:
         return last_attributes
     return ET.SubElement(measure, "attributes")
+
+
+def has_music(measure: ET.Element) -> bool:
+    """Whether a measure being written holds a note or rest yet."""
+    return measure.find("note") is not None
 
 
 def build_or_get_barline(measure: ET.Element, location: str) -> ET.Element:

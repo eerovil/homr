@@ -3,6 +3,7 @@
     python -m fixturecheck one laulun-aika-s2      ~20s
     python -m fixturecheck pins                    tier 1 -- the pinned failures
     python -m fixturecheck fixtures                tier 2 -- the five
+    python -m fixturecheck private                 cases from the private songs repo
     python -m fixturecheck corpus                  tier 3 -- everything, ~35 min
     python -m fixturecheck ten                     the written-down sample, ~4 min
     python -m fixturecheck status                  instant -- the last run
@@ -433,6 +434,8 @@ def main() -> int:
         names = [case.name for case in cases.pinned_cases()]
     elif tier == "fixtures":
         names = [case.name for case in cases.fixture_cases()]
+    elif tier == "private":
+        names = [case.name for case in cases.private_cases()]
     elif tier == "ten":
         names = cases.sample()
     elif tier in ("all", "corpus"):

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from homr import constants, reread
+from homr.brace_dot_detection import interior_bar_lines
 from homr.debug import Debug
 from homr.errors import IncompleteRecognitionError
 from homr.image_utils import crop_image_and_return_new_top
@@ -487,11 +488,11 @@ def parse_staffs(
     # even if it's part of a grand staff.
     number_of_voices = _get_number_of_voices(staffs)
     i = 0
-    voices = []
+    rows: list[list[list[EncodedSymbol]]] = []
     regions = StaffRegions(staffs)
     for voice in range(number_of_voices):
         staffs_for_voice = [staff.staffs[voice] for staff in staffs]
-        result_for_voice = []
+        result_for_voice: list[list[EncodedSymbol]] = []
         for staff_index, staff in enumerate(staffs_for_voice):
             if selected_staff >= 0 and staff_index != selected_staff:
                 eprint("Ignoring staff due to selected_staff argument", i)
@@ -509,8 +510,74 @@ def parse_staffs(
             if not any(symbol.rhythm.startswith(("note", "rest")) for symbol in result_staff):
                 raise IncompleteRecognitionError(f"Staff {i}: no notes or rests were recognized")
             result_staff.append(EncodedSymbol("newline"))
-            result_for_voice.extend(result_staff)
+            result_for_voice.append(result_staff)
             i += 1
 
-        voices.append(remove_duplicated_symbols(result_for_voice))
-    return voices
+        rows.append(result_for_voice)
+    if selected_staff < 0:
+        _drop_bars_past_the_system(rows, staffs)
+    return [
+        remove_duplicated_symbols([symbol for row in voice_rows for symbol in row])
+        for voice_rows in rows
+    ]
+
+
+_BAR_ENDS = ("barline", "doublebarline", "bolddoublebarline", "repeatEnd", "repeatEndStart")
+
+
+def _bars(symbols: list[EncodedSymbol]) -> list[tuple[int, int]]:
+    """(start, end) token spans of the bars holding a note or rest, end exclusive
+    and including the bar's closing barline when there is one."""
+    spans = []
+    start = 0
+    for index, symbol in enumerate(symbols):
+        if symbol.rhythm in _BAR_ENDS or symbol.rhythm == "newline":
+            end = index + 1 if symbol.rhythm != "newline" else index
+            if any(s.rhythm.startswith(("note", "rest")) for s in symbols[start:end]):
+                spans.append((start, end))
+            start = index + 1
+    return spans
+
+
+def _printed_bars(staff: Staff) -> int:
+    """Bars the page prints on a staff: its interior barlines plus one."""
+    return len(interior_bar_lines(staff)) + 1
+
+
+def _drop_bars_past_the_system(
+    rows: list[list[list[EncodedSymbol]]], staffs: list[MultiStaff]
+) -> None:
+    """Take off bars a staff decoded after the end of its system.
+
+    The decoder sometimes runs on past a staff's last barline and writes one
+    more bar -- on Finlandia (arr. Morgan, eerovil/musescore-choir-plugins#274)
+    a whole note repeating the tied whole note before it, and a whole note
+    under a final chord. That staff then runs a bar longer than the others,
+    and once the parts are assembled every later bar of it sits beside the
+    wrong music.
+
+    A trailing bar is dropped only on two independent pieces of evidence: the
+    staff decoded more bars than every other staff of the system, and more
+    than the barlines printed on it allow. One alone is not enough -- a staff
+    can genuinely carry more bars than its neighbours (a cue, a staff whose
+    barlines were missed), and a missed barline undercounts the page.
+    """
+    for row_index, multi_staff in enumerate(staffs):
+        counts = [len(_bars(voice_rows[row_index])) for voice_rows in rows]
+        if len(counts) < 2:
+            continue
+        for voice, voice_rows in enumerate(rows):
+            others = max(c for n, c in enumerate(counts) if n != voice)
+            printed = _printed_bars(multi_staff.staffs[voice])
+            limit = max(others, printed)
+            spans = _bars(voice_rows[row_index])
+            if len(spans) <= limit:
+                continue
+            cut = spans[limit][0]
+            eprint(
+                f"Staff {voice} of system {row_index}: dropping {len(spans) - limit} bar(s) "
+                f"decoded past the system's end ({len(spans)} decoded, {printed} printed, "
+                f"{others} on the other staves)"
+            )
+            row = voice_rows[row_index]
+            voice_rows[row_index] = row[:cut] + [row[-1]]
