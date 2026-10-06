@@ -220,6 +220,69 @@ def test_a_courtesy_signature_after_the_last_bar_is_left_out(
     assert all(not s.printed_meters for s in out)
 
 
+def placed(x: float) -> EncodedSymbol:
+    symbol = EncodedSymbol("note_4", "C4", position="upper")
+    symbol.image_coordinates = (x, 0.0)
+    return symbol
+
+
+def misplaced_barline_stream() -> list[EncodedSymbol]:
+    """Three quarters, then a barline the decoder put 250px right of where it is
+    printed (at 400), then four quarters."""
+    return [
+        EncodedSymbol("clef_G2", position="upper"),
+        EncodedSymbol("keySignature_0"),
+        EncodedSymbol("timeSignature/4"),
+        placed(150),
+        placed(250),
+        placed(350),
+        barline(650),
+        placed(480),
+        placed(560),
+        placed(640),
+        placed(720),
+        barline(800),
+    ]
+
+
+def test_a_signature_after_a_misplaced_barline_opens_the_bar_after_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """eerovil/musescore-choir-plugins#274, Kantajani s12: the bass's first barline
+    was decoded far right of the print, and the 6/4 after it was read as the
+    system's opening signature."""
+    monkeypatch.setattr(
+        time_signature_reader,
+        "find_time_signatures",
+        lambda image, s: [PrintedMeter(420, 4, 4, 0.8)],
+    )
+    out = attach_printed_meters(
+        misplaced_barline_stream(), np.zeros((1, 1)), staff(), lambda point: point
+    )
+
+    assert not out[2].printed_meters
+    rhythms = [s.rhythm for s in out]
+    inserted = rhythms.index("barline") + 1
+    assert rhythms[inserted] == "timeSignature/4"
+    assert out[inserted].printed_meters == ((4, 4),)
+
+
+def test_a_signature_at_the_head_of_placed_notes_stays_the_opening_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        time_signature_reader,
+        "find_time_signatures",
+        lambda image, s: [PrintedMeter(110, 3, 4, 0.8)],
+    )
+    out = attach_printed_meters(
+        misplaced_barline_stream(), np.zeros((1, 1)), staff(), lambda point: point
+    )
+
+    assert out[2].printed_meters == ((3, 4),)
+    assert [s.rhythm for s in out] == [s.rhythm for s in misplaced_barline_stream()]
+
+
 #: A printed 6, as the reader cut it out of Lempilintu's 6/4 (rows 0-1 and 28 are
 #: staff lines). eerovil/musescore-choir-plugins#274: it correlates with the 6 at
 #: 0.76 and with the 0 at 0.72, too close to read, so the bar kept the decoder's 4/4.
