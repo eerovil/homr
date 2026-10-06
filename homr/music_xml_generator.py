@@ -231,7 +231,8 @@ def build_measures(
                 build_multi_measure_rest(symbol, attributes)
             else:
                 staff_positions = group.into_positions()
-                advance = advance_to_next_group(group, clock, sounding)
+                following = groups[group_no + 1] if group_no + 1 < len(groups) else None
+                advance = advance_to_next_group(group, clock, sounding, following)
                 clock += advance
                 sounding = [end for end in sounding if end > clock]
                 for pos_no, staff_pos in enumerate(staff_positions):
@@ -1607,6 +1608,10 @@ def build_note_chord(
 
     if chord_duration < max(by_duration):
         result.append(build_backup(max(by_duration) - chord_duration, state))
+    elif chord_duration > max(by_duration):
+        # The next moment starts after this voice falls silent
+        # (`advance_to_next_group`, a voice that does not go on).
+        result.append(build_forward(chord_duration - max(by_duration), state))
 
     return result
 

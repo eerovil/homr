@@ -241,13 +241,23 @@ def _printed_per_signature(voice: list[SymbolChord]) -> list[Fraction | None]:
 
 
 def advance_to_next_group(
-    group: SymbolChord, clock: Fraction, sounding: list[Fraction]
+    group: SymbolChord,
+    clock: Fraction,
+    sounding: list[Fraction],
+    following: SymbolChord | None = None,
 ) -> Fraction:
     """How far the next group starts after this one, updating the sounding notes in place.
 
     Tokens say which notes start together, not when each group starts: a group starts
     when the earliest still-sounding note ends. The writer keeps time with this, and so
     does `repair_tuplet_overlaps`, so the two cannot disagree about when a note sounds.
+
+    Given the group that ``following`` it, the next group also cannot start before
+    each of *its* voices is free: a voice's next symbol does not start inside its own
+    note. On Illan viimeinen tango s3 (eerovil/musescore-choir-plugins#274) three
+    voices hold a dotted eighth and go on, and the fourth, misread as a plain eighth,
+    is silent after it; the earliest ending alone started everyone's next note a
+    sixteenth early.
     """
     durations = [
         s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
@@ -256,7 +266,27 @@ def advance_to_next_group(
     if not timed:
         return Fraction(0)
     sounding.extend(clock + d for d in timed)
-    return min(end for end in sounding if end > clock) - clock
+    advance = min(end for end in sounding if end > clock) - clock
+    if following is None:
+        return advance
+    ends: dict[str, Fraction] = {}
+    for symbol in group.symbols:
+        length = symbol.get_duration().fraction if symbol.rhythm.startswith(("note", "rest")) else 0
+        if length > 0:
+            ends[symbol.position] = min(ends.get(symbol.position, length), length)
+    going_on = {
+        symbol.position
+        for symbol in following.symbols
+        if symbol.rhythm.startswith(("note", "rest")) and symbol.get_duration().fraction > 0
+    }
+    # Only where every voice that ends first falls silent: a voice that goes on
+    # starts its next symbol where its note ends, and that is the evidence the
+    # earliest ending gives; a voice that stops gives none.
+    enders = {position for position, end in ends.items() if end == advance}
+    continuing = [ends[position] for position in going_on if position in ends]
+    if enders and not enders & going_on and continuing:
+        return max(advance, min(continuing))
+    return advance
 
 
 def _onsets(
@@ -278,7 +308,8 @@ def _onsets(
             symbols[swap[1]] = symbols[swap[1]].change_rhythm(swap[2])
             chord = SymbolChord(symbols, chord.tuplet_mark)
         onsets.append(clock)
-        clock += advance_to_next_group(chord, clock, sounding)
+        following = voice[chord_index + 1] if chord_index + 1 < span[1] else None
+        clock += advance_to_next_group(chord, clock, sounding, following)
         sounding[:] = [end for end in sounding if end > clock]
     onsets.append(clock)
     return onsets
@@ -1341,7 +1372,7 @@ def find_nominator_per_time_signature(
     # and the bar is labelled 5/4 when every voice in it is 4/4.
     sounding: list[Fraction] = []
     started = False
-    for chord in voice:
+    for chord_index, chord in enumerate(voice):
         if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
             if started:
                 if in_measure > Fraction(0):
@@ -1355,7 +1386,8 @@ def find_nominator_per_time_signature(
             current.append(in_measure)
             in_measure, sounding = Fraction(0), []
         else:
-            in_measure += advance_to_next_group(chord, in_measure, sounding)
+            following = voice[chord_index + 1] if chord_index + 1 < len(voice) else None
+            in_measure += advance_to_next_group(chord, in_measure, sounding, following)
             sounding[:] = [end for end in sounding if end > in_measure]
     if in_measure > Fraction(0):
         current.append(in_measure)
@@ -1402,7 +1434,7 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
     measure_duration = []
     # On the writer's clock, as `find_nominator_per_time_signature` measures.
     sounding: list[Fraction] = []
-    for chord in voice:
+    for chord_index, chord in enumerate(voice):
         if chord.is_barline() and duration_in_measure > Fraction(0):
             measure_duration.append(duration_in_measure)
             duration_in_measure, sounding = Fraction(0), []
@@ -1414,7 +1446,10 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
                     frac = symbol.get_duration().fraction
                     if frac > Fraction(0):
                         durations.append(frac)
-            duration_in_measure += advance_to_next_group(chord, duration_in_measure, sounding)
+            following = voice[chord_index + 1] if chord_index + 1 < len(voice) else None
+            duration_in_measure += advance_to_next_group(
+                chord, duration_in_measure, sounding, following
+            )
             sounding[:] = [end for end in sounding if end > duration_in_measure]
 
     if duration_in_measure > Fraction(0):
