@@ -240,23 +240,83 @@ def _printed_per_signature(voice: list[SymbolChord]) -> list[Fraction | None]:
     return out
 
 
+class _Ending(Fraction):
+    """When a sounding note ends, and the voice (`position`) it sounds in.
+
+    The callers keep the sounding notes as a list of end times and drop the
+    ended ones between groups; carrying the voice on the end time itself keeps
+    that bookkeeping as it is, while the silent-voice rule below can still tell
+    which voice a note held over from an earlier group belongs to.
+    """
+
+    position: str
+
+    def __new__(cls, value: Fraction, position: str) -> _Ending:
+        ending = super().__new__(cls, value)
+        ending.position = position
+        return ending
+
+
 def advance_to_next_group(
-    group: SymbolChord, clock: Fraction, sounding: list[Fraction]
+    group: SymbolChord,
+    clock: Fraction,
+    sounding: list[Fraction],
+    following: SymbolChord | None = None,
 ) -> Fraction:
     """How far the next group starts after this one, updating the sounding notes in place.
 
     Tokens say which notes start together, not when each group starts: a group starts
     when the earliest still-sounding note ends. The writer keeps time with this, and so
     does `repair_tuplet_overlaps`, so the two cannot disagree about when a note sounds.
+
+    Given the group that ``following`` it, the next group also waits until a voice
+    it goes on in is ready for its next note, whichever group that voice's sounding
+    notes started in. On Illan viimeinen tango s3
+    (eerovil/musescore-choir-plugins#274) three voices hold a dotted eighth and go
+    on, and the fourth, misread as a plain eighth, is silent after it; the earliest
+    ending alone started everyone's next note a sixteenth early.
     """
-    durations = [
-        s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
+    # Grace notes have no duration and take no time.
+    timed = [
+        _Ending(clock + s.get_duration().fraction, s.position)
+        for s in group.symbols
+        if s.rhythm.startswith(("note", "rest")) and s.get_duration().fraction > 0
     ]
-    timed = [d for d in durations if d > 0]  # grace notes have no duration and take no time
     if not timed:
         return Fraction(0)
-    sounding.extend(clock + d for d in timed)
-    return min(end for end in sounding if end > clock) - clock
+    sounding.extend(timed)
+    still = [end for end in sounding if end > clock]
+    earliest = min(still)
+    advance = earliest - clock
+    if following is None:
+        return advance
+    # A voice that starts a note here while one of its own is still sounding has
+    # been misread; the repairs find that note by where this clock puts the next
+    # group, so it is left to the earliest ending (Legenda system 9, bars 18-19).
+    started_here = {end.position for end in timed}
+    if any(
+        getattr(end, "position", None) in started_here
+        for end in still
+        if not any(end is new for new in timed)
+    ):
+        return advance
+    # When each voice next starts a note: where the shortest of its sounding notes
+    # ends, held over or started here. Two values in one voice's moment are a
+    # chord whose longer note rings on, and the voice's next note follows the
+    # shorter, as the tokens are written. The next group starts when the earliest
+    # note ends, and once one voice it goes on in is ready.
+    free: dict[str, Fraction] = {}
+    for end in still:
+        position = getattr(end, "position", None)
+        if position is not None:
+            free[position] = min(free.get(position, end), end)
+    going_on = {
+        symbol.position
+        for symbol in following.symbols
+        if symbol.rhythm.startswith(("note", "rest")) and symbol.get_duration().fraction > 0
+    }
+    waiting = [free[position] for position in going_on if position in free]
+    return max(earliest, min(waiting)) - clock if waiting else advance
 
 
 def _onsets(
@@ -278,7 +338,8 @@ def _onsets(
             symbols[swap[1]] = symbols[swap[1]].change_rhythm(swap[2])
             chord = SymbolChord(symbols, chord.tuplet_mark)
         onsets.append(clock)
-        clock += advance_to_next_group(chord, clock, sounding)
+        following = voice[chord_index + 1] if chord_index + 1 < span[1] else None
+        clock += advance_to_next_group(chord, clock, sounding, following)
         sounding[:] = [end for end in sounding if end > clock]
     onsets.append(clock)
     return onsets
@@ -641,13 +702,16 @@ def repair_bar_arithmetic(
         if system_targets is not None and len(system_targets) == len(bars)
         else [None] * len(bars)
     )
+    opening = next(iter(_musical_bars(voice, bars)), None)
     for bar_number, (span, own, theirs) in enumerate(
         zip(bars, _bar_targets(voice, bars), others, strict=True), start=1
     ):
         # A staff whose own voices cannot say what a bar is -- one voice, or a
         # second voice in a single bar -- may take it from the other staves of
         # the system, when every one of them agrees (`system_bar_targets`).
-        target = own if own is not None else theirs
+        # The opening bar may be a pickup; the other staves cannot say it is not.
+        borrowed = None if bar_number - 1 == opening else theirs
+        target = own if own is not None else borrowed
         if target is None:
             continue
         repair = _repair_for_bar(voice, span, target, alone=own is None)
@@ -750,6 +814,153 @@ def _bar_targets(voice: list[SymbolChord], bars: list[tuple[int, int]]) -> list[
 _REPAIR_WITNESS_BARS = 2
 
 
+#: Two notes of one voice standing closer than this share of the voice's
+#: ordinary spacing in the bar are one printed head read twice.
+_SAME_HEAD_SHARE = 0.4
+
+
+def _one_head_apart(a: EncodedSymbol, b: EncodedSymbol) -> bool:
+    """Whether two notes stand on the same staff position or neighbouring ones."""
+    steps = "CDEFGAB"
+
+    def position(symbol: EncodedSymbol) -> int | None:
+        pitch = symbol.pitch or ""
+        if len(pitch) < 2 or pitch[0] not in steps or not pitch[1:].isdigit():
+            return None
+        return int(pitch[1:]) * 7 + steps.index(pitch[0])
+
+    left, right = position(a), position(b)
+    return left is not None and right is not None and abs(left - right) <= 1
+
+
+def _probability(symbol: EncodedSymbol) -> float | None:
+    """The decoder's probability for the rhythm it read, if it gave one."""
+    rhythm = (symbol.confidence or {}).get("rhythm") if symbol.confidence else None
+    value = rhythm.get("probability") if isinstance(rhythm, dict) else None
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def drop_double_reads(
+    voice: list[SymbolChord],
+    changes: list[ReconstructionChange] | None = None,
+    system_targets: list[Fraction | None] | None = None,
+) -> list[SymbolChord]:
+    """Take out a note the decoder read twice off one printed head.
+
+    Two notes one after another in the same voice cannot stand at the same
+    place on the page, nor the second to the left of the first. On Kantajani s8
+    (eerovil/musescore-choir-plugins#274) the first sopranos' sixth eighth was
+    read twice, 7px apart, and the second sopranos gained an E4 placed after the
+    F4 it was decoded before; each bar came out an eighth over its 5/4.
+
+    A note is taken out only when all of these hold: it and its neighbour in the
+    voice stand at one place or out of order on the page, the bar measures
+    longer than its target by exactly that note's value, and it is the less
+    certain of the two by the decoder's own probability. Exactly one such note in
+    the bar, or nothing is done.
+    """
+    bars = _bar_boundaries(voice)
+    others = (
+        system_targets
+        if system_targets is not None and len(system_targets) == len(bars)
+        else [None] * len(bars)
+    )
+    drop: set[tuple[int, int]] = set()
+    printed = printed_bar_lengths(voice)
+    for bar_number, (span, own, theirs) in enumerate(
+        zip(bars, _bar_targets(voice, bars), others, strict=True), start=1
+    ):
+        # The opening bar may be a pickup, but a pickup is short; a bar *longer*
+        # than the other staves, or than the meter printed at its head, is not
+        # one, and only a bar that is too long is acted on here.
+        target = own if own is not None else theirs
+        if target is None and bar_number == 1:
+            target = printed[0]
+        if target is None:
+            continue
+        lengths = _staff_lengths(voice, span)
+        found = []
+        for position, length in lengths.items():
+            over = length - target
+            if over <= 0:
+                continue
+            notes = [
+                (chord_index, symbol_index, symbol)
+                for chord_index in range(span[0], span[1])
+                for symbol_index, symbol in enumerate(voice[chord_index].symbols)
+                if symbol.position == position
+                and symbol.rhythm.startswith("note")
+                and not _is_grace(symbol)
+                and symbol.image_coordinates is not None
+                and _stands_alone(voice[chord_index], symbol)
+            ]
+            xs = [float(symbol.image_coordinates[0]) for _, _, symbol in notes]  # type: ignore[index]
+            steps = sorted(abs(b - a) for a, b in zip(xs, xs[1:], strict=False))
+            if len(steps) < 2:
+                continue
+            ordinary = steps[len(steps) // 2]
+            for (left, right), (xa, xb) in zip(
+                zip(notes, notes[1:], strict=False), zip(xs, xs[1:], strict=False), strict=True
+            ):
+                if xb - xa >= _SAME_HEAD_SHARE * ordinary:
+                    continue
+                if not _one_head_apart(left[2], right[2]):
+                    # A head read twice comes back at its pitch or a step off it.
+                    # Finlandia s8's baritone ends E3 A3 with the A3 placed 2px
+                    # right of the E3 -- the decoder's position for a bar's last
+                    # note is not always where it is printed -- and a fourth
+                    # apart they are two heads.
+                    continue
+                certainty = (_probability(left[2]), _probability(right[2]))
+                if None in certainty or certainty[0] == certainty[1]:
+                    # "The less certain of the two" has to mean something: with a
+                    # probability missing, or the two equal, there is no such note.
+                    continue
+                weaker = left if certainty[0] < certainty[1] else right  # type: ignore[operator]
+                if weaker[2].get_duration().fraction == over:
+                    found.append((bar_number, weaker))
+        if len(found) == 1:
+            _, (chord_index, symbol_index, symbol) = found[0]
+            drop.add((chord_index, symbol_index))
+            eprint(f"Bar {bar_number}: {symbol.pitch} read twice off one head; dropped")
+            if changes is not None:
+                changes.append(
+                    ReconstructionChange(
+                        kind="double_read",
+                        bar=bar_number,
+                        group=chord_index,
+                        symbol=symbol_index,
+                        staff=symbol.position,
+                        pitch=symbol.pitch,
+                        before=symbol.rhythm,
+                        after="dropped",
+                        reason="read twice off one printed head; the bar was over by its value",
+                    )
+                )
+    if not drop:
+        return voice
+    out = []
+    for chord_index, chord in enumerate(voice):
+        kept = [s for i, s in enumerate(chord.symbols) if (chord_index, i) not in drop]
+        if kept:
+            out.append(SymbolChord(kept, chord.tuplet_mark))
+    return out
+
+
+def _musical_bars(groups: list[SymbolChord], bars: list[tuple[int, int]]) -> list[int]:
+    """Which of the bars hold a note or rest: a clef and key before a start-repeat
+    are counted as a bar of their own and hold nothing."""
+    return [
+        index
+        for index, span in enumerate(bars)
+        if any(
+            symbol.rhythm.startswith(("note", "rest"))
+            for chord in groups[span[0] : span[1]]
+            for symbol in chord.symbols
+        )
+    ]
+
+
 def system_bar_targets(voices: list[list[EncodedSymbol]]) -> list[list[Fraction | None]]:
     """What each bar of each staff ought to measure, by the other staves of the system.
 
@@ -760,31 +971,46 @@ def system_bar_targets(voices: list[list[EncodedSymbol]]) -> list[list[Fraction 
     in every bar. For each staff and bar this gives the length **every** other
     staff measures there, all of its voices agreeing, when at least two other
     staves have the bar and at least two bars of the system agree like that.
-    Staves that do not have the same number of bars give nothing, and neither
-    does the opening bar, which may be a pickup.
+    Bars are lined up by the music they hold, so a staff whose clef and key
+    stand before a start-repeat (an empty bar to the reconstruction) still lines
+    up; staves holding a different number of bars give nothing. The opening bar
+    gets a target too, and the repairs decide what it may be used for: it may be
+    a pickup, which is short and never long.
     """
     grouped = [group_into_chords(voice) for voice in voices]
     bars = [_bar_boundaries(groups) for groups in grouped]
+    musical = [_musical_bars(groups, b) for groups, b in zip(grouped, bars, strict=True)]
     empty: list[list[Fraction | None]] = [[None] * len(b) for b in bars]
-    if len(voices) < 3 or len({len(b) for b in bars}) != 1:
+    if len(voices) < 3 or len({len(m) for m in musical}) != 1:
         return empty
     agreed: list[list[Fraction | None]] = []
-    for groups, spans in zip(grouped, bars, strict=True):
+    printed: list[list[Fraction | None]] = []
+    for groups, spans, indices in zip(grouped, bars, musical, strict=True):
         per_bar: list[Fraction | None] = []
-        for span in spans:
-            lengths = set(_staff_lengths(groups, span).values())
+        for index in indices:
+            lengths = set(_staff_lengths(groups, spans[index]).values())
             per_bar.append(lengths.pop() if len(lengths) == 1 else None)
         agreed.append(per_bar)
-    count = len(bars[0])
+        on_page = printed_bar_lengths(groups)
+        printed.append([on_page[index] for index in indices])
+    count = len(musical[0])
     out = empty
     for staff in range(len(voices)):
         targets: list[Fraction | None] = [None] * count
-        for bar in range(1, count):
+        for bar in range(count):
             theirs = {agreed[other][bar] for other in range(len(voices)) if other != staff}
             if len(theirs) == 1 and None not in theirs:
                 targets[bar] = theirs.pop()
-        if sum(1 for target in targets if target is not None) >= _REPAIR_WITNESS_BARS:
-            out[staff] = targets
+                continue
+            # Where the staves disagree, a time signature read off any staff of
+            # the system holds for all of them: Kantajani s8's two soprano staves
+            # both read an eighth too many, and its altos' 5/4 was read off the page.
+            read = {printed[other][bar] for other in range(len(voices))} - {None}
+            if len(read) == 1:
+                targets[bar] = read.pop()
+        if sum(1 for target in targets[1:] if target is not None) >= _REPAIR_WITNESS_BARS:
+            for bar, index in enumerate(musical[staff]):
+                out[staff][index] = targets[bar]
     return out
 
 
@@ -1165,7 +1391,7 @@ def find_nominator_per_time_signature(
     # and the bar is labelled 5/4 when every voice in it is 4/4.
     sounding: list[Fraction] = []
     started = False
-    for chord in voice:
+    for chord_index, chord in enumerate(voice):
         if chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature"):
             if started:
                 if in_measure > Fraction(0):
@@ -1179,7 +1405,8 @@ def find_nominator_per_time_signature(
             current.append(in_measure)
             in_measure, sounding = Fraction(0), []
         else:
-            in_measure += advance_to_next_group(chord, in_measure, sounding)
+            following = voice[chord_index + 1] if chord_index + 1 < len(voice) else None
+            in_measure += advance_to_next_group(chord, in_measure, sounding, following)
             sounding[:] = [end for end in sounding if end > in_measure]
     if in_measure > Fraction(0):
         current.append(in_measure)
@@ -1226,7 +1453,7 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
     measure_duration = []
     # On the writer's clock, as `find_nominator_per_time_signature` measures.
     sounding: list[Fraction] = []
-    for chord in voice:
+    for chord_index, chord in enumerate(voice):
         if chord.is_barline() and duration_in_measure > Fraction(0):
             measure_duration.append(duration_in_measure)
             duration_in_measure, sounding = Fraction(0), []
@@ -1238,7 +1465,10 @@ def find_division_and_time_signature_nominator(voice: list[SymbolChord]) -> tupl
                     frac = symbol.get_duration().fraction
                     if frac > Fraction(0):
                         durations.append(frac)
-            duration_in_measure += advance_to_next_group(chord, duration_in_measure, sounding)
+            following = voice[chord_index + 1] if chord_index + 1 < len(voice) else None
+            duration_in_measure += advance_to_next_group(
+                chord, duration_in_measure, sounding, following
+            )
             sounding[:] = [end for end in sounding if end > duration_in_measure]
 
     if duration_in_measure > Fraction(0):
@@ -2681,6 +2911,7 @@ def reconstruct_voice(
     groups = retime_onto_steady_voices(groups, changes)
     groups = repair_tuplet_overlaps(groups, changes, restore_decoded=True)
     groups = solve_bar_rhythms(groups, changes, bar_length)
+    groups = drop_double_reads(groups, changes, system_targets)
     groups = repair_bar_arithmetic(groups, changes, system_targets)
     groups = add_tuplet_start_stop(groups)
     groups = infer_meter_changes(groups, changes)

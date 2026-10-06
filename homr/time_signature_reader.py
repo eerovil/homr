@@ -460,6 +460,57 @@ _BAR_LINES = (
 )
 
 
+def _bar_by_notes(
+    symbols: list[EncodedSymbol], x: float, reach: float, start: int, end: int
+) -> tuple[int, int]:
+    """The bar a signature at `x` opens, by the notes when the barlines misplace it.
+
+    A signature opens its bar, so every note of that bar stands right of it. The
+    decoder's x for a barline can be far off: on Kantajani s12
+    (eerovil/musescore-choir-plugins#274) the bass's first barline was placed
+    330px right of where it is printed, the 6/4 printed after it was read as
+    opening the system, and the staff was labelled 6/4 in a bar of 7/4. Where the
+    bar the barlines give holds a note well left of the digits, the bar is the one
+    after the last note left of them.
+    """
+    if not any(
+        _is_timed(symbol)
+        and symbol.image_coordinates is not None
+        and symbol.image_coordinates[0] < x - reach
+        for symbol in symbols[start:end]
+    ):
+        return start, end
+    left = [
+        index
+        for index, symbol in enumerate(symbols)
+        if _is_timed(symbol)
+        and symbol.image_coordinates is not None
+        and symbol.image_coordinates[0] < x
+    ]
+    after = next(
+        (
+            index
+            for index in range(left[-1] + 1, len(symbols))
+            if symbols[index].rhythm in _BAR_LINES
+        ),
+        None,
+    )
+    if after is None:
+        return start, end
+    following = next(
+        (index for index in range(after + 1, len(symbols)) if symbols[index].rhythm in _BAR_LINES),
+        len(symbols),
+    )
+    if any(
+        _is_timed(symbol)
+        and symbol.image_coordinates is not None
+        and symbol.image_coordinates[0] < x
+        for symbol in symbols[after + 1 : following]
+    ):
+        return start, end
+    return after + 1, following
+
+
 def attach_printed_meters(
     symbols: list[EncodedSymbol],
     image: NDArray,
@@ -519,6 +570,7 @@ def attach_printed_meters(
         before = [index for index, position in barlines if position < x]
         start = before[-1] + 1 if before else 0
         end = next((index for index, _ in barlines if index >= start), len(out))
+        start, end = _bar_by_notes(out, x, reach, start, end)
         if not any(_is_timed(symbol) for symbol in out[start:end]):
             eprint("Time signature", readings, "after the last bar: a courtesy, left out")
             continue
