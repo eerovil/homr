@@ -755,3 +755,80 @@ def test_a_note_does_not_borrow_the_stem_of_a_head_another_note_reads() -> None:
 
     assert symbols[1].stem_direction == "up"
     assert symbols[3].stem_direction is None
+
+
+def test_a_chord_is_stemmed_by_its_note_furthest_from_the_middle() -> None:
+    """D5 over A4 on one down stem is one voice, not a second one.
+
+    A4 alone would stem up; in the chord D5 is further from the middle line
+    and decides. Read note by note, the down stem looked like a second voice,
+    and every chord went to voice 2 with the rests left behind in voice 1.
+    """
+    measure = ET.fromstring("""<measure number="1">
+             <note><pitch><step>D</step><octave>5</octave></pitch>
+               <duration>2</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
+             <note><chord/><pitch><step>A</step><octave>4</octave></pitch>
+               <duration>2</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
+             <note><rest/><duration>2</duration><voice>1</voice><staff>1</staff></note>
+             <note><pitch><step>C</step><octave>5</octave></pitch>
+               <duration>2</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+             <note><chord/><pitch><step>G</step><octave>4</octave></pitch>
+               <duration>2</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+           </measure>""")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert {note.findtext("voice") for note in measure.findall("note")} == {"1"}
+
+
+def test_a_chord_stemmed_against_its_extreme_note_is_still_a_second_voice() -> None:
+    """D5 over B4 stemmed up: nothing in a lone voice draws that."""
+    measure = ET.fromstring("""<measure number="1">
+             <note><pitch><step>D</step><octave>5</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+             <note><chord/><pitch><step>B</step><octave>4</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>up</stem><staff>1</staff></note>
+             <note><pitch><step>G</step><octave>4</octave></pitch>
+               <duration>4</duration><voice>1</voice><stem>down</stem><staff>1</staff></note>
+           </measure>""")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert [note.findtext("voice") for note in measure.findall("note")] == ["1", "1", "2"]
+
+
+def test_a_beamed_run_is_stemmed_by_its_note_furthest_from_the_middle() -> None:
+    """Kantajani: C5 Bb4 A4 Bb4 under one beam, stemmed down, is one voice.
+
+    A4 alone would stem up. Read note by note its down stem looked like a
+    second voice, and the eighths were dealt alternately into two voices.
+    """
+    eighths = "".join(
+        f"""<note><pitch><step>{step}</step><octave>{octave}</octave></pitch>
+               <duration>2</duration><voice>1</voice><type>eighth</type>{stem}<staff>1</staff></note>"""
+        for step, octave, stem in [
+            ("C", 5, "<stem>down</stem>"),
+            ("B", 4, ""),
+            ("A", 4, "<stem>down</stem>"),
+            ("B", 4, ""),
+        ]
+    )
+    measure = ET.fromstring(f'<measure number="1">{eighths}</measure>')
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert {note.findtext("voice") for note in measure.findall("note")} == {"1"}
+
+
+def test_a_low_quarter_stemmed_down_is_still_a_second_voice() -> None:
+    """A run only joins beamable notes; a lone quarter is judged on its own."""
+    measure = ET.fromstring("""<measure number="1">
+             <note><pitch><step>C</step><octave>5</octave></pitch>
+               <duration>2</duration><voice>1</voice><type>eighth</type><stem>down</stem><staff>1</staff></note>
+             <note><pitch><step>E</step><octave>4</octave></pitch>
+               <duration>4</duration><voice>1</voice><type>quarter</type><stem>down</stem><staff>1</staff></note>
+           </measure>""")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert [note.findtext("voice") for note in measure.findall("note")] == ["2", "2"]

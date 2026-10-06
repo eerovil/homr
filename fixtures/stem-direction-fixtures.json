@@ -65,11 +65,6 @@
       "reference": "talviuni-s2.musicxml",
       "known_gaps": [
         {
-          "failure": "staff 1: m3 E4 at x=691.0 expected ['up'] but detected ['down', 'up']",
-          "reason": "the stems mask reads a stem on both sides of the lower head of a two-note chord; the recognised MusicXML still puts it in the right voice",
-          "id": "TU-s1-691"
-        },
-        {
           "failure": "staff 1: extra notehead at x=314.0 position 8.0 with stems ['none']",
           "reason": "a stemless head the reference has no note for, at the same x on both staves; the recognised MusicXML has no extra note there",
           "id": "TU-s1-314p8"
