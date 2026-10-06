@@ -316,6 +316,14 @@ def build_measures(
         # average of two of them and need not be a whole number of quarters.
         # Flooring 1.875 said the page was in 1/4, a meter no bar of it is in.
         beats = max(round(state.nominator * 4), 1)
+        # No signature at the head of the system: the meter carries over from the
+        # one before, and what the opening bar holds is the evidence for it. The
+        # median of the system says what most bars are, and on Kantajani s6 and
+        # s12 (eerovil/musescore-choir-plugins#274) that was the meter the system
+        # changes *to* a bar later, so a 4/4 bar was labelled 3/4.
+        opening = _measured_quarters(measures[0], division) if measures else None
+        if opening is not None and opening.denominator == 1 and opening > 0:
+            beats = int(opening)
         ET.SubElement(time_el, "beats").text = str(beats)
         ET.SubElement(time_el, "beat-type").text = "4"
     return measures
@@ -772,6 +780,15 @@ def _lowest(event: TimedNoteEvent) -> int | None:
         if note.find("pitch") is not None
     ]
     return min(steps) if steps else None
+
+
+def _measured_quarters(measure: ET.Element, division: int) -> Fraction | None:
+    """How many quarters the longest voice of a written measure lasts."""
+    per_quarter = division // 4
+    if per_quarter <= 0:
+        return None
+    ends = [end for events in _timeline(measure).values() for _, end, _ in events]
+    return Fraction(max(ends), per_quarter) if ends else None
 
 
 def _timeline(measure: ET.Element) -> dict[tuple[str, str], list[tuple[int, int, ET.Element]]]:

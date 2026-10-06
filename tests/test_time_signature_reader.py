@@ -344,3 +344,26 @@ def test_a_barline_read_as_a_one_is_no_number() -> None:
     raw, clean = _bits(_BARLINE_RAW), _bits(_BARLINE_CLEAN)
 
     assert time_signature_reader._read_number(raw, clean, on_line, _BARLINE_UNIT) is None
+
+
+@pytest.mark.parametrize("kind", ["doublebarline", "bolddoublebarline", "repeatStart"])
+def test_a_change_after_a_double_barline_or_repeat_opens_the_bar_after_it(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """eerovil/musescore-choir-plugins#274: Kantajani prints 3/4 after a start-repeat
+    and 6/4 after a double barline; both landed in the bar before."""
+    symbols = stream()
+    symbols[6] = EncodedSymbol(kind)
+    symbols[6].image_coordinates = (400.0, 0.0)
+    monkeypatch.setattr(
+        time_signature_reader,
+        "find_time_signatures",
+        lambda image, s: [PrintedMeter(130, 3, 4, 0.8), PrintedMeter(430, 4, 4, 0.8)],
+    )
+
+    out = attach_printed_meters(symbols, np.zeros((1, 1)), staff(), lambda point: point)
+
+    rhythms = [s.rhythm for s in out]
+    inserted = rhythms.index(kind) + 1
+    assert rhythms[inserted] == "timeSignature/4"
+    assert out[inserted].printed_meters == ((4, 4),)

@@ -446,6 +446,20 @@ def _is_timed(symbol: EncodedSymbol) -> bool:
     return symbol.rhythm.startswith(("note", "rest"))
 
 
+#: Every token that stands at a barline. A meter change is usually printed after
+#: a double barline, often after a repeat sign; counting only plain `barline`
+#: placed such a signature in the bar before it (Kantajani s6 and s12, Lempilintu
+#: s4: eerovil/musescore-choir-plugins#274).
+_BAR_LINES = (
+    "barline",
+    "doublebarline",
+    "bolddoublebarline",
+    "repeatStart",
+    "repeatEnd",
+    "repeatEndStart",
+)
+
+
 def attach_printed_meters(
     symbols: list[EncodedSymbol],
     image: NDArray,
@@ -494,7 +508,7 @@ def attach_printed_meters(
     barlines = [
         (index, symbol.image_coordinates[0])
         for index, symbol in enumerate(symbols)
-        if symbol.rhythm.startswith("barline") and symbol.image_coordinates is not None
+        if symbol.rhythm in _BAR_LINES and symbol.image_coordinates is not None
     ]
     out = list(symbols)
     insertions: list[tuple[int, EncodedSymbol]] = []
