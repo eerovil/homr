@@ -845,3 +845,57 @@ def test_a_whole_note_is_never_voiced_by_a_stem_it_does_not_have() -> None:
     rebalance_measure_voices(measure, {1: ("G", 2, 0)})
 
     assert [note.findtext("voice") for note in measure.findall("note")] == ["1"]
+
+
+def _two_stem_chords(upper_mark: str, lower_mark: str) -> ET.Element:
+    """Three two-stem chords: the upper head stemmed up, the lower one down."""
+    notes = ""
+    for upper, lower in [(("D", 4), ("B", 3)), (("F", 4), ("D", 4)), (("A", 4), ("F", 4))]:
+        for (step, octave), stem, token in (
+            (upper, "up", upper_mark),
+            (lower, "down", lower_mark),
+        ):
+            chord = "<chord/>" if stem == "down" else ""
+            notes += (
+                f'<note voice-token="{token}">{chord}<pitch><step>{step}</step>'
+                f"<octave>{octave}</octave></pitch><duration>2</duration><voice>1</voice>"
+                f"<type>eighth</type><stem>{stem}</stem><staff>1</staff></note>"
+            )
+    return ET.fromstring(f'<measure number="1">{notes}</measure>')
+
+
+def _voices_by_stem(measure: ET.Element) -> dict[str, set[str]]:
+    found: dict[str, set[str]] = {"up": set(), "down": set()}
+    for note in measure.findall("note"):
+        found[note.findtext("stem") or ""].add(note.findtext("voice") or "")
+    return found
+
+
+def test_model_voices_swapped_against_every_stem_are_turned_back() -> None:
+    """Illan viimeinen tango s4 (eerovil/musescore-choir-plugins#274): the model
+    marked every up-stemmed upper head as the second voice."""
+    measure = _two_stem_chords(upper_mark="2", lower_mark="1")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert _voices_by_stem(measure) == {"up": {"1"}, "down": {"2"}}
+
+
+def test_model_voices_that_agree_with_the_stems_are_kept() -> None:
+    measure = _two_stem_chords(upper_mark="1", lower_mark="2")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert _voices_by_stem(measure) == {"up": {"1"}, "down": {"2"}}
+
+
+def test_a_partial_disagreement_is_still_the_models() -> None:
+    measure = _two_stem_chords(upper_mark="2", lower_mark="1")
+    first_up, first_down = measure.findall("note")[:2]
+    first_up.set("voice-token", "1")
+    first_down.set("voice-token", "2")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    notes = measure.findall("note")
+    assert [n.findtext("voice") for n in notes[2:]] == ["2", "1", "2", "1"]
