@@ -214,6 +214,22 @@ def _runs(columns: NDArray[np.bool_] | np.bool_, gap: int) -> list[tuple[int, in
     return runs
 
 
+#: A printed 1 is a stroke with a flag: in all three fonts its widest row is
+#: half its height, a whole staff space, and a typical row a third of it. A
+#: barline or a stem is the same width all the way down and far thinner. On the
+#: new songs (eerovil/musescore-choir-plugins#274) three barlines were read as
+#: 1 over 1; none was wider than 0.37 of a staff space anywhere between the
+#: lines. Half a space sits between the two with room either side.
+_MIN_ONE_WIDTH = 0.5
+
+
+def _is_bare_stroke(ink: NDArray[np.bool_], unit: float) -> bool:
+    """Whether ink read as a 1 is too thin anywhere to be one: a barline, a stem."""
+    if ink.size == 0:
+        return True
+    return int(ink.sum(axis=1).max()) < _MIN_ONE_WIDTH * unit
+
+
 def _read_number(
     raw: NDArray[np.bool_], clean: NDArray[np.bool_], on_line: NDArray[np.bool_], unit: float
 ) -> tuple[int, float] | None:
@@ -250,6 +266,8 @@ def _read_number(
         allowed = _LEADING if index == 0 else _ANY_DIGIT
         digit, score, runner_up = classify_digit(raw[:, left:right], on_line, allowed)
         if score < _MIN_SCORE or score - runner_up < _MARGIN:
+            return None
+        if digit == 1 and _is_bare_stroke(body[:, left:right], unit):
             return None
         value = value * 10 + digit
         weakest = min(weakest, score)
@@ -412,12 +430,6 @@ def _read_stack(
         numbers.append(number)
     (numerator, top_score), (denominator, bottom_score) = numbers
     if denominator not in _DENOMINATORS or not 1 <= numerator <= _MAX_NUMERATOR:
-        return None
-    if numerator == 1 and denominator == 1:
-        # A 1 is a vertical stroke, so a 1 over a 1 is any stroke crossing both
-        # halves of the staff -- a barline, a stem -- and 1/1 is a meter nobody
-        # prints. Read as one, it put a 1/1 the page does not have into three
-        # songs of eerovil/musescore-choir-plugins#274.
         return None
     return numerator, denominator, min(top_score, bottom_score)
 
