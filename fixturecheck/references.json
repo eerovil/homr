@@ -1,11 +1,61 @@
 {
  "cases": {
+  "fin-s01": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s02": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "fin-s03": {
    "meter": 0,
    "score": 100.0,
    "structure": 0
   },
+  "fin-s04": {
+   "meter": 1,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s06": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "fin-s07": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s08": {
+   "meter": 0,
+   "score": 94.2,
+   "structure": 0
+  },
+  "fin-s09": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s10": {
+   "meter": 0,
+   "score": 98.85,
+   "structure": 0
+  },
+  "fin-s11": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "fin-s12": {
    "meter": 0,
    "score": 100.0,
    "structure": 0
@@ -185,6 +235,56 @@
    "score": 88.52,
    "structure": 0
   },
+  "illan-s01": {
+   "meter": 0,
+   "score": 92.0,
+   "structure": 0
+  },
+  "illan-s02": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "illan-s03": {
+   "meter": 0,
+   "score": 95.24,
+   "structure": 0
+  },
+  "illan-s04": {
+   "meter": 0,
+   "score": 72.73,
+   "structure": 0
+  },
+  "illan-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "illan-s06": {
+   "meter": 0,
+   "score": 94.03,
+   "structure": 0
+  },
+  "illan-s07": {
+   "meter": 0,
+   "score": 98.8,
+   "structure": 0
+  },
+  "illan-s08": {
+   "meter": 0,
+   "score": 98.1,
+   "structure": 0
+  },
+  "illan-s09": {
+   "meter": 0,
+   "score": 97.94,
+   "structure": 0
+  },
+  "illan-s10": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "kaksi-laulua-krapulasta-2-s1": {
    "image": "fea5cfc12fa91cd3",
    "meter": 0,
@@ -325,7 +425,37 @@
    "score": 98.59,
    "structure": 0
   },
+  "kantajani-s01": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s02": {
+   "meter": 1,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s03": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s04": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "kantajani-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s06": {
+   "meter": 1,
+   "score": 97.67,
+   "structure": 0
+  },
+  "kantajani-s07": {
    "meter": 0,
    "score": 100.0,
    "structure": 0
@@ -333,6 +463,26 @@
   "kantajani-s08": {
    "meter": 0,
    "score": 95.06,
+   "structure": 0
+  },
+  "kantajani-s09": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s10": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s11": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "kantajani-s12": {
+   "meter": 1,
+   "score": 100.0,
    "structure": 0
   },
   "kayttaytymisohjeita-s1": {
@@ -531,6 +681,71 @@
    "score": 100.0,
    "structure": 0
   },
+  "lempilintu-s01": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s02": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s03": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s04": {
+   "meter": 2,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s06": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s07": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s08": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s09": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s10": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s11": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "lempilintu-s12": {
+   "meter": 0,
+   "score": 98.85,
+   "structure": 0
+  },
+  "lempilintu-s13": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "pois-meni-mereen-paiva-s1": {
    "image": "93ba604d295812e2",
    "meter": 0,
@@ -599,7 +814,57 @@
    "score": 100.0,
    "structure": 0
   },
+  "shakkitarina-s02": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s03": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s04": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s06": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s07": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s08": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s09": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "shakkitarina-s10": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s11": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "shakkitarina-s12": {
    "meter": 0,
    "score": 100.0,
    "structure": 0
@@ -646,9 +911,64 @@
    "score": 92.59,
    "structure": 0
   },
+  "vielako-s01": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s02": {
+   "meter": 1,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s03": {
+   "meter": 1,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s04": {
+   "meter": 1,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s05": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s06": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s07": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s08": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
   "vielako-s09": {
    "meter": 0,
    "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s10": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s11": {
+   "meter": 0,
+   "score": 100.0,
+   "structure": 0
+  },
+  "vielako-s12": {
+   "meter": 0,
+   "score": 99.04,
    "structure": 0
   },
   "virta-scratch-s1": {
