@@ -26,6 +26,7 @@ from homr.doubt import (
     SILENT_BESIDE_CHORD,
     confidence_doubts,
     find_doubts,
+    find_spots,
     interval_doubts,
     mark_doubts,
     odd_time_doubts,
@@ -210,9 +211,7 @@ def test_marks_are_red_words_on_their_staff_at_the_head_of_the_bar() -> None:
     words = direction.find("direction-type/words")
     assert words is not None
     assert words.get("color") == "#FF0000"
-    assert words.text == (
-        MARK_PREFIX + f"check against the page: voice 2: {RHYTHM_CLOSE}; {SECOND_READING}"
-    )
+    assert words.text == MARK_PREFIX + "rhythm? notes?"
     assert direction.findtext("staff") == "2"
 
 
@@ -310,3 +309,40 @@ def test_a_chord_beside_a_rest_or_a_note_is_ordinary() -> None:
     lower = _n("C", 2, 4) + _n("C", 2) + _n("A", 2, chord=True) + _n("C", 2)
     assert not silent_beside_chord_doubts(_two_voices(resting + _n("E", 1), lower))
     assert not silent_beside_chord_doubts(_two_voices(_n("E", 1, 6) + _n("E", 1), lower))
+
+
+def test_the_notes_a_doubt_is_about_are_red_and_the_word_stands_above_them() -> None:
+    """The owner's request on eerovil/musescore-choir-plugins#274: a short word,
+    and the place in the bar it is about."""
+    root = _fifth(1, -1)
+    measure = root.find(".//measure")
+    assert measure is not None
+    doubts = interval_doubts(root)
+    spots, words = find_spots([], root, None, doubts)
+    assert mark_doubts(root, doubts, spots, words) == 1
+    notes = measure.findall("note")
+    assert [note.get("color") for note in notes] == ["#FF0000", "#FF0000"]
+    assert all(note.find("notehead").get("color") == "#FF0000" for note in notes)  # type: ignore[union-attr]
+    children = list(measure)
+    direction = measure.find("direction")
+    assert direction is not None
+    assert children.index(direction) == children.index(notes[0]) - 1
+    assert direction.findtext("direction-type/words") == MARK_PREFIX + "accidental?"
+
+
+def test_a_second_reading_differing_only_in_pitch_says_pitch() -> None:
+    first = _score([[(1, 1, "C", 8)]])
+    second = _score([[(1, 1, "D", 8)]])
+    doubts = reading_doubts(first, second)
+    spots, words = find_spots([], first, second, doubts)
+    assert words == {(0, 1, 1): {"pitch?"}}
+    assert spots[(0, 1, 1)] == first.findall(".//note")
+
+
+def test_a_doubt_with_no_notes_to_name_stands_at_the_head_of_the_bar() -> None:
+    root = _score([[(1, 1, "C", 8)]])
+    assert mark_doubts(root, {(0, 1, 1): {SECOND_READING_FAILED}}) == 1
+    measure = root.find(".//measure")
+    assert measure is not None
+    assert [c.tag for c in measure][:2] == ["attributes", "direction"]
+    assert measure.find("note").get("color") is None  # type: ignore[union-attr]

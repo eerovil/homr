@@ -27,7 +27,7 @@ from homr.brace_dot_detection import (
     record_bar_lines,
 )
 from homr.debug import Debug
-from homr.doubt import find_doubts, mark_doubts
+from homr.doubt import find_doubts, find_spots, mark_doubts
 from homr.errors import IncompleteRecognitionError
 from homr.image_prediction import get_predictions, predict_symbols
 from homr.model import InputPredictions, MultiStaff, Staff
@@ -286,7 +286,8 @@ def process_image(
             second = _second_reading(image_path, config, xml_generator_args)
             doubts = find_doubts(result_staffs, xml, second)
             readings = bar_readings(xml, result_staffs, doubts)
-            marked = mark_doubts(xml, doubts)
+            spots, words = find_spots(result_staffs, xml, second, doubts)
+            marked = mark_doubts(xml, doubts, spots, words)
             embed_readings(xml, readings)
             eprint(f"Marked {marked} bar(s) to check against the page")
             eprint(f"Offered other readings for {len(readings)} voice(s) of those bars")

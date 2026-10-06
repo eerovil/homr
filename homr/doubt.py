@@ -456,15 +456,59 @@ def _sort_key(reason: str) -> tuple[int, str]:
     return (_ORDER.index(tail) if tail in _ORDER else len(_ORDER), reason)
 
 
-def mark_text(reasons: set[str]) -> str:
-    return MARK_PREFIX + "check against the page: " + "; ".join(sorted(reasons, key=_sort_key))
+#: What a person reads at the bar: one word per kind of doubt. The reasons above
+#: stay as they are for the record (`find_doubts`); the score carries only this.
+_WORD = {
+    RHYTHM_CLOSE: "rhythm?",
+    PITCH_UNSURE: "pitch?",
+    ACCIDENTAL_UNSURE: "accidental?",
+    VOICE_UNSURE: "voice?",
+    COPIES_DISAGREE: "rhythm?",
+    ODD_TIME: "rhythm?",
+    ODD_INTERVAL: "accidental?",
+    SILENT_BESIDE_CHORD: "voice?",
+    SECOND_READING: "notes?",
+    SECOND_READING_FAILED: "unchecked?",
+}
+_WORD_ORDER = ["pitch?", "accidental?", "rhythm?", "voice?", "notes?", "unchecked?"]
 
 
-def mark_doubts(xml: ET.Element, doubts: Doubts) -> int:
-    """Put a red `⚠` text at the head of each doubted bar, on its staff. Returns how many."""
+def mark_words(reasons: set[str]) -> list[str]:
+    """The words a mark says, each once, in a fixed order."""
+    words = {_WORD.get(reason.split(": ", 1)[-1], "check?") for reason in reasons}
+    return sorted(
+        words, key=lambda w: _WORD_ORDER.index(w) if w in _WORD_ORDER else len(_WORD_ORDER)
+    )
+
+
+def mark_text(reasons: set[str], words: set[str] | None = None) -> str:
+    chosen = (
+        mark_words(reasons)
+        if words is None
+        else sorted(
+            words, key=lambda w: _WORD_ORDER.index(w) if w in _WORD_ORDER else len(_WORD_ORDER)
+        )
+    )
+    return MARK_PREFIX + " ".join(chosen)
+
+
+def mark_doubts(
+    xml: ET.Element,
+    doubts: Doubts,
+    spots: "Spots | None" = None,
+    words: "dict[tuple[int, int, int], set[str]] | None" = None,
+) -> int:
+    """Mark each doubted bar on its staff. Returns how many.
+
+    Where the doubt names notes (`find_spots`), they are coloured red and the
+    `⚠` word stands right above the first of them; otherwise the word stands at
+    the head of the bar. Colouring is not undone by anything here: a person
+    turns the notes back once the bar is put right.
+    """
     parts = xml.findall("part")
     marked = 0
-    for (part_index, staff, bar), reasons in sorted(doubts.items()):
+    for key, reasons in sorted(doubts.items()):
+        part_index, staff, bar = key
         if not reasons or part_index >= len(parts):
             continue
         part = parts[part_index]
@@ -473,14 +517,260 @@ def mark_doubts(xml: ET.Element, doubts: Doubts) -> int:
             continue
         measure = measures[bar - 1]
         direction = ET.Element("direction", placement="above")
-        words = ET.SubElement(ET.SubElement(direction, "direction-type"), "words", color="#FF0000")
-        words.text = mark_text(reasons)
+        text = ET.SubElement(ET.SubElement(direction, "direction-type"), "words", color="#FF0000")
+        text.text = mark_text(reasons, (words or {}).get(key))
         if _staves_of(part) > 1:
             ET.SubElement(direction, "staff").text = str(staff)
-        index = next(
-            (i for i, child in enumerate(measure) if child.tag not in ("attributes", "print")),
-            len(measure),
-        )
+        children = list(measure)
+        flagged = [note for note in (spots or {}).get(key, []) if note in children]
+        for note in flagged:
+            note.set("color", "#FF0000")
+            head = note.find("notehead")
+            if head is None:
+                head = ET.Element("notehead")
+                head.text = "normal"
+                _insert_notehead(note, head)
+            head.set("color", "#FF0000")
+        if flagged:
+            first = min(children.index(note) for note in flagged)
+            # A chord's later notes carry <chord/>: the word goes before the
+            # note that opens the chord, where the cursor stands at its onset.
+            while first > 0 and children[first].find("chord") is not None:
+                first -= 1
+            index = first
+        else:
+            index = next(
+                (i for i, child in enumerate(children) if child.tag not in ("attributes", "print")),
+                len(children),
+            )
         measure.insert(index, direction)
         marked += 1
     return marked
+
+
+#: Where <notehead> goes among a note's children (MusicXML's own order).
+_BEFORE_NOTEHEAD = {
+    "grace",
+    "cue",
+    "chord",
+    "pitch",
+    "unpitched",
+    "rest",
+    "tie",
+    "duration",
+    "instrument",
+    "footnote",
+    "level",
+    "voice",
+    "type",
+    "dot",
+    "accidental",
+    "time-modification",
+    "stem",
+}
+
+
+def _insert_notehead(note: ET.Element, head: ET.Element) -> None:
+    index = 0
+    for i, child in enumerate(note):
+        if isinstance(child.tag, str) and child.tag in _BEFORE_NOTEHEAD:
+            index = i + 1
+    note.insert(index, head)
+
+
+# --- where in the bar --------------------------------------------------------
+
+#: (part, staff, bar) -> the notes a doubt is about.
+Spots = dict[tuple[int, int, int], list[ET.Element]]
+
+_IMGPOS = re.compile(r"imgpos: (-?\d+), (-?\d+)")
+
+
+def _notes_by_position(xml: ET.Element) -> dict[tuple[int, int], list[ET.Element]]:
+    """The written notes, by the image position their symbol was decoded at."""
+    found: dict[tuple[int, int], list[ET.Element]] = defaultdict(list)
+    for note in xml.iter("note"):
+        for child in note:
+            if child.tag is ET.Comment:  # type: ignore[comparison-overlap]
+                match = _IMGPOS.search(child.text or "")
+                if match:
+                    found[(int(match.group(1)), int(match.group(2)))].append(note)
+    return found
+
+
+def _written(
+    symbol: EncodedSymbol, by_position: dict[tuple[int, int], list[ET.Element]]
+) -> list[ET.Element]:
+    coordinates = symbol.image_coordinates
+    if coordinates is None:
+        return []
+    x, y = coordinates
+    return by_position.get((round(x), round(y)), [])
+
+
+def _located(xml: ET.Element) -> dict[tuple[int, int, int], list[tuple]]:
+    """Every pitched note by (part, staff, bar): (onset, (step, octave, alter), duration, note)."""
+    found: dict[tuple[int, int, int], list[tuple]] = defaultdict(list)
+    for part_index, part in enumerate(xml.findall("part")):
+        divisions = 1
+        for bar, measure in enumerate(part.findall("measure"), start=1):
+            at = previous = Fraction(0)
+            for element in measure:
+                text = element.findtext("divisions")
+                if element.tag == "attributes" and text:
+                    divisions = int(text)
+                if element.tag in ("backup", "forward"):
+                    step = Fraction(int(element.findtext("duration") or 0), divisions * 4)
+                    at += -step if element.tag == "backup" else step
+                    continue
+                if element.tag != "note":
+                    continue
+                duration = Fraction(int(element.findtext("duration") or 0), divisions * 4)
+                onset = previous if element.find("chord") is not None else at
+                if element.find("chord") is None:
+                    previous, at = at, at + duration
+                pitch = element.find("pitch")
+                if pitch is None or element.find("grace") is not None:
+                    continue
+                what = (
+                    pitch.findtext("step") or "",
+                    pitch.findtext("octave") or "",
+                    int(float(pitch.findtext("alter") or 0)),
+                )
+                staff = int(element.findtext("staff") or 1)
+                found[(part_index, staff, bar)].append((onset, what, duration, element))
+    return found
+
+
+def _two_best(moments: list[list[EncodedSymbol]], length: Fraction) -> tuple[list, list] | None:
+    """The best and second-best values of each moment, of the readings that fill the bar."""
+    states: dict[Fraction, list[tuple[float, tuple]]] = {Fraction(0): [(0.0, ())]}
+    for heads in moments:
+        following: dict[Fraction, list[tuple[float, tuple]]] = defaultdict(list)
+        for elapsed, paths in states.items():
+            for duration, score in _options(heads):
+                if elapsed + duration > length:
+                    continue
+                following[elapsed + duration].extend(
+                    (total + score, values + (duration,)) for total, values in paths
+                )
+        states = {t: sorted(p, key=lambda item: -item[0])[:2] for t, p in following.items()}
+    best = states.get(length)
+    if not best or len(best) < 2:  # noqa: PLR2004
+        return None
+    return list(best[0][1]), list(best[1][1])
+
+
+def find_spots(
+    staffs: list[list[EncodedSymbol]],
+    xml: ET.Element,
+    second: ET.Element | None,
+    doubts: Doubts,
+) -> tuple[Spots, dict[tuple[int, int, int], set[str]]]:
+    """For each doubted bar, the notes the doubt is about, and the words to say.
+
+    The notes are found again by the same evidence each rule used: a decoded
+    symbol by the image position it was written with, a note of the score by
+    where it stands in the bar. A second reading that differs only in pitch
+    (the same moments, the same lengths) says "pitch?" rather than "notes?".
+    """
+    spots: Spots = defaultdict(list)
+    words: dict[tuple[int, int, int], set[str]] = {}
+    by_position = _notes_by_position(xml)
+    located = _located(xml)
+
+    def add(key: tuple[int, int, int], notes: list[ET.Element]) -> None:
+        if key in doubts:
+            for note in notes:
+                if note.find("pitch") is not None and note not in spots[key]:
+                    spots[key].append(note)
+
+    lengths = bar_lengths(xml)
+    for part, symbols in enumerate(staffs):
+        bar = 1
+        moments: dict[tuple[int, str], list[list[EncodedSymbol]]] = defaultdict(list)
+        linked = False
+        for symbol in symbols:
+            if symbol.rhythm == "barline":
+                bar += 1
+                linked = False
+                continue
+            if symbol.rhythm == "chord":
+                linked = True
+                continue
+            if not (symbol.rhythm.startswith(("note", "rest")) and _duration(symbol.rhythm)):
+                linked = False
+                continue
+            key = (part, _staff(symbol.position), bar)
+            if symbol.rhythm.startswith("note") and (
+                _probability(symbol, "pitch") < _PITCH
+                or _probability(symbol, "lift") < _LIFT
+                or _probability(symbol, "position") < _POSITION
+            ):
+                add(key, _written(symbol, by_position))
+            group = moments[(bar, symbol.position)]
+            if linked and group:
+                group[-1].append(symbol)
+            else:
+                group.append([symbol])
+            linked = False
+        part_lengths = lengths[part] if part < len(lengths) else []
+        for (bar_number, position), voice in moments.items():
+            key = (part, _staff(position), bar_number)
+            if key not in doubts or bar_number > len(part_lengths):
+                continue
+            pair = _two_best(voice, part_lengths[bar_number - 1])
+            if pair is None:
+                continue
+            best, other = pair
+            for heads, one, two in zip(voice, best, other, strict=False):
+                if one != two:
+                    for head in heads:
+                        add(key, _written(head, by_position))
+
+    for key, notes in located.items():
+        if key not in doubts:
+            continue
+        reasons = {reason.split(": ", 1)[-1] for reason in doubts[key]}
+        struck: dict[Fraction, list[tuple]] = defaultdict(list)
+        for entry in notes:
+            struck[entry[0]].append(entry)
+        if ODD_TIME in reasons:
+            add(key, [entry[3] for entry in notes if _odd(entry[0])])
+        if ODD_INTERVAL in reasons:
+            for together in struck.values():
+                for i, low in enumerate(together):
+                    for high in together[i + 1 :]:
+                        if _out_of_use(low[1], high[1]):
+                            add(key, [low[3], high[3]])
+        if SILENT_BESIDE_CHORD in reasons:
+            for together in struck.values():
+                voices: dict[str, list[ET.Element]] = defaultdict(list)
+                for entry in together:
+                    voices[entry[3].findtext("voice") or "1"].append(entry[3])
+                for chord_notes in voices.values():
+                    if len(chord_notes) >= 2:  # noqa: PLR2004
+                        add(key, chord_notes)
+        if COPIES_DISAGREE in reasons:
+            for together in struck.values():
+                for i, one in enumerate(together):
+                    for two in together[i + 1 :]:
+                        if one[1] == two[1] and one[2] != two[2]:
+                            add(key, [one[3], two[3]])
+
+    if second is not None:
+        theirs = _located(second)
+        for key, notes in located.items():
+            if key not in doubts or not any(
+                reason.endswith(SECOND_READING) for reason in doubts[key]
+            ):
+                continue
+            read_again = {(entry[0], entry[1], entry[2]) for entry in theirs.get(key, [])}
+            differing = [
+                entry for entry in notes if (entry[0], entry[1], entry[2]) not in read_again
+            ]
+            add(key, [entry[3] for entry in differing])
+            moments_there = {(entry[0], entry[2]) for entry in theirs.get(key, [])}
+            if differing and all((entry[0], entry[2]) in moments_there for entry in differing):
+                words[key] = set(mark_words(doubts[key])) - {"notes?"} | {"pitch?"}
+    return spots, words
