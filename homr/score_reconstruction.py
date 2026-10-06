@@ -640,6 +640,38 @@ def _all_alternatives(symbol: EncodedSymbol) -> list[str]:
     return [alternative["value"] for alternative in alternatives]
 
 
+def _opening_bar_target(
+    voice: list[SymbolChord],
+    bars: list[tuple[int, int]],
+    targets: list[Fraction | None],
+    span: tuple[int, int],
+) -> Fraction | None:
+    """The length a system's opening bar is held to, when it runs **over** the bar
+    after it.
+
+    The opening bar may be a pickup, and a pickup is short -- so it is never
+    lengthened. A bar longer than the meter the next bar is held to is not a
+    pickup: on Illan viimeinen tango s9 (eerovil/musescore-choir-plugins#274) the
+    first bar's D5 eighth was read as a dotted eighth and the bar ran a
+    sixteenth over its 2/4, which the decoder's second reading (the plain
+    eighth, at 0.33) mends.
+    """
+    index = bars.index(span)
+    if index + 1 >= len(bars) or targets[index + 1] is None:
+        return None
+    following = bars[index + 1]
+    if any(
+        chord.symbols and chord.symbols[0].rhythm.startswith("timeSignature")
+        for chord in voice[following[0] : following[1]]
+    ):
+        return None  # the next bar is in another meter
+    target = targets[index + 1]
+    lengths = _staff_lengths(voice, span)
+    if not lengths or max(lengths.values()) <= target:  # type: ignore[operator]
+        return None
+    return target
+
+
 def repair_bar_arithmetic(
     voice: list[SymbolChord],
     changes: list[ReconstructionChange] | None = None,
@@ -668,7 +700,9 @@ def repair_bar_arithmetic(
       the bar being repaired every staff but one must already measure it. A
       system printing one staff is never repaired -- the same rule
       `_corroborated_length` follows, and for the same reason.
-    - **Never the bar that opens a span**, which is where an anacrusis is.
+    - **Never lengthen the bar that opens a span**, which is where an anacrusis
+      is. A pickup is short, so an opening bar running *over* the next bar's
+      length may be shortened to it (`_opening_bar_target`).
     - **Never a bar this cannot measure** -- a tuplet or a multi-measure rest
       anywhere in it, since its length would be arithmetic this does not do. A
       grace note takes no time and is measured as taking none; one read alone in
@@ -703,8 +737,9 @@ def repair_bar_arithmetic(
         else [None] * len(bars)
     )
     opening = next(iter(_musical_bars(voice, bars)), None)
+    targets = _bar_targets(voice, bars)
     for bar_number, (span, own, theirs) in enumerate(
-        zip(bars, _bar_targets(voice, bars), others, strict=True), start=1
+        zip(bars, targets, others, strict=True), start=1
     ):
         # A staff whose own voices cannot say what a bar is -- one voice, or a
         # second voice in a single bar -- may take it from the other staves of
@@ -712,6 +747,8 @@ def repair_bar_arithmetic(
         # The opening bar may be a pickup; the other staves cannot say it is not.
         borrowed = None if bar_number - 1 == opening else theirs
         target = own if own is not None else borrowed
+        if target is None and bar_number - 1 == opening:
+            target = _opening_bar_target(voice, bars, targets, span)
         if target is None:
             continue
         repair = _repair_for_bar(voice, span, target, alone=own is None)
@@ -840,6 +877,47 @@ def _probability(symbol: EncodedSymbol) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
+#: How likely the decoder must have found another value for a note before that
+#: value counts as a reading of the page rather than noise.
+_LIKELY_ALTERNATIVE = 0.1
+
+
+def _misread_elsewhere(
+    notes: list[tuple[int, int, EncodedSymbol]],
+    candidate: tuple[int, int, EncodedSymbol],
+    over: Fraction,
+) -> bool:
+    """Whether another note of the voice has a likely second reading exactly the
+    bar's overrun shorter -- a value misread, which the arithmetic repair mends,
+    rather than a head read twice.
+
+    Illan viimeinen tango s9 (eerovil/musescore-choir-plugins#274): a D5 eighth
+    read as a dotted eighth (0.49 against the plain eighth's 0.33) left the bar a
+    sixteenth over, and the C5 sixteenth beside it, 17px from the B4 that follows
+    it in a tight beamed pair, was taken out as a double read.
+    """
+    for _, _, symbol in notes:
+        if symbol is candidate[2]:
+            continue
+        rhythm = (symbol.confidence or {}).get("rhythm") if symbol.confidence else None
+        alternatives = rhythm.get("alternatives", []) if isinstance(rhythm, dict) else []
+        length = symbol.get_duration().fraction
+        for alternative in alternatives:
+            value = alternative.get("value")
+            probability = alternative.get("probability")
+            if (
+                not isinstance(value, str)
+                or value == symbol.rhythm
+                or not value.startswith("note")
+                or not isinstance(probability, (int, float))
+                or probability < _LIKELY_ALTERNATIVE
+            ):
+                continue
+            if length - EncodedSymbol(value).get_duration().fraction == over:
+                return True
+    return False
+
+
 def drop_double_reads(
     voice: list[SymbolChord],
     changes: list[ReconstructionChange] | None = None,
@@ -917,7 +995,9 @@ def drop_double_reads(
                     # probability missing, or the two equal, there is no such note.
                     continue
                 weaker = left if certainty[0] < certainty[1] else right  # type: ignore[operator]
-                if weaker[2].get_duration().fraction == over:
+                if weaker[2].get_duration().fraction == over and not _misread_elsewhere(
+                    notes, weaker, over
+                ):
                     found.append((bar_number, weaker))
         if len(found) == 1:
             _, (chord_index, symbol_index, symbol) = found[0]
