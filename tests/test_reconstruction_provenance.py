@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,7 @@ def test_generate_xml_collects_the_changes_from_each_part(
         index: int,
         has_two_staves: bool,
         reconstruction_changes: list[ReconstructionChange] | None = None,
+        system_targets: list[Fraction | None] | None = None,
     ) -> ET.Element:
         assert reconstruction_changes is not None
         reconstruction_changes.append(change)
@@ -161,7 +163,9 @@ def test_generate_xml_collects_the_changes_from_each_part(
     assert collected == [[change]]
 
 
-def test_confidence_sidecar_adds_provenance_without_breaking_version_one(tmp_path: Path) -> None:
+def test_confidence_sidecar_adds_provenance_without_breaking_version_one(
+    tmp_path: Path,
+) -> None:
     symbol = EncodedSymbol(
         "note_4",
         pitch="C4",

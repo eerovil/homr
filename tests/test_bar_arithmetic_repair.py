@@ -471,3 +471,58 @@ def test_a_voice_short_by_its_partners_rests_is_not_lengthened() -> None:
     ]
     voice = system(four_four(), four_four(), rests)
     assert repair_bar_arithmetic(voice) is voice
+
+
+# --- a staff that cannot say what a bar is on its own ---------------------
+
+
+def _one_voice_stream(bars: list[list[str]]) -> list[EncodedSymbol]:
+    """A one-staff stream of bars, each a list of rhythms, alternatives of a quarter
+    read where the decoder ranked an eighth under it."""
+    out: list[EncodedSymbol] = []
+    for rhythms in bars:
+        for rhythm in rhythms:
+            alternatives = ("note_4", "note_8") if rhythm == "note_4" else ()
+            out.append(note(rhythm, "upper", stem="up", alternatives=alternatives))
+        out.append(EncodedSymbol("barline"))
+    return out
+
+
+def test_the_other_staves_give_a_lone_staff_its_bar_length() -> None:
+    """Finlandia s8 (eerovil/musescore-choir-plugins#274): the baritone's first
+    eighth was read as a quarter, and with one voice its staff could not say the
+    bar was over; the three other staves measure four quarters in every bar."""
+    from homr.score_reconstruction import group_into_chords, system_bar_targets
+
+    steady = [["note_2", "note_2"]] * 4
+    eighths = ["note_4"] + ["note_8"] * 7
+    overrun = [["note_2", "note_2"]] * 3 + [eighths]
+    voices = [_one_voice_stream(steady)] * 3 + [_one_voice_stream(overrun)]
+    targets = system_bar_targets(voices)
+    assert targets[3] == [None, Fraction(1), Fraction(1), Fraction(1)]
+
+    repaired = repair_bar_arithmetic(group_into_chords(voices[3]), None, targets[3])
+    rhythms = [s.rhythm for chord in repaired for s in chord.symbols if s.rhythm.startswith("note")]
+    assert rhythms[-8:] == ["note_8"] * 8
+
+
+def test_staves_that_disagree_give_no_bar_length() -> None:
+    from homr.score_reconstruction import system_bar_targets
+
+    voices = [
+        _one_voice_stream([["note_2", "note_2"]] * 3),
+        _one_voice_stream([["note_2", "note_2"]] * 3),
+        _one_voice_stream([["note_2", "note_4"]] * 3),
+    ]
+    assert system_bar_targets(voices)[0] == [None, None, None]
+
+
+def test_staves_with_different_bar_counts_give_nothing() -> None:
+    from homr.score_reconstruction import system_bar_targets
+
+    voices = [
+        _one_voice_stream([["note_2", "note_2"]] * 3),
+        _one_voice_stream([["note_2", "note_2"]] * 3),
+        _one_voice_stream([["note_2", "note_2"]] * 4),
+    ]
+    assert all(t is None for staff in system_bar_targets(voices) for t in staff)

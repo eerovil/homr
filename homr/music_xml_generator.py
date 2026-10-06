@@ -21,6 +21,7 @@ from homr.score_reconstruction import (
     prevailing_length,
     reconstruct_voice,
     repair_bar_arithmetic,
+    system_bar_targets,
 )
 from homr.simple_logging import eprint
 from homr.slur_resolution import resolve_slurs
@@ -122,6 +123,7 @@ def generate_xml(
     root.append(build_defaults(args))
     has_two_staves_by_part = [_voice_has_two_staves(staff) for staff in staffs]
     root.append(build_part_list(has_two_staves_by_part))
+    system_targets = system_bar_targets(staffs)
     for index, staff in enumerate(staffs):
         changes: list[ReconstructionChange] | None = (
             [] if reconstruction_changes is not None else None
@@ -133,6 +135,7 @@ def generate_xml(
                 index,
                 has_two_staves_by_part[index],
                 reconstruction_changes=changes,
+                system_targets=system_targets[index],
             )
         )
         if reconstruction_changes is not None:
@@ -156,6 +159,7 @@ def build_part(
     index: int,
     has_two_staves: bool,
     reconstruction_changes: list[ReconstructionChange] | None = None,
+    system_targets: list[Fraction | None] | None = None,
 ) -> ET.Element:
     part = ET.Element("part", id=get_part_id(index))
     is_first_part = index == 0
@@ -165,6 +169,7 @@ def build_part(
         is_first_part,
         has_two_staves,
         reconstruction_changes=reconstruction_changes,
+        system_targets=system_targets,
     ):
         part.append(measure)
     convert_ties(part)
@@ -178,6 +183,7 @@ def build_measures(
     is_first_part: bool,
     has_two_staves: bool = False,
     reconstruction_changes: list[ReconstructionChange] | None = None,
+    system_targets: list[Fraction | None] | None = None,
 ) -> list[ET.Element]:
     clefs: dict[int, tuple[str, int, int]] = {}
     # Tokens say which notes start together, not when each group starts. A group starts
@@ -196,7 +202,7 @@ def build_measures(
         clock, sounding = Fraction(0), []
 
     measure_number = 1
-    reconstructed = reconstruct_voice(voice, args.bar_length)
+    reconstructed = reconstruct_voice(voice, args.bar_length, system_targets)
     if reconstruction_changes is not None:
         reconstruction_changes.extend(reconstructed.changes)
     groups = reconstructed.groups
