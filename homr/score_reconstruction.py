@@ -270,8 +270,8 @@ def advance_to_next_group(
     does `repair_tuplet_overlaps`, so the two cannot disagree about when a note sounds.
 
     Given the group that ``following`` it, the next group also waits until a voice
-    it goes on in is free: a voice is free when the last of its own sounding notes
-    ends, whichever group that note started in. On Illan viimeinen tango s3
+    it goes on in is ready for its next note, whichever group that voice's sounding
+    notes started in. On Illan viimeinen tango s3
     (eerovil/musescore-choir-plugins#274) three voices hold a dotted eighth and go
     on, and the fourth, misread as a plain eighth, is silent after it; the earliest
     ending alone started everyone's next note a sixteenth early.
@@ -300,14 +300,16 @@ def advance_to_next_group(
         if not any(end is new for new in timed)
     ):
         return advance
-    # When each voice is free: the end of the latest of its sounding notes, held
-    # over from an earlier group or started here. The next group starts when the
-    # earliest note ends, and once one voice it goes on in is free.
+    # When each voice next starts a note: where the shortest of its sounding notes
+    # ends, held over or started here. Two values in one voice's moment are a
+    # chord whose longer note rings on, and the voice's next note follows the
+    # shorter, as the tokens are written. The next group starts when the earliest
+    # note ends, and once one voice it goes on in is ready.
     free: dict[str, Fraction] = {}
     for end in still:
         position = getattr(end, "position", None)
         if position is not None:
-            free[position] = max(free.get(position, end), end)
+            free[position] = min(free.get(position, end), end)
     going_on = {
         symbol.position
         for symbol in following.symbols

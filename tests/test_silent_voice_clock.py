@@ -102,9 +102,10 @@ def test_a_note_held_over_from_an_earlier_moment_is_known_by_its_voice() -> None
     assert clock == Fraction(3, 4)
 
 
-def test_a_voice_is_free_only_when_the_longer_of_its_two_notes_ends() -> None:
-    """Two notes of one voice start together, a quarter and a half; the voice's
-    next note waits for the half, not the quarter."""
+def test_a_voice_holding_two_values_goes_on_after_the_shorter() -> None:
+    """A quarter and a half in one voice's moment are a chord whose half rings on;
+    the voice's next note follows the quarter, as the tokens are written (and as
+    `test_one_staff_is_untouched_by_per_staff_cursors` pins for the writer)."""
     from fractions import Fraction
 
     from homr.score_reconstruction import SymbolChord, advance_to_next_group
@@ -116,4 +117,28 @@ def test_a_voice_is_free_only_when_the_longer_of_its_two_notes_ends() -> None:
         ]
     )
     following = SymbolChord([EncodedSymbol("note_4", "B4", "_", position="upper")])
-    assert advance_to_next_group(first, Fraction(0), [], following) == Fraction(1, 2)
+    assert advance_to_next_group(first, Fraction(0), [], following) == Fraction(1, 4)
+
+
+def test_a_voice_held_over_waits_for_its_shorter_note_too() -> None:
+    """The same chord held over while another voice moves on: the held voice's
+    next note still follows its own quarter, not the half ringing beside it."""
+    from fractions import Fraction
+
+    from homr.score_reconstruction import SymbolChord, advance_to_next_group
+
+    first = SymbolChord(
+        [
+            EncodedSymbol("note_4.", "C5", "_", position="upper"),
+            EncodedSymbol("note_1", "A4", "_", position="upper"),
+            EncodedSymbol("note_8", "C4", "_", position="lower"),
+        ]
+    )
+    second = SymbolChord([EncodedSymbol("note_8", "D4", "_", position="lower")])
+    third = SymbolChord([EncodedSymbol("note_4", "B4", "_", position="upper")])
+    sounding: list[Fraction] = []
+    clock = advance_to_next_group(first, Fraction(0), sounding, second)
+    assert clock == Fraction(1, 8)
+    sounding[:] = [end for end in sounding if end > clock]
+    clock += advance_to_next_group(second, clock, sounding, third)
+    assert clock == Fraction(3, 8)
