@@ -240,6 +240,23 @@ def _printed_per_signature(voice: list[SymbolChord]) -> list[Fraction | None]:
     return out
 
 
+class _Ending(Fraction):
+    """When a sounding note ends, and the voice (`position`) it sounds in.
+
+    The callers keep the sounding notes as a list of end times and drop the
+    ended ones between groups; carrying the voice on the end time itself keeps
+    that bookkeeping as it is, while the silent-voice rule below can still tell
+    which voice a note held over from an earlier group belongs to.
+    """
+
+    position: str
+
+    def __new__(cls, value: Fraction, position: str) -> _Ending:
+        ending = super().__new__(cls, value)
+        ending.position = position
+        return ending
+
+
 def advance_to_next_group(
     group: SymbolChord,
     clock: Fraction,
@@ -259,25 +276,31 @@ def advance_to_next_group(
     is silent after it; the earliest ending alone started everyone's next note a
     sixteenth early.
     """
-    durations = [
-        s.get_duration().fraction for s in group.symbols if s.rhythm.startswith(("note", "rest"))
+    # Grace notes have no duration and take no time.
+    timed = [
+        _Ending(clock + s.get_duration().fraction, s.position)
+        for s in group.symbols
+        if s.rhythm.startswith(("note", "rest")) and s.get_duration().fraction > 0
     ]
-    timed = [d for d in durations if d > 0]  # grace notes have no duration and take no time
     if not timed:
         return Fraction(0)
-    sounding.extend(clock + d for d in timed)
-    advance = min(end for end in sounding if end > clock) - clock
+    sounding.extend(timed)
+    still = [end for end in sounding if end > clock]
+    earliest = min(still)
+    advance = earliest - clock
     if following is None:
         return advance
+    # Each voice's latest note: the one it starts here, else one held over from an
+    # earlier group. A note held over in a voice that starts another here is not
+    # that voice's any more; the reading has it overlap itself, and that is left
+    # to the earliest ending alone, as before.
     ends: dict[str, Fraction] = {}
-    for symbol in group.symbols:
-        length = (
-            symbol.get_duration().fraction
-            if symbol.rhythm.startswith(("note", "rest"))
-            else Fraction(0)
-        )
-        if length > 0:
-            ends[symbol.position] = min(ends.get(symbol.position, length), length)
+    for end in timed:
+        ends[end.position] = min(ends.get(end.position, end), end)
+    for held in still:
+        position = getattr(held, "position", None)
+        if position is not None and all(position != new.position for new in timed):
+            ends[position] = min(ends.get(position, held), held)
     going_on = {
         symbol.position
         for symbol in following.symbols
@@ -286,10 +309,10 @@ def advance_to_next_group(
     # Only where every voice that ends first falls silent: a voice that goes on
     # starts its next symbol where its note ends, and that is the evidence the
     # earliest ending gives; a voice that stops gives none.
-    enders = {position for position, end in ends.items() if end == advance}
+    enders = {position for position, end in ends.items() if end == earliest}
     continuing = [ends[position] for position in going_on if position in ends]
     if enders and not enders & going_on and continuing:
-        return max(advance, min(continuing))
+        return max(advance, min(continuing) - clock)
     return advance
 
 

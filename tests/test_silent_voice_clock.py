@@ -78,3 +78,25 @@ def test_the_voices_that_go_on_start_where_their_own_notes_end() -> None:
     first_voice = onsets(measure)["1"]
     # Dotted eighth, then the sixteenth on its own beat: 3 sixteenths in.
     assert [at for at, _ in first_voice][:2] == [0, 3]
+
+
+def test_a_note_held_over_from_an_earlier_moment_is_known_by_its_voice() -> None:
+    """One voice holds a dotted quarter from the first moment and falls silent;
+    the other, which went on at the quarter with a half, is still sounding when
+    the held note ends, and its own next note waits for that half to end."""
+    from fractions import Fraction
+
+    from homr.score_reconstruction import SymbolChord, advance_to_next_group
+
+    def at(rhythm: str, position: str) -> EncodedSymbol:
+        return EncodedSymbol(rhythm, "C5", "_", position=position)
+
+    first = SymbolChord([at("note_4.", "upper"), at("note_4", "upper2")])
+    second = SymbolChord([at("note_2", "upper2")])
+    third = SymbolChord([at("note_4", "upper2")])
+    sounding: list[Fraction] = []
+    clock = advance_to_next_group(first, Fraction(0), sounding, second)
+    assert clock == Fraction(1, 4)
+    sounding[:] = [end for end in sounding if end > clock]
+    clock += advance_to_next_group(second, clock, sounding, third)
+    assert clock == Fraction(3, 4)
