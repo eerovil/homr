@@ -576,6 +576,7 @@ def rebalance_measure_voices(
         sorted_events = sorted(events, key=lambda e: (e.start, e.end))
         two_voices = _staff_carries_two_voices(sorted_events, (clefs or {}).get(staff_num))
         voice_tokens = any(note.get(VOICE_TOKEN) for event in events for note in event.notes)
+        flipped = voice_tokens and _tokens_reversed_against_stems(sorted_events)
         active: list[tuple[int, int]] = []
         for event in sorted_events:
             active = [
@@ -597,7 +598,7 @@ def rebalance_measure_voices(
                 # on, and that reading outranks a stem: it is the newer evidence.
                 tokens = {note.get(VOICE_TOKEN) == "2" for note in event.notes}
                 if len(tokens) == 1:
-                    preferred_voice = 2 if tokens.pop() else 1
+                    preferred_voice = 2 if tokens.pop() != flipped else 1
             voice_no = preferred_voice if preferred_voice is not None else 1
             while voice_no in used_voices:
                 if preferred_voice is not None:
@@ -692,6 +693,33 @@ def double_shared_noteheads(
         for offset, element in enumerate(elements, start=1):
             measure.insert(after + offset, element)
     return len(insertions)
+
+
+def _tokens_reversed_against_stems(events: list[TimedNoteEvent]) -> bool:
+    """Whether the model numbered a staff's two voices the wrong way round.
+
+    The model's voice marks outrank a stem, but on Illan viimeinen tango s4
+    (eerovil/musescore-choir-plugins#274) it marked the upper line of a run of
+    two-stem chords as the second voice, every chord of the bar, while the page
+    stems every upper head up and every lower head down: 12 notes in the other
+    singer's part. A partial disagreement is the model's to win; this is only
+    the case where the two say the same thing with the numbers swapped -- every
+    stemmed note the model marked contradicts its stem, both directions occur,
+    and an up stem and a down stem sound at once, so there are two voices here.
+    """
+    marked = [
+        (direction, all(note.get(VOICE_TOKEN) == "2" for note in event.notes), event)
+        for event in events
+        if (direction := _direction(event)) is not None
+        and len({note.get(VOICE_TOKEN) == "2" for note in event.notes}) == 1
+    ]
+    if len(marked) < 2:
+        return False
+    if any((direction == "up") != second for direction, second, _ in marked):
+        return False
+    ups = [event for direction, _, event in marked if direction == "up"]
+    downs = [event for direction, _, event in marked if direction == "down"]
+    return any(a.start < b.end and b.start < a.end for a in ups for b in downs)
 
 
 def _rejoin_one_line(staff_num: int, assignments: list[tuple[int, TimedNoteEvent, int]]) -> None:
