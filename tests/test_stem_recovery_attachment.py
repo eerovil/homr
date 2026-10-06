@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from homr.bounding_boxes import BoundingEllipse
+from homr.bounding_boxes import BoundingEllipse, RotatedBoundingBox
 from homr.model import StemDirection
 from homr.note_detection import (
     _reach_towards_head,
@@ -85,3 +85,35 @@ def test_bridge_requires_a_source_backed_starting_endpoint(
     bridge[near, 0] = endpoint_has_ink
     reached = _reach_towards_head(bridge, 0, near, edge, 3)
     assert reached == (edge if endpoint_has_ink else near)
+
+
+def _head_with_a_stroke_below_left(stroke_bottom: int) -> tuple[np.ndarray, BoundingEllipse]:
+    """A head with an up stem, and a vertical stroke hanging off its lower left."""
+    page = np.full((120, 80), 255, dtype=np.uint8)
+    cv2.ellipse(page, (40, 50), (8, 5), 0, 0, 360, 0, -1)
+    page[50:stroke_bottom, 32:35] = 0
+    return page, BoundingEllipse(((40, 50), (16, 11), 0), np.empty((0, 2)))
+
+
+def test_a_stroke_just_past_the_head_does_not_make_it_a_unison() -> None:
+    """Shakkitarina, Vielako huvittaisi: a natural sign's stroke is not a down stem.
+
+    The segmentation drew the up stem; the scan found ink 6-10px below the
+    head's middle on its left. Taken for a down stem, it made every such head
+    two voices meeting and wrote the note a second time.
+    """
+    page, head = _head_with_a_stroke_below_left(59)
+    up_stem = RotatedBoundingBox(((48, 25), (2, 50), 0), np.empty((0, 2)))
+
+    result = combine_noteheads_with_stems([head], [up_stem], page)
+
+    assert result[0].stem_directions == [StemDirection.UP]
+
+
+def test_a_printed_down_stem_still_makes_the_head_a_unison() -> None:
+    page, head = _head_with_a_stroke_below_left(85)
+    up_stem = RotatedBoundingBox(((48, 25), (2, 50), 0), np.empty((0, 2)))
+
+    result = combine_noteheads_with_stems([head], [up_stem], page)
+
+    assert set(result[0].stem_directions) == {StemDirection.UP, StemDirection.DOWN}

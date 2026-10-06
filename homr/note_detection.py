@@ -27,6 +27,9 @@ WAIST_DEPTH = 0.8
 MAX_STEM_HEIGHT = 5.0
 # How many times a chord's stem may be handed on from one notehead to the next.
 CHORD_PASSES = 2
+#: How long, in notehead heights, a stem only the scan found must be before it
+#: makes a head that already has a stem the other way a two-voice unison.
+SECOND_STEM_MIN_HEADS = 2.0
 # How tall a hole in a stroke may be, in pixels, and still be read as the staff
 # line that was taken out of it rather than as paper between two strokes. A
 # staff line is three or four pixels of ink on these scans.
@@ -747,6 +750,7 @@ def stems_of_notehead(
         if is_plausible_stem(notehead, stem)
         and not belongs_to_another_notehead(notehead, stem, noteheads or [])
     ]
+    learned_from_model = list(candidates)
     learned_directions = {stem_direction(notehead, stem) for stem in candidates}
 
     def from_source(bridge: NDArray | None) -> list[RotatedBoundingBox]:
@@ -776,7 +780,25 @@ def stems_of_notehead(
         )
         for direction in StemDirection
     }
-    return [stem for stem in longest.values() if stem is not None]
+    found = [stem for stem in longest.values() if stem is not None]
+    if len(found) == 2:
+        # Two stems make the head a unison of two voices, and the second voice
+        # is then written into the score as a note of its own. A stem only the
+        # scan found has to look like a stem to carry that: a stroke barely past
+        # the head -- a natural sign's, an x-head's -- doubled 17 notes of
+        # Shakkitarina and a dozen of Vielako huvittaisi
+        # (eerovil/musescore-choir-plugins#276). Those ran 6-10px from the
+        # middle of a head 11px tall; a printed stem runs three heads or more.
+        short = [
+            stem
+            for stem in found
+            if not any(stem is learned for learned in learned_from_model)
+            and stem.size[1] < notehead.size[1] * SECOND_STEM_MIN_HEADS
+        ]
+        if len(short) == 2:
+            short = [min(short, key=lambda stem: stem.size[1])]
+        found = [stem for stem in found if not any(stem is gone for gone in short)]
+    return found
 
 
 def combine_noteheads_with_stems(
