@@ -209,3 +209,55 @@ def test_a_courtesy_signature_after_the_last_bar_is_left_out(
 
     assert [s.rhythm for s in out] == [s.rhythm for s in stream()]
     assert all(not s.printed_meters for s in out)
+
+
+#: A printed 6, as the reader cut it out of Lempilintu's 6/4 (rows 0-1 and 28 are
+#: staff lines). eerovil/musescore-choir-plugins#274: it correlates with the 6 at
+#: 0.76 and with the 0 at 0.72, too close to read, so the bar kept the decoder's 4/4.
+_PRINTED_SIX = [
+    "####################",
+    "####################",
+    ".....###########....",
+    "....#####...######..",
+    "...#####....#######.",
+    "..#####.....#######.",
+    ".######....########.",
+    ".######.....#######.",
+    ".#####......#######.",
+    "######.......#####..",
+    "######..............",
+    "######..............",
+    "######..#########...",
+    "##################..",
+    "####################",
+    "########..#.########",
+    "#######......#######",
+    "#######......#######",
+    "#######.......######",
+    "#######.......######",
+    ".######.......######",
+    ".######......#######",
+    "..#####......######.",
+    "..#####......######.",
+    "...#####....######..",
+    "....#############...",
+    "......#########.....",
+    "....................",
+    "####################",
+    "......##########....",
+]
+
+
+def test_a_leading_digit_is_never_read_as_zero() -> None:
+    ink = np.array([[ch == "#" for ch in row] for row in _PRINTED_SIX])
+    on_line = np.zeros(len(_PRINTED_SIX), dtype=bool)
+    on_line[[0, 1, 28]] = True
+
+    digit, score, runner_up = time_signature_reader.classify_digit(ink, on_line)
+    assert digit == 6 and score - runner_up < 0.1  # 0 is almost as good
+
+    digit, score, runner_up = time_signature_reader.classify_digit(
+        ink, on_line, frozenset(range(1, 10))
+    )
+    assert digit == 6
+    assert score - runner_up >= 0.1

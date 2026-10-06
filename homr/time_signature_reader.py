@@ -46,6 +46,8 @@ _MIN_SCORE = 0.5
 _MARGIN = 0.1
 
 _DENOMINATORS = (1, 2, 4, 8, 16, 32)
+_ANY_DIGIT = frozenset(range(10))
+_LEADING = frozenset(range(1, 10))
 _MAX_NUMERATOR = 16
 
 
@@ -87,7 +89,9 @@ def _correlate(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
 
 
 def classify_digit(
-    ink: NDArray[np.bool_], on_line: NDArray[np.bool_] | None = None
+    ink: NDArray[np.bool_],
+    on_line: NDArray[np.bool_] | None = None,
+    allowed: frozenset[int] = _ANY_DIGIT,
 ) -> tuple[int, float, float]:
     """The digit `ink` (cropped to its own extent) looks most like.
 
@@ -95,6 +99,9 @@ def classify_digit(
     about the digit -- the line fills them whatever is printed there -- so they
     are left out of the comparison rather than scrubbed out of the image, which
     at this resolution takes the digit's own thin strokes with it.
+
+    Only digits in `allowed` are candidates, so a digit that cannot stand here
+    is neither chosen nor counted as the runner-up.
 
     Returns the digit, its score, and the score of the best other digit.
     """
@@ -105,6 +112,8 @@ def classify_digit(
     sample = ink.astype(np.float64)[keep]
     scores: dict[int, float] = {}
     for digit, shapes in _templates().items():
+        if digit not in allowed:
+            continue
         best = -1.0
         for shape in shapes:
             resized = cv2.resize(
@@ -232,8 +241,14 @@ def _read_number(
         pieces = [(left, left + gap_left), (left + gap_right, right)]
     value = 0
     weakest = 1.0
-    for left, right in pieces:
-        digit, score, runner_up = classify_digit(raw[:, left:right], on_line)
+    for index, (left, right) in enumerate(pieces):
+        # No time signature number starts with 0 (numerators run 1-16, the
+        # denominators are 1, 2, 4, 8, 16 and 32). Leaving 0 out of a leading
+        # digit matters because 0 is the digit a 6 looks most like: Lempilintu's
+        # printed 6 scored 0.76 as a 6 and 0.72 as a 0, too close to be read,
+        # and next best after 0 was 9 at 0.51 (eerovil/musescore-choir-plugins#274).
+        allowed = _LEADING if index == 0 else _ANY_DIGIT
+        digit, score, runner_up = classify_digit(raw[:, left:right], on_line, allowed)
         if score < _MIN_SCORE or score - runner_up < _MARGIN:
             return None
         value = value * 10 + digit
