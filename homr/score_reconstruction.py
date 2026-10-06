@@ -580,7 +580,9 @@ def _all_alternatives(symbol: EncodedSymbol) -> list[str]:
 
 
 def repair_bar_arithmetic(
-    voice: list[SymbolChord], changes: list[ReconstructionChange] | None = None
+    voice: list[SymbolChord],
+    changes: list[ReconstructionChange] | None = None,
+    system_targets: list[Fraction | None] | None = None,
 ) -> list[SymbolChord]:
     """Take the decoder's second answer where its first one does not fit the bar.
 
@@ -634,12 +636,21 @@ def repair_bar_arithmetic(
     """
     bars = _bar_boundaries(voice)
     repairs = {}
-    for bar_number, (span, target) in enumerate(
-        zip(bars, _bar_targets(voice, bars), strict=True), start=1
+    others = (
+        system_targets
+        if system_targets is not None and len(system_targets) == len(bars)
+        else [None] * len(bars)
+    )
+    for bar_number, (span, own, theirs) in enumerate(
+        zip(bars, _bar_targets(voice, bars), others, strict=True), start=1
     ):
+        # A staff whose own voices cannot say what a bar is -- one voice, or a
+        # second voice in a single bar -- may take it from the other staves of
+        # the system, when every one of them agrees (`system_bar_targets`).
+        target = own if own is not None else theirs
         if target is None:
             continue
-        repair = _repair_for_bar(voice, span, target)
+        repair = _repair_for_bar(voice, span, target, alone=own is None)
         if repair is not None:
             chord_index, symbol_index, rhythm, why = repair
             repairs[(chord_index, symbol_index)] = (rhythm, why, bar_number)
@@ -739,8 +750,46 @@ def _bar_targets(voice: list[SymbolChord], bars: list[tuple[int, int]]) -> list[
 _REPAIR_WITNESS_BARS = 2
 
 
+def system_bar_targets(voices: list[list[EncodedSymbol]]) -> list[list[Fraction | None]]:
+    """What each bar of each staff ought to measure, by the other staves of the system.
+
+    A staff read on its own cannot always say what a bar is: on Finlandia s8
+    (eerovil/musescore-choir-plugins#274) the baritone's first eighth was read as
+    a quarter, that bar ran an eighth over, and the staff had no second voice to
+    corroborate a length -- while the three other staves measured four quarters
+    in every bar. For each staff and bar this gives the length **every** other
+    staff measures there, all of its voices agreeing, when at least two other
+    staves have the bar and at least two bars of the system agree like that.
+    Staves that do not have the same number of bars give nothing, and neither
+    does the opening bar, which may be a pickup.
+    """
+    grouped = [group_into_chords(voice) for voice in voices]
+    bars = [_bar_boundaries(groups) for groups in grouped]
+    empty: list[list[Fraction | None]] = [[None] * len(b) for b in bars]
+    if len(voices) < 3 or len({len(b) for b in bars}) != 1:
+        return empty
+    agreed: list[list[Fraction | None]] = []
+    for groups, spans in zip(grouped, bars, strict=True):
+        per_bar: list[Fraction | None] = []
+        for span in spans:
+            lengths = set(_staff_lengths(groups, span).values())
+            per_bar.append(lengths.pop() if len(lengths) == 1 else None)
+        agreed.append(per_bar)
+    count = len(bars[0])
+    out = empty
+    for staff in range(len(voices)):
+        targets: list[Fraction | None] = [None] * count
+        for bar in range(1, count):
+            theirs = {agreed[other][bar] for other in range(len(voices)) if other != staff}
+            if len(theirs) == 1 and None not in theirs:
+                targets[bar] = theirs.pop()
+        if sum(1 for target in targets if target is not None) >= _REPAIR_WITNESS_BARS:
+            out[staff] = targets
+    return out
+
+
 def _repair_for_bar(
-    voice: list[SymbolChord], span: tuple[int, int], target: Fraction
+    voice: list[SymbolChord], span: tuple[int, int], target: Fraction, alone: bool = False
 ) -> tuple[int, int, str, str] | None:
     """The one alternative that makes this bar add up, where there is exactly one.
 
@@ -749,7 +798,8 @@ def _repair_for_bar(
     tie-break, and it only ever speaks where the arithmetic has already refused.
     """
     lengths = _staff_lengths(voice, span)
-    if len(lengths) < 2:
+    # Corroborated by the other staves of the system, one voice is enough.
+    if len(lengths) < (1 if alone else 2):
         return None
     adrift = [position for position, length in lengths.items() if length != target]
     if len(adrift) != 1:
@@ -2598,7 +2648,9 @@ class ReconstructedVoice:
 
 
 def reconstruct_voice(
-    voice: list[EncodedSymbol], bar_length: Fraction | None = None
+    voice: list[EncodedSymbol],
+    bar_length: Fraction | None = None,
+    system_targets: list[Fraction | None] | None = None,
 ) -> ReconstructedVoice:
     """Apply homr's musical reconstruction passes in their established order."""
     changes: list[ReconstructionChange] = []
@@ -2615,7 +2667,7 @@ def reconstruct_voice(
     groups = retime_onto_steady_voices(groups, changes)
     groups = repair_tuplet_overlaps(groups, changes, restore_decoded=True)
     groups = solve_bar_rhythms(groups, changes, bar_length)
-    groups = repair_bar_arithmetic(groups, changes)
+    groups = repair_bar_arithmetic(groups, changes, system_targets)
     groups = add_tuplet_start_stop(groups)
     groups = infer_meter_changes(groups, changes)
     division, nominator = find_division_and_time_signature_nominator(groups)
