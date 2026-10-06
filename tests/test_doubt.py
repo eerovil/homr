@@ -255,7 +255,7 @@ def test_legenda_system_11_bar_25_bass_is_marked() -> None:
 def _fifth(low_alter: int, high_alter: int) -> ET.Element:
     """One bar: a C and the G above it struck together in two voices of a staff."""
     root = _score([[(1, 1, "C", 4), ("backup", 4), (1, 2, "G", 4)]])
-    for note, alter in zip(root.findall(".//note"), (low_alter, high_alter)):
+    for note, alter in zip(root.findall(".//note"), (low_alter, high_alter), strict=True):
         pitch = note.find("pitch")
         assert pitch is not None
         if alter:
