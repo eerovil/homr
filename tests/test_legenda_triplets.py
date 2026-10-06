@@ -792,3 +792,25 @@ def test_a_copy_holding_a_longer_note_through_the_moment_is_not_filled() -> None
         barline(),
     ]
     assert rhythms(fill_unison_copies(bar), "upper") == ["note_8", "note_8"]
+
+
+def test_a_head_drawn_with_one_stem_is_not_a_skipped_unison_copy() -> None:
+    """Finlandia s8 (eerovil/musescore-choir-plugins#274): the second voice appears
+    only on two heads drawn with two stems, shared; the chords before them have one
+    stem each and are the first voice's alone."""
+    shared = [note("note_4", "upper", "F5"), note("note_4", "upper2", "F5")]
+    for symbol in shared:
+        symbol.stem_direction = "both"
+    alone = [note("note_4", "upper", "A5"), note("note_4", "upper", "A5")]
+    for symbol in alone:
+        symbol.stem_direction = "down"
+    bar = [
+        moment(alone[0]),
+        moment(alone[1]),
+        moment(*shared),
+        moment(*[note("note_4", position, "E5") for position in ("upper", "upper2")]),
+        barline(),
+    ]
+    for symbol in bar[3].symbols:
+        symbol.stem_direction = "both"
+    assert rhythms(fill_unison_copies(bar), "upper2") == ["note_4", "note_4"]
