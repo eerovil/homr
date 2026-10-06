@@ -585,9 +585,7 @@ def rebalance_measure_voices(
             ]
             used_voices = {voice_no for _, voice_no in active}
             directions = {
-                direction
-                for note in event.notes
-                if (direction := note.findtext("stem")) in {"up", "down"}
+                direction for note in event.notes if (direction := _stem(note)) is not None
             }
             preferred_voice = (
                 {"up": 1, "down": 2}.get(directions.pop())
@@ -607,11 +605,14 @@ def rebalance_measure_voices(
                 voice_no += 1
             active.append((event.end, voice_no))
             assignments.append((staff_num, event, voice_no))
-            xml_voice = str(get_xml_voice(staff_num, voice_no - 1))
-            for note in event.notes:
-                voice_el = note.find("voice")
-                if voice_el is not None:
-                    voice_el.text = xml_voice
+        if not voice_tokens:
+            _rejoin_one_line(staff_num, assignments)
+    for staff_num, event, voice_no in assignments:
+        xml_voice = str(get_xml_voice(staff_num, voice_no - 1))
+        for note in event.notes:
+            voice_el = note.find("voice")
+            if voice_el is not None:
+                voice_el.text = xml_voice
     double_shared_noteheads(measure, assignments)
     for note in measure.findall("note"):
         note.attrib.pop("stem-shared", None)
@@ -691,6 +692,58 @@ def double_shared_noteheads(
         for offset, element in enumerate(elements, start=1):
             measure.insert(after + offset, element)
     return len(insertions)
+
+
+def _rejoin_one_line(staff_num: int, assignments: list[tuple[int, TimedNoteEvent, int]]) -> None:
+    """Put a staff's voices back together when they never sound at once.
+
+    A note's voice follows its stem, so one stem read the wrong way round -- an
+    x-notehead's, a note whose accidental was taken for a second stem -- puts a
+    lone note of a one-voice staff in voice 2, and voice 1 runs short exactly
+    there (Vieläkö huvittaisi, Finlandia, Shakkitarina:
+    eerovil/musescore-choir-plugins#274). Two voices that never overlap anywhere
+    in the bar are one line; a second singer resting would have a rest printed,
+    and a rest is an event like any note. A head drawn for both voices
+    (`stem-shared`) is two voices meeting, so a bar holding one is left alone.
+    """
+    mine = [
+        (index, event, voice)
+        for index, (staff, event, voice) in enumerate(assignments)
+        if staff == staff_num
+    ]
+    voices = {voice for _, _, voice in mine}
+    if any(note.get("stem-shared") for _, event, _ in mine for note in event.notes):
+        return
+    if voices != {1, 2}:
+        return
+    first = [event for _, event, voice in mine if voice == 1]
+    second = [event for _, event, voice in mine if voice == 2]
+    if any(a.start < b.end and b.start < a.end for a in first for b in second):
+        return
+    # A real lower voice sits below the line around it; a note that is not
+    # below every neighbour is the line itself, with a stem read the wrong way.
+    for event in second:
+        low = _lowest(event)
+        before = [e for e in first if e.end <= event.start and _lowest(e) is not None]
+        after = [e for e in first if e.start >= event.end and _lowest(e) is not None]
+        neighbours = [max(before, key=lambda e: e.end)] if before else []
+        neighbours += [min(after, key=lambda e: e.start)] if after else []
+        if low is None or not neighbours:
+            return
+        if all(low < (_lowest(n) or 0) for n in neighbours):
+            return
+    for index, event, _ in mine:
+        assignments[index] = (staff_num, event, 1)
+
+
+def _lowest(event: TimedNoteEvent) -> int | None:
+    """The diatonic step of an event's lowest note; None for a rest."""
+    steps = [
+        _diatonic(note.findtext("pitch/step") or "C", int(note.findtext("pitch/octave") or 4))
+        for note in event.notes
+        if note.find("pitch") is not None
+    ]
+    return min(steps) if steps else None
 
 
 def _timeline(measure: ET.Element) -> dict[tuple[str, str], list[tuple[int, int, ET.Element]]]:
@@ -958,11 +1011,23 @@ def _shares_a_notehead(note: ET.Element) -> bool:
     return note.get("stem-shared") == "yes"
 
 
+#: Note values printed without a stem. A stem written on one is a misreading --
+#: a whole note came out "down" on four of the new songs and was moved to voice
+#: 2 for it (eerovil/musescore-choir-plugins#274) -- so it is no evidence.
+_STEMLESS = {"whole", "breve"}
+
+
+def _stem(note: ET.Element) -> str | None:
+    """The stem direction a note is printed with, or None when it has none."""
+    if note.findtext("type") in _STEMLESS:
+        return None
+    direction = note.findtext("stem")
+    return direction if direction in {"up", "down"} else None
+
+
 def _direction(event: TimedNoteEvent) -> str | None:
     """The one stem direction this event is drawn with, if it has just one."""
-    directions = {
-        direction for note in event.notes if (direction := note.findtext("stem")) in {"up", "down"}
-    }
+    directions = {direction for note in event.notes if (direction := _stem(note)) is not None}
     return directions.pop() if len(directions) == 1 else None
 
 

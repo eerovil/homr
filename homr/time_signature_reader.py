@@ -46,6 +46,8 @@ _MIN_SCORE = 0.5
 _MARGIN = 0.1
 
 _DENOMINATORS = (1, 2, 4, 8, 16, 32)
+_ANY_DIGIT = frozenset(range(10))
+_LEADING = frozenset(range(1, 10))
 _MAX_NUMERATOR = 16
 
 
@@ -87,7 +89,9 @@ def _correlate(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
 
 
 def classify_digit(
-    ink: NDArray[np.bool_], on_line: NDArray[np.bool_] | None = None
+    ink: NDArray[np.bool_],
+    on_line: NDArray[np.bool_] | None = None,
+    allowed: frozenset[int] = _ANY_DIGIT,
 ) -> tuple[int, float, float]:
     """The digit `ink` (cropped to its own extent) looks most like.
 
@@ -95,6 +99,9 @@ def classify_digit(
     about the digit -- the line fills them whatever is printed there -- so they
     are left out of the comparison rather than scrubbed out of the image, which
     at this resolution takes the digit's own thin strokes with it.
+
+    Only digits in `allowed` are candidates, so a digit that cannot stand here
+    is neither chosen nor counted as the runner-up.
 
     Returns the digit, its score, and the score of the best other digit.
     """
@@ -105,6 +112,8 @@ def classify_digit(
     sample = ink.astype(np.float64)[keep]
     scores: dict[int, float] = {}
     for digit, shapes in _templates().items():
+        if digit not in allowed:
+            continue
         best = -1.0
         for shape in shapes:
             resized = cv2.resize(
@@ -205,6 +214,22 @@ def _runs(columns: NDArray[np.bool_] | np.bool_, gap: int) -> list[tuple[int, in
     return runs
 
 
+#: A printed 1 is a stroke with a flag: in all three fonts its widest row is
+#: half its height, a whole staff space, and a typical row a third of it. A
+#: barline or a stem is the same width all the way down and far thinner. On the
+#: new songs (eerovil/musescore-choir-plugins#274) three barlines were read as
+#: 1 over 1; none was wider than 0.37 of a staff space anywhere between the
+#: lines. Half a space sits between the two with room either side.
+_MIN_ONE_WIDTH = 0.5
+
+
+def _is_bare_stroke(ink: NDArray[np.bool_], unit: float) -> bool:
+    """Whether ink read as a 1 is too thin anywhere to be one: a barline, a stem."""
+    if ink.size == 0:
+        return True
+    return int(ink.sum(axis=1).max()) < _MIN_ONE_WIDTH * unit
+
+
 def _read_number(
     raw: NDArray[np.bool_], clean: NDArray[np.bool_], on_line: NDArray[np.bool_], unit: float
 ) -> tuple[int, float] | None:
@@ -232,9 +257,17 @@ def _read_number(
         pieces = [(left, left + gap_left), (left + gap_right, right)]
     value = 0
     weakest = 1.0
-    for left, right in pieces:
-        digit, score, runner_up = classify_digit(raw[:, left:right], on_line)
+    for index, (left, right) in enumerate(pieces):
+        # No time signature number starts with 0 (numerators run 1-16, the
+        # denominators are 1, 2, 4, 8, 16 and 32). Leaving 0 out of a leading
+        # digit matters because 0 is the digit a 6 looks most like: Lempilintu's
+        # printed 6 scored 0.76 as a 6 and 0.72 as a 0, too close to be read,
+        # and next best after 0 was 9 at 0.51 (eerovil/musescore-choir-plugins#274).
+        allowed = _LEADING if index == 0 else _ANY_DIGIT
+        digit, score, runner_up = classify_digit(raw[:, left:right], on_line, allowed)
         if score < _MIN_SCORE or score - runner_up < _MARGIN:
+            return None
+        if digit == 1 and _is_bare_stroke(body[:, left:right], unit):
             return None
         value = value * 10 + digit
         weakest = min(weakest, score)

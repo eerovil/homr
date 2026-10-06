@@ -151,6 +151,15 @@ def test_a_denominator_no_meter_has_is_refused() -> None:
     assert find_time_signatures(image, staff()) == []
 
 
+def test_one_over_one_is_still_read_when_printed() -> None:
+    image = blank_staff()
+    draw_signature(image, 1, 1, 120)
+
+    found = find_time_signatures(image, staff())
+
+    assert [(m.numerator, m.denominator) for m in found] == [(1, 1)]
+
+
 # --- placing what was read into the decoded stream ---
 
 
@@ -209,3 +218,129 @@ def test_a_courtesy_signature_after_the_last_bar_is_left_out(
 
     assert [s.rhythm for s in out] == [s.rhythm for s in stream()]
     assert all(not s.printed_meters for s in out)
+
+
+#: A printed 6, as the reader cut it out of Lempilintu's 6/4 (rows 0-1 and 28 are
+#: staff lines). eerovil/musescore-choir-plugins#274: it correlates with the 6 at
+#: 0.76 and with the 0 at 0.72, too close to read, so the bar kept the decoder's 4/4.
+_PRINTED_SIX = [
+    "####################",
+    "####################",
+    ".....###########....",
+    "....#####...######..",
+    "...#####....#######.",
+    "..#####.....#######.",
+    ".######....########.",
+    ".######.....#######.",
+    ".#####......#######.",
+    "######.......#####..",
+    "######..............",
+    "######..............",
+    "######..#########...",
+    "##################..",
+    "####################",
+    "########..#.########",
+    "#######......#######",
+    "#######......#######",
+    "#######.......######",
+    "#######.......######",
+    ".######.......######",
+    ".######......#######",
+    "..#####......######.",
+    "..#####......######.",
+    "...#####....######..",
+    "....#############...",
+    "......#########.....",
+    "....................",
+    "####################",
+    "......##########....",
+]
+
+
+def test_a_leading_digit_is_never_read_as_zero() -> None:
+    ink = np.array([[ch == "#" for ch in row] for row in _PRINTED_SIX])
+    on_line = np.zeros(len(_PRINTED_SIX), dtype=bool)
+    on_line[[0, 1, 28]] = True
+
+    digit, score, runner_up = time_signature_reader.classify_digit(ink, on_line)
+    assert digit == 6 and score - runner_up < 0.1  # 0 is almost as good
+
+    digit, score, runner_up = time_signature_reader.classify_digit(
+        ink, on_line, frozenset(range(1, 10))
+    )
+    assert digit == 6
+    assert score - runner_up >= 0.1
+
+
+#: The numerator a barline gave when read as 1/1 on Vieläkö huvittaisi
+#: (eerovil/musescore-choir-plugins#274): the reader's own `raw` and `clean`
+#: columns and the staff-line rows. A 3-4px stroke, no flag.
+_BARLINE_RAW = [
+    "...........##...........",
+    "########################",
+    "########################",
+    "########################",
+    "....................###.",
+    "...................#####",
+    "...................#####",
+    "....................###.",
+    "....................###.",
+    "....................####",
+    "....................####",
+    "##########........######",
+    "########################",
+    "########################",
+    "###########.###.########",
+    "....................####",
+    "....................####",
+    "....................###.",
+    "....................###.",
+    "...................####.",
+    "....................###.",
+    "....................###.",
+    "########################",
+    "########################",
+    "########################",
+    "########################",
+]
+_BARLINE_CLEAN = [
+    "...........##...........",
+    "########################",
+    "########################",
+    "########################",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................####",
+    "....................###.",
+    "....................###.",
+    "...................####.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+    "....................###.",
+]
+_BARLINE_ON_LINE = "11110000000111100000001111"
+_BARLINE_UNIT = 10.848
+
+
+def _bits(rows: list[str]) -> np.ndarray:
+    return np.array([[ch == "#" for ch in row] for row in rows])
+
+
+def test_a_barline_read_as_a_one_is_no_number() -> None:
+    on_line = np.array([ch == "1" for ch in _BARLINE_ON_LINE])
+    raw, clean = _bits(_BARLINE_RAW), _bits(_BARLINE_CLEAN)
+
+    assert time_signature_reader._read_number(raw, clean, on_line, _BARLINE_UNIT) is None
