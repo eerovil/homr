@@ -6,14 +6,14 @@ Regenerated from `fixturecheck/series.jsonl` on every run — do not edit by han
 
 | harness | measured | homr | references | of everything judged, right | cases |
 | --- | --- | --- | --- | --- | --- |
-| `fixturecheck` | 2026-10-06T05:43:07+00:00 (private) | `626619f~pod` | `f26eeff6c43ce42b+new71` | **99.4%** | 71 read |
+| `fixturecheck` | 2026-10-06T06:53:29+00:00 (private) | `495fd7e~pod` | `f26eeff6c43ce42b+new71` | **99.4%** | 71 read |
 | `choir-bench` | _never_ | — | — | — | — |
 
 The two are **not averaged**. `fixturecheck` scores notes across the printed systems of the repertoire; `choir-bench` scores staves and bars across the public-domain benchmark pages. They answer different questions and a single figure over both would mean nothing.
 
 ## The gate
 
-**FAIL** — 0/7 committed cases stand under homr `626619f~pod`, latest as of . Not judged under this homr, so the gate cannot pass: `hanget-soi`, `kolme-kakea`, `laulun-aika-s2`, `sammon-ryosto`, `system4`, `talviuni-s1`, `talviuni-s2`. A pass under an earlier homr is not a claim about this one.
+**FAIL** — 0/7 committed cases stand under homr `495fd7e~pod`, latest as of . Not judged under this homr, so the gate cannot pass: `hanget-soi`, `kolme-kakea`, `laulun-aika-s2`, `sammon-ryosto`, `system4`, `talviuni-s1`, `talviuni-s2`. A pass under an earlier homr is not a claim about this one.
 
 Each case counts by its own latest result under that homr, so re-running one cannot speak for the others.
 
@@ -25,8 +25,6 @@ Each case counts by its own latest result under that homr, so re-running one can
 
 | when | harness | tier | homr | references | right |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-04T07:25:08+00:00 | `fixturecheck` | one | `3c47efd+678fa6~pod` | `f26eeff6c43ce42b+drift1` | 100.0% |
-| 2026-10-04T07:26:47+00:00 | `fixturecheck` | ten | `3c47efd+678fa6~pod` | `f26eeff6c43ce42b+drift5` | 99.4% |
 | 2026-10-05T18:58:29+00:00 | `fixturecheck` | fixtures | `c7b0bac+2d6093~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-05T19:01:08+00:00 | `fixturecheck` | private | `c7b0bac+2d6093~pod` | `f26eeff6c43ce42b+new4` | 98.8% |
 | 2026-10-05T19:52:36+00:00 | `fixturecheck` | fixtures | `10ab41b+b023f3~pod` | `f26eeff6c43ce42b` | 99.2% |
@@ -37,6 +35,8 @@ Each case counts by its own latest result under that homr, so re-running one can
 | 2026-10-06T05:06:59+00:00 | `fixturecheck` | private | `dc53efa~pod` | `f26eeff6c43ce42b+new71` | 99.1% |
 | 2026-10-06T05:13:14+00:00 | `fixturecheck` | fixtures | `626619f~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-06T05:43:07+00:00 | `fixturecheck` | private | `626619f~pod` | `f26eeff6c43ce42b+new71` | 99.4% |
+| 2026-10-06T06:34:50+00:00 | `fixturecheck` | fixtures | `495fd7e~pod` | `f26eeff6c43ce42b` | 99.2% |
+| 2026-10-06T06:53:29+00:00 | `fixturecheck` | private | `495fd7e~pod` | `f26eeff6c43ce42b+new71` | 99.4% |
 
 A tier is not a sample of the one above it — a ten-case run and a full sweep are different populations, so read a percentage against runs of the same tier.
 
