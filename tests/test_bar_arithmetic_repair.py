@@ -214,10 +214,17 @@ def test_one_staff_is_never_enough() -> None:
     assert repair_bar_arithmetic(voice) is voice
 
 
-def test_the_bar_that_opens_a_system_is_never_repaired() -> None:
+def test_the_bar_that_opens_a_system_is_never_lengthened() -> None:
     """That is where an anacrusis is, and a pickup is a bar short of its meter."""
-    voice = system(hanget_soi_bar_2(), even_bar(), even_bar())
+    voice = system(hanget_soi_bar_3(), even_bar(), even_bar())
     assert repair_bar_arithmetic(voice) is voice
+
+
+def test_an_opening_bar_running_over_the_next_is_not_a_pickup() -> None:
+    """Illan viimeinen tango s9 (eerovil/musescore-choir-plugins#274): the opening
+    bar runs over, which no pickup does, so it is mended like any other."""
+    voice = system(hanget_soi_bar_2(), even_bar(), even_bar())
+    assert rhythms(repair_bar_arithmetic(voice))[:3] == ["note_4.", "note_2", "note_2"]
 
 
 def test_one_clean_bar_is_not_a_meter() -> None:
