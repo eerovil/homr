@@ -499,7 +499,8 @@ def test_the_other_staves_give_a_lone_staff_its_bar_length() -> None:
     overrun = [["note_2", "note_2"]] * 3 + [eighths]
     voices = [_one_voice_stream(steady)] * 3 + [_one_voice_stream(overrun)]
     targets = system_bar_targets(voices)
-    assert targets[3] == [None, Fraction(1), Fraction(1), Fraction(1)]
+    # The opening bar gets one too; the repair keeps away from it (a pickup).
+    assert targets[3] == [Fraction(1), Fraction(1), Fraction(1), Fraction(1)]
 
     repaired = repair_bar_arithmetic(group_into_chords(voices[3]), None, targets[3])
     rhythms = [s.rhythm for chord in repaired for s in chord.symbols if s.rhythm.startswith("note")]
