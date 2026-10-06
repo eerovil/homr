@@ -17,6 +17,7 @@ from homr.doubt import (
     ACCIDENTAL_UNSURE,
     COPIES_DISAGREE,
     MARK_PREFIX,
+    ODD_INTERVAL,
     ODD_TIME,
     PITCH_UNSURE,
     RHYTHM_CLOSE,
@@ -24,6 +25,7 @@ from homr.doubt import (
     SECOND_READING_FAILED,
     confidence_doubts,
     find_doubts,
+    interval_doubts,
     mark_doubts,
     odd_time_doubts,
     reading_doubts,
@@ -248,3 +250,25 @@ def test_legenda_system_11_bar_25_bass_is_marked() -> None:
     doubts = find_doubts(staffs, xml, second)
     assert (0, 2, 3) in doubts
     assert mark_doubts(xml, doubts) == len(doubts)
+
+
+def _fifth(low_alter: int, high_alter: int) -> ET.Element:
+    """One bar: a C and the G above it struck together in two voices of a staff."""
+    root = _score([[(1, 1, "C", 4), ("backup", 4), (1, 2, "G", 4)]])
+    for note, alter in zip(root.findall(".//note"), (low_alter, high_alter)):
+        pitch = note.find("pitch")
+        assert pitch is not None
+        if alter:
+            ET.SubElement(pitch, "alter").text = str(alter)
+    return root
+
+
+def test_a_doubly_diminished_fifth_is_a_doubt() -> None:
+    """Finlandia system 8 (eerovil/musescore-choir-plugins#274), in made-up notes:
+    a double flat read as a natural leaves a fifth two semitones short."""
+    assert interval_doubts(_fifth(1, -1)) == {(0, 1, 1): {ODD_INTERVAL}}
+
+
+def test_a_diminished_or_augmented_fifth_is_ordinary() -> None:
+    for low, high in ((0, 0), (1, 0), (0, 1), (0, -1), (-1, 0)):
+        assert not interval_doubts(_fifth(low, high)), (low, high)

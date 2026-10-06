@@ -7,7 +7,7 @@ the score would not notice either, so it would reach the practice track. The
 owner's requirement is that no wrong bar goes unmarked; false alarms come
 second.
 
-Three rules, each catching what the others miss. Measured on 38 printed
+Four rules, each catching what the others miss. The first three were measured on 38 printed
 systems (Legenda, the five recognition fixtures and four songs): on the bars
 with owner-checked references, all 9 wrong ones are marked, along with 39 of
 the 117 right ones; on the songs whose references are less certain, 26 of 27.
@@ -21,6 +21,9 @@ the 117 right ones; on the songs whose references are less certain, 26 of 27.
   what catches the errors the decoder was sure of.
 - A note starts at a time no ordinary rhythm reaches (`odd_time_doubts`): a
   bar whose arithmetic went wrong upstream puts notes at 15/32 of a bar.
+- Two notes struck together make an interval music does not use
+  (`interval_doubts`): a doubly augmented or diminished one, which a misread
+  accidental makes and a printed score does not.
 
 Each marked bar gets a red `⚠` text at its head, on its own staff, naming what
 was doubted. It is not on the page, which is why it is opt-in (`--mark-doubt`).
@@ -53,6 +56,7 @@ COPIES_DISAGREE = "the two voices read a shared note differently"
 SECOND_READING = "a second reading came out different"
 SECOND_READING_FAILED = "the second reading failed"
 ODD_TIME = "a note starts at an odd time"
+ODD_INTERVAL = "an accidental makes an interval music does not use"
 
 # (part index, staff within the part from 1, bar from 1) -> reasons
 Doubts = dict[tuple[int, int, int], set[str]]
@@ -309,6 +313,58 @@ def odd_time_doubts(xml: ET.Element) -> Doubts:
     return doubts
 
 
+_STEPS = "CDEFGAB"
+_SEMITONES = (0, 2, 4, 5, 7, 9, 11)  # also the major/perfect size of each generic interval
+_PERFECT = {0, 3, 4}  # unison, fourth and fifth, by steps modulo the octave
+
+
+def _out_of_use(low: tuple, high: tuple) -> bool:
+    """Whether two notes sounding together are a doubly augmented or diminished
+    interval: B natural against F flat, say, where Bbb-Fb is a fifth."""
+    steps = [_STEPS.index(note[0]) + 7 * int(note[1]) for note in (low, high)]
+    pitch = [
+        _SEMITONES[_STEPS.index(note[0])] + 12 * int(note[1]) + note[2] for note in (low, high)
+    ]
+    if steps[0] > steps[1]:
+        steps.reverse()
+        pitch.reverse()
+    generic = steps[1] - steps[0]
+    size = 12 * (generic // 7) + _SEMITONES[generic % 7]
+    off = pitch[1] - pitch[0] - size
+    allowed = (-1, 0, 1) if generic % 7 in _PERFECT else (-2, -1, 0, 1)
+    return off not in allowed
+
+
+def interval_doubts(xml: ET.Element) -> Doubts:
+    """The bars where two notes struck together on one staff are an interval music
+    does not use, which a misread accidental makes.
+
+    Finlandia system 8 (eerovil/musescore-choir-plugins#274): the bass prints
+    B double-flat under F flat, a fifth, and the decoder read the double flat as a
+    natural -- B natural against F flat -- sure of it and the same on the second
+    reading, so nothing else marked the bar. Across the 71 hand-checked systems
+    of that card, the five recognition fixtures and every chord of the 48 songs'
+    scores on the owner's host (1324 of them), no such interval is printed; in
+    every homr reading of those songs this was the only one.
+    """
+    events, where, _ = _events(xml)
+    doubts: Doubts = defaultdict(set)
+    for (staff, bar), found in events.items():
+        struck: dict[Fraction, list[tuple]] = defaultdict(list)
+        for onset, what, _ in found:
+            if what != ("rest",) and what[0]:
+                struck[onset].append(what)
+        if any(
+            _out_of_use(notes[i], notes[j])
+            for notes in struck.values()
+            for i in range(len(notes))
+            for j in range(i + 1, len(notes))
+        ):
+            part, inner = where[staff]
+            doubts[(part, inner, bar)].add(ODD_INTERVAL)
+    return doubts
+
+
 def find_doubts(
     staffs: list[list[EncodedSymbol]], xml: ET.Element, second: ET.Element | None
 ) -> Doubts:
@@ -317,6 +373,7 @@ def find_doubts(
         confidence_doubts(staffs, bar_lengths(xml)),
         reading_doubts(xml, second),
         odd_time_doubts(xml),
+        interval_doubts(xml),
     ):
         for key, reasons in found.items():
             doubts[key] |= reasons
@@ -330,6 +387,7 @@ _ORDER = [
     VOICE_UNSURE,
     COPIES_DISAGREE,
     ODD_TIME,
+    ODD_INTERVAL,
     SECOND_READING,
     SECOND_READING_FAILED,
 ]
