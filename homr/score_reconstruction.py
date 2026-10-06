@@ -1901,7 +1901,7 @@ def solve_bar_rhythms(
     ):
         rebuilt.extend(voice[previous : span[0]])
         chosen = None
-        if sols is not None and length is not None:
+        if sols is not None and length is not None and not _has_gap(voice, span):
             chosen = sols.get(length) or None  # {}: nothing to change
         if chosen is None:
             rebuilt.extend(voice[span[0] : span[1]])
@@ -1910,6 +1910,30 @@ def solve_bar_rhythms(
         previous = span[1]
     rebuilt.extend(voice[previous:])
     return rebuilt
+
+
+def _has_gap(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
+    """Whether a voice of this bar falls silent between two of its own moments.
+
+    The decoder places every symbol in the moment it reads it at, so a voice
+    that ends before its next moment starts is missing a symbol there -- on
+    Illan viimeinen tango s1 (eerovil/musescore-choir-plugins#274) a unison head
+    written once, for the other voice, and a sixteenth rest the decoder never
+    wrote. That bar is short for want of a symbol, not because a value was
+    misread, and rebuilding it one value after another closes the gap: every
+    later note of the voice moves a sixteenth early.
+    """
+    onsets = _onsets(voice, span)
+    for moments in _voice_moments(voice, span).values():
+        cursor: Fraction | None = None
+        for chord_index, indices in moments:
+            at = onsets[chord_index - span[0]]
+            if cursor is not None and at > cursor:
+                return True
+            cursor = at + max(
+                voice[chord_index].symbols[i].get_duration().fraction for i in indices
+            )
+    return False
 
 
 def _declares_meter(voice: list[SymbolChord], span: tuple[int, int]) -> bool:
