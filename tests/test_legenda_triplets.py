@@ -780,3 +780,15 @@ def test_a_system_that_fits_two_lengths_takes_the_one_the_music_was_in() -> None
     assert solve_bar_rhythms(system) == system
     solved = solve_bar_rhythms(system, bar_length=Fraction(1))
     assert rhythms(solved, "upper")[:8] == ["note_12", "note_6"] * 4
+
+
+def test_a_copy_holding_a_longer_note_through_the_moment_is_not_filled() -> None:
+    """Illan viimeinen tango s7 (eerovil/musescore-choir-plugins#274): the upper voice
+    holds an eighth while the lower one sings two sixteenths on the same pitch."""
+    bar = [
+        moment(note("note_8", "upper", "C4"), note("note_8", "upper2", "C4")),
+        moment(note("note_8", "upper", "C4"), note("note_16", "upper2", "C4")),
+        moment(note("note_16", "upper2", "C4")),
+        barline(),
+    ]
+    assert rhythms(fill_unison_copies(bar), "upper") == ["note_8", "note_8"]

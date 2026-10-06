@@ -1316,6 +1316,17 @@ def fill_unison_copies(
             if len(copies) < _MIN_UNISON_NOTES:
                 continue
             copied = {chord_index for chord_index, _ in copies}
+            onsets = _onsets(voice, span)
+            # When each of the copy's notes stops sounding: a moment the copy is
+            # still holding a note through has nothing missing from it.
+            held = [
+                (
+                    onsets[chord_index - span[0]],
+                    onsets[chord_index - span[0]]
+                    + max(voice[chord_index].symbols[i].get_duration().fraction for i in indices),
+                )
+                for chord_index, indices in copies
+            ]
             in_unison = True
             for chord_index, indices in copies:
                 symbols = voice[chord_index].symbols
@@ -1329,6 +1340,12 @@ def fill_unison_copies(
                 continue
             for chord_index, indices in moments[lead]:
                 if chord_index in copied:
+                    continue
+                at = onsets[chord_index - span[0]]
+                if any(start < at < end for start, end in held):
+                    # Illan viimeinen tango s7, s8 (eerovil/musescore-choir-plugins#274):
+                    # the copy holds an eighth through the lead's second sixteenth,
+                    # and that sixteenth was written into it as an extra note.
                     continue
                 symbols = list(out[chord_index].symbols)
                 for i in indices:
