@@ -722,8 +722,8 @@ def _rejoin_one_line(staff_num: int, assignments: list[tuple[int, TimedNoteEvent
     second = [event for _, event, voice in mine if voice == 2]
     if any(a.start < b.end and b.start < a.end for a in first for b in second):
         return
-    # A real lower voice sits below the line around it; a note on or above its
-    # neighbours' pitch is the line itself, with a stem read the wrong way.
+    # A real lower voice sits below the line around it; a note that is not
+    # below every neighbour is the line itself, with a stem read the wrong way.
     for event in second:
         low = _lowest(event)
         before = [e for e in first if e.end <= event.start and _lowest(e) is not None]
@@ -732,7 +732,7 @@ def _rejoin_one_line(staff_num: int, assignments: list[tuple[int, TimedNoteEvent
         neighbours += [min(after, key=lambda e: e.start)] if after else []
         if low is None or not neighbours:
             return
-        if any(low < (_lowest(n) or 0) for n in neighbours):
+        if all(low < (_lowest(n) or 0) for n in neighbours):
             return
     for index, event, _ in mine:
         assignments[index] = (staff_num, event, 1)

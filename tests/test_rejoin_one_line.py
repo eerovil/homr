@@ -37,6 +37,19 @@ def test_a_lone_note_on_the_line_returns_to_voice_one() -> None:
     assert voices(line) == [1, 1, 1]
 
 
+def test_a_note_between_its_neighbours_returns_to_voice_one() -> None:
+    """Shakkitarina: C4 ... E4 (a natural's stroke read as a down stem) ... G4."""
+    line = [(1, event(0, 4, "C", 4), 1), (1, event(4, 8, "E", 4), 2), (1, event(8, 12, "G", 4), 1)]
+    _rejoin_one_line(1, line)
+    assert voices(line) == [1, 1, 1]
+
+
+def test_a_note_below_both_neighbours_stays_a_second_voice() -> None:
+    line = [(1, event(0, 4, "C", 5), 1), (1, event(4, 8, "E", 4), 2), (1, event(8, 12, "G", 4), 1)]
+    _rejoin_one_line(1, line)
+    assert voices(line) == [1, 2, 1]
+
+
 def test_a_note_below_the_line_stays_a_second_voice() -> None:
     line = [(1, event(0, 4, "D", 5), 1), (1, event(4, 8, "G", 4), 2)]
     _rejoin_one_line(1, line)
