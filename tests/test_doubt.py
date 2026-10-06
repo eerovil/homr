@@ -297,11 +297,26 @@ def test_a_voice_silent_beside_the_other_voices_chord_is_a_doubt() -> None:
     """Finlandia system 10 (eerovil/musescore-choir-plugins#274), in made-up notes:
     the upper voice's third note went into the lower voice as a chord, leaving the
     upper voice nothing on that beat."""
-    upper = _n("E", 1, 4) + "<forward><duration>2</duration></forward>" + _n("E", 1)
+    # As homr writes it: the hole comes from the cursor arithmetic -- the upper
+    # voice's last note is written after a backup into the lower voice's bar --
+    # and nothing at all is written for the upper voice on that beat.
     lower = _n("C", 2, 4) + _n("C", 2) + _n("A", 2, chord=True) + _n("C", 2)
-    assert silent_beside_chord_doubts(_two_voices(upper, lower)) == {
-        (0, 1, 1): {SILENT_BESIDE_CHORD}
-    }
+    root = ET.fromstring(
+        '<score-partwise><part id="P1"><measure number="1"><attributes>'
+        "<divisions>2</divisions></attributes>"
+        f'{_n("E", 1, 4)}<backup><duration>4</duration></backup>{lower}'
+        f'<backup><duration>2</duration></backup>{_n("E", 1)}</measure></part></score-partwise>'
+    )
+    assert silent_beside_chord_doubts(root) == {(0, 1, 1): {SILENT_BESIDE_CHORD}}
+
+
+def test_a_silence_written_with_forward_is_not_a_hole() -> None:
+    """MusicXML's `<forward>` is a voice's own written silence."""
+    upper = _n("E", 1, 4) + "<forward><duration>2</duration><voice>1</voice></forward>"
+    lower = _n("C", 2, 4) + _n("C", 2) + _n("A", 2, chord=True) + _n("C", 2)
+    assert not silent_beside_chord_doubts(_two_voices(upper + _n("E", 1), lower))
+    unnamed = _n("E", 1, 4) + "<forward><duration>2</duration></forward>"
+    assert not silent_beside_chord_doubts(_two_voices(unnamed + _n("E", 1), lower))
 
 
 def test_a_chord_beside_a_rest_or_a_note_is_ordinary() -> None:

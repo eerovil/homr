@@ -377,7 +377,9 @@ def silent_beside_chord_doubts(xml: ET.Element) -> Doubts:
     (eerovil/musescore-choir-plugins#274) the first tenor's A flat was written
     into the second tenor's voice as a chord on her G, and the first tenor had a
     hole on that beat. Printed music fills a voice's silence with a rest, so no
-    hand-checked reference of that card or the recognition fixtures shows it.
+    hand-checked reference of that card or the recognition fixtures shows it. A
+    `<forward>` is MusicXML's written silence for a voice and counts as covering
+    it: only a hole nothing was written into is evidence.
     """
     doubts: Doubts = defaultdict(set)
     for part_index, part in enumerate(xml.findall("part")):
@@ -386,12 +388,21 @@ def silent_beside_chord_doubts(xml: ET.Element) -> Doubts:
             at = previous = Fraction(0)
             spans: dict[tuple[str, str], list[tuple[Fraction, Fraction]]] = defaultdict(list)
             heads: dict[tuple[str, str, Fraction], int] = defaultdict(int)
+            last_staff, last_voice = "1", None
             for element in measure:
                 text = element.findtext("divisions")
                 if element.tag == "attributes" and text:
                     divisions = int(text)
                 if element.tag in ("backup", "forward"):
                     step = Fraction(int(element.findtext("duration") or 0), divisions * 4)
+                    if element.tag == "forward":
+                        # A forward is a voice's own written silence, not a hole:
+                        # it covers the voice it names, else the one written last.
+                        voice = element.findtext("voice") or last_voice
+                        if voice is not None:
+                            spans[(element.findtext("staff") or last_staff, voice)].append(
+                                (at, at + step)
+                            )
                     at += -step if element.tag == "backup" else step
                     continue
                 if element.tag != "note" or element.find("grace") is not None:
@@ -402,6 +413,7 @@ def silent_beside_chord_doubts(xml: ET.Element) -> Doubts:
                 if not chord:
                     previous, at = at, at + duration
                 key = (element.findtext("staff") or "1", element.findtext("voice") or "1")
+                last_staff, last_voice = key
                 if not chord:
                     spans[key].append((onset, onset + duration))
                 if element.find("pitch") is not None:
