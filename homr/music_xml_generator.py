@@ -585,9 +585,7 @@ def rebalance_measure_voices(
             ]
             used_voices = {voice_no for _, voice_no in active}
             directions = {
-                direction
-                for note in event.notes
-                if (direction := note.findtext("stem")) in {"up", "down"}
+                direction for note in event.notes if (direction := _stem(note)) is not None
             }
             preferred_voice = (
                 {"up": 1, "down": 2}.get(directions.pop())
@@ -714,9 +712,9 @@ def _rejoin_one_line(staff_num: int, assignments: list[tuple[int, TimedNoteEvent
         if staff == staff_num
     ]
     voices = {voice for _, _, voice in mine}
-    if voices != {1, 2}:
-        return
     if any(note.get("stem-shared") for _, event, _ in mine for note in event.notes):
+        return
+    if voices != {1, 2}:
         return
     first = [event for _, event, voice in mine if voice == 1]
     second = [event for _, event, voice in mine if voice == 2]
@@ -1013,11 +1011,23 @@ def _shares_a_notehead(note: ET.Element) -> bool:
     return note.get("stem-shared") == "yes"
 
 
+#: Note values printed without a stem. A stem written on one is a misreading --
+#: a whole note came out "down" on four of the new songs and was moved to voice
+#: 2 for it (eerovil/musescore-choir-plugins#274) -- so it is no evidence.
+_STEMLESS = {"whole", "breve"}
+
+
+def _stem(note: ET.Element) -> str | None:
+    """The stem direction a note is printed with, or None when it has none."""
+    if note.findtext("type") in _STEMLESS:
+        return None
+    direction = note.findtext("stem")
+    return direction if direction in {"up", "down"} else None
+
+
 def _direction(event: TimedNoteEvent) -> str | None:
     """The one stem direction this event is drawn with, if it has just one."""
-    directions = {
-        direction for note in event.notes if (direction := note.findtext("stem")) in {"up", "down"}
-    }
+    directions = {direction for note in event.notes if (direction := _stem(note)) is not None}
     return directions.pop() if len(directions) == 1 else None
 
 

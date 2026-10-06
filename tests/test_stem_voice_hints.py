@@ -832,3 +832,16 @@ def test_a_low_quarter_stemmed_down_is_still_a_second_voice() -> None:
     rebalance_measure_voices(measure, {1: ("G", 2, 0)})
 
     assert [note.findtext("voice") for note in measure.findall("note")] == ["2", "2"]
+
+
+def test_a_whole_note_is_never_voiced_by_a_stem_it_does_not_have() -> None:
+    """eerovil/musescore-choir-plugins#274: a whole note came out with a down stem
+    and went to voice 2 on a one-voice staff (Finlandia, Shakkitarina, Vieläkö)."""
+    measure = ET.fromstring("""<measure number="1">
+             <note><pitch><step>D</step><octave>4</octave></pitch>
+               <duration>8</duration><voice>1</voice><type>whole</type><stem>down</stem><staff>1</staff></note>
+           </measure>""")
+
+    rebalance_measure_voices(measure, {1: ("G", 2, 0)})
+
+    assert [note.findtext("voice") for note in measure.findall("note")] == ["1"]
