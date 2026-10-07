@@ -215,6 +215,7 @@ def run_cases(names: list[str], tier: str) -> int:
                         "staves_page": result.staves_page,
                         "staves_homr": result.staves_homr,
                         "at_fault": result.at_fault, "meter": result.meter,
+                        "repeat": result.repeat,
                         "unison": result.unison, "before": before})
 
         counts = {k: getattr(result, k) for k in series.COUNTS}
@@ -244,6 +245,8 @@ def run_cases(names: list[str], tier: str) -> int:
         # A misread meter is a wrong answer about the bars the notes are read
         # in, so it belongs on the line rather than only on the page.
         meter = f", {result.meter} bar(s) in the wrong meter" if result.meter else ""
+        if result.repeat:
+            meter += f", {result.repeat} repeat sign(s) missing or invented"
         # A unison homr wrote into one voice is not a misreading and is not
         # scored, so the line said nothing at all about it -- and a case
         # carrying two of them read exactly like a case carrying none. It is

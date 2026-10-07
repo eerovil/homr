@@ -96,6 +96,18 @@ meant that since it was defined — so it is **remembered beside the score** and
 may not rise (see The gate), which is how it fails a run despite not being in
 the percentage.
 
+## When the two disagree about a repeat sign
+
+A repeat sign is not a note, so the note comparison could not see one. A start
+repeat homr skipped left every note right and the case at 100%, while the
+practice track went back to the wrong bar
+([musescore-choir-plugins#312](https://github.com/eerovil/musescore-choir-plugins/issues/312)).
+So each bar is also judged on its repeat signs: one `repeat` row for every sign one
+side has there and the other has not. The sign is read across **every staff of
+the system**, since it is drawn across the whole system and the choir app copies
+it to every staff. `repeat` is counted and remembered like `meter`. A memory
+written before it existed holds none.
+
 ## When the two disagree about the staves
 
 Every note is matched on its staff, so if the reference and the parse hold a
@@ -411,8 +423,8 @@ still wrong here** — every fault this check can name, one line each. That is t
 stage-1 error list, and the judgement it invites is "are these real, and are
 they on the page" rather than "is the light green".
 
-**A case is remembered by three numbers, not one.** The score may not fall; the
-`structure` and `meter` counts may not rise. Both of those are counted as cases
+**A case is remembered by four numbers, not one.** The score may not fall; the
+`structure`, `meter` and `repeat` counts may not rise. Both of those are counted as cases
 rather than as notes and so are deliberately outside the notes-right percentage
 — a memory made only of that percentage would have dropped the meter gate on the
 floor. Getting worse is getting worse whichever way it happens.

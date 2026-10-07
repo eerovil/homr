@@ -184,10 +184,12 @@ def test_every_tier_is_judged_by_the_same_rule(
 
 def json_memory(path: Path) -> dict:
     held = json.loads(path.read_text())["cases"]
+    # As `references.accepted`: a memory written before `repeat` was counted
+    # holds none.
     return {
-        name: {f: entry[f] for f in references.MEMORY}
+        name: {f: entry.get(f, references._LATER.get(f)) for f in references.MEMORY}
         for name, entry in held.items()
-        if all(f in entry for f in references.MEMORY)
+        if all(f in entry or f in references._LATER for f in references.MEMORY)
     }
 
 

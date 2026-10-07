@@ -277,6 +277,14 @@ The transformer model generates these predictions in sequence, processing the de
 
 **Note**: The transformer output provides the sequence of symbols but does not include explicit positional information (horizontal or vertical coordinates). However, the model computes the center of attention as a byproduct of the attention mechanism, which is used to estimate the focus point on the staff image. homr maps this point back to the input image and writes it as a comment into each note of the MusicXML output, e.g. `<!-- imgpos: 45, 231 -->`. These are rough positions: they point at or near the symbol, but aren't pixel-exact.
 
+**A start repeat opening a staff is checked in the pixels** (`homr/repeat_signs.py`,
+[musescore-choir-plugins#312](https://github.com/eerovil/musescore-choir-plugins/issues/312)).
+The decoder reads a start-repeat sign in the middle of a staff but often skips one
+standing right after the clef and key, so the score repeats from the wrong bar. When
+the decoder wrote only a clef, key and time before the first note, homr looks between
+them for a barline followed by two dots in the two middle spaces, and adds the
+`repeatStart` token the decoder left out. It never moves or doubles one it wrote.
+
 ### Stage 4: MusicXML Output
 
 The symbol sequence is converted into MusicXML format and saved to disk. The resulting file can be processed with tools like [musescore](https://musescore.com/) or [relieur](https://github.com/papoteur-mga/relieur) (for multi-image combinations).

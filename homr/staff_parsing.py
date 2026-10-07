@@ -10,6 +10,7 @@ from homr.errors import IncompleteRecognitionError
 from homr.image_utils import crop_image_and_return_new_top
 from homr.model import MultiStaff, Note, Staff
 from homr.point_mapping import PointMapping, chain, identity, undo_crop, undo_resize
+from homr.repeat_signs import add_missing_start_repeat, log_added
 from homr.simple_logging import eprint
 from homr.staff_dewarping import StaffDewarping, dewarp_staff_image
 from homr.staff_parsing_tromr import parse_staff_tromr
@@ -400,6 +401,10 @@ def parse_staff_image(
         dropped = drop_unprinted_chord_notes(result, noteheads)
         if dropped:
             eprint("Dropped", dropped, "chord note(s) the page prints no head for")
+    # The decoder reads a start repeat in the middle of a staff but often not one
+    # opening it, after the clef and key (eerovil/musescore-choir-plugins#312).
+    if add_missing_start_repeat(result, staff, image, staff_to_page):
+        log_added(index)
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):
