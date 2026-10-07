@@ -109,12 +109,9 @@ def _hook(ink: NDArray, below: int, x: int, unit: float) -> bool:
     columns = ink[below:, max(0, x - reach) : x + reach + 1]
     if columns.size == 0:
         return False
-    inked = columns.any(axis=1)
-    length = 0
-    for value in inked:
-        if not value:
-            break
-        length += 1
+    inked = np.asarray(columns.any(axis=1), dtype=bool)
+    gaps = np.flatnonzero(~inked)
+    length = int(gaps[0]) if gaps.size else len(inked)
     return length >= _MIN_HOOK * unit
 
 
