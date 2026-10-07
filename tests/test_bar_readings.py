@@ -220,10 +220,12 @@ def _two_voice_bar(upper: str, lower: str) -> ET.Element:
         out = []
         for spec in text.split(","):
             step, octave, duration = spec.split()
+            alter = {"#": 1, "b": -1}.get(step[1:], 0)
             pitch = (
                 "<rest/>"
                 if step == "R"
-                else f"<pitch><step>{step}</step><octave>{octave}</octave></pitch>"
+                else f"<pitch><step>{step[0]}</step><alter>{alter}</alter>"
+                f"<octave>{octave}</octave></pitch>"
             )
             out.append(f"<note>{pitch}<duration>{duration}</duration><voice>{voice}</voice></note>")
         return "".join(out)
@@ -259,6 +261,19 @@ def test_voices_are_paired_by_their_notes_not_their_numbers() -> None:
     [entry] = second_readings(first, second, _DOUBTED)
     assert entry["voice"] == "1"
     assert [m["pitches"][0]["step"] for m in entry["second"]] == ["C", "E"]
+
+
+def test_voices_a_semitone_apart_on_one_step_are_not_confused() -> None:
+    # F sharp above, F natural below; the second reading wrote the F natural first
+    # and changed the F sharp's rhythm. By step alone the two pairings tie.
+    first = _two_voice_bar("F# 5 2,F# 5 2", "F 5 2,F 5 2")
+    second = _two_voice_bar("F 5 2,F 5 2", "F# 5 3,F# 5 1")
+    [entry] = second_readings(first, second, _DOUBTED)
+    assert entry["voice"] == "1"
+    assert [(m["value"], m["pitches"][0]["alter"]) for m in entry["second"]] == [
+        ("note_4.", 1),
+        ("note_8", 1),
+    ]
 
 
 def test_no_second_reading_where_it_cannot_be_laid_beside_the_first() -> None:

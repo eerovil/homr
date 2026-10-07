@@ -482,7 +482,12 @@ def _fills(moments: list, length: Fraction) -> bool:
 
 
 def _heard(moments: list) -> set[tuple]:
-    return {(m.onset, p["step"], p["octave"]) for m in moments for p in m.pitches}
+    # The accidental is part of the note: two voices a semitone apart on one step
+    # are different lines, and pairing them by step alone could hand a voice the
+    # other's second reading.
+    return {
+        (m.onset, p["step"], p.get("alter", 0), p["octave"]) for m in moments for p in m.pitches
+    }
 
 
 def _as_written(moments: list) -> list[dict] | None:
