@@ -108,6 +108,22 @@ the system**, since it is drawn across the whole system and the choir app copies
 it to every staff. `repeat` is counted and remembered like `meter`. A memory
 written before it existed holds none.
 
+## Slurs, against their own answer key
+
+The references' slurs came from homr and nobody checked them, so slurs are not
+compared against the reference. They have a key of their own,
+`homr-fixtures/slurs.json` in the private songs repository: every slur the page
+prints, read off a 400 dpi crop and checked by the owner
+(eerovil/musescore-choir-plugins#318). A slur is its staff and the bar and onset of
+each end; an end that runs over the system edge is `null`. `fixturecheck/slurs.py`
+counts each case's slurs found, missed and invented, and how many of the page's
+slur ends at a system edge homr kept. The run line and the run record carry them
+(`slurs` in `series.jsonl`). **They stay out of the note score and the gate**: a
+missed slur costs a singer a syllable, not a note, and every percentage here is
+quoted against a history that never counted them. A case the key does not list is
+not judged. One caveat: a system-edge end is matched on its one end alone, so a
+tie half on the same note counts as found.
+
 ## When the two disagree about the staves
 
 Every note is matched on its staff, so if the reference and the parse hold a
