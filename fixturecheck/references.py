@@ -134,7 +134,10 @@ def frozen(entry: dict) -> bool:
 #: line above, and would mean a case may not come to hold more of them than it
 #: was accepted with; that is a separate claim about what a fixture owes, and
 #: it is a person's to make.
-MEMORY = ("score", "structure", "meter")
+MEMORY = ("score", "structure", "meter", "repeat")
+#: `repeat` came later (eerovil/musescore-choir-plugins#312); a memory written
+#: before it has none, which is the same as having accepted none.
+_LATER = {"repeat": 0}
 
 #: How much a score may fall and still count as the same reading. Zero, and
 #: that is the point of the card: a real regression shows up as notes, and
@@ -158,6 +161,7 @@ def marks(counts: dict) -> dict:
         "score": round(100.0 * right / judged, 2) if judged else 0.0,
         "structure": int(counts.get("staves_page", 0) != counts.get("staves_homr", 0)),
         "meter": int(counts.get("meter", 0)),
+        "repeat": int(counts.get("repeat", 0)),
     }
 
 
@@ -172,7 +176,7 @@ def worse(now: dict, was: dict) -> list[str]:
     if now.get("score", 0.0) < was.get("score", 0.0) - SLACK:
         said.append(f"{now.get('score', 0.0):.2f}% of notes right, "
                     f"against {was.get('score', 0.0):.2f}% accepted")
-    for field in ("structure", "meter"):
+    for field in ("structure", "meter", "repeat"):
         if now.get(field, 0) > was.get(field, 0):
             said.append(f"{field} {now.get(field, 0)}, against "
                         f"{was.get(field, 0)} accepted")
@@ -187,8 +191,9 @@ def better(now: dict, was: dict) -> bool:
 def accepted(path: Path | None = None) -> dict:
     """Every case's memory, by name. Absent means nobody has accepted a reading."""
     held = load(path)["cases"]
-    return {name: {f: entry[f] for f in MEMORY}
-            for name, entry in held.items() if all(f in entry for f in MEMORY)}
+    return {name: {f: entry.get(f, _LATER.get(f)) for f in MEMORY}
+            for name, entry in held.items()
+            if all(f in entry or f in _LATER for f in MEMORY)}
 
 
 def remember(readings: dict, path: Path | None = None) -> list[str]:
@@ -213,9 +218,10 @@ def remember(readings: dict, path: Path | None = None) -> list[str]:
     moved: list[str] = []
     for name, reading in readings.items():
         entry = held.setdefault(name, {})
-        if all(entry.get(f) == reading.get(f) for f in MEMORY):
+        reading = {f: reading.get(f, _LATER.get(f)) for f in MEMORY}
+        if all(entry.get(f) == reading[f] for f in MEMORY):
             continue
-        entry.update({f: reading[f] for f in MEMORY})
+        entry.update(reading)
         moved.append(name)
     if moved:
         manifest.setdefault("why", _WHY)

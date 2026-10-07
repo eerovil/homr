@@ -252,6 +252,10 @@ class Result:
     #: a notehead, so it is counted like `structure` and not folded into the
     #: note percentage -- see `compare_meter`.
     meter: int = 0
+    #: Bars where the two disagree about a repeat sign. Like `meter`, a wrong
+    #: answer about the bar and not about a notehead: a missing start repeat
+    #: plays the wrong bars again, with every note right (see `compare_repeats`).
+    repeat: int = 0
     rows: list[Row] = field(default_factory=list)
 
     @property
@@ -304,6 +308,8 @@ class Result:
                         f"wrote {self.staves_homr}{blame}")
         if self.meter:
             said.append(f"{self.meter} bar(s) in the wrong meter")
+        if self.repeat:
+            said.append(f"{self.repeat} repeat sign(s) missing or invented")
         for count, what in ((self.voice, "in the wrong voice"),
                             (self.pitch, "at the wrong pitch"),
                             (self.size, "missing or invented"),
@@ -524,6 +530,9 @@ def compare_output(reference: Path, parsed: Path, case: str = "") -> Result:
     for row in compare_meter(reference, parsed):
         result.meter += 1
         result.rows.append(row)
+    for row in compare_repeats(reference, parsed):
+        result.repeat += 1
+        result.rows.append(row)
     if result.structure:
         blame = {
             "reference": "the page agrees with homr — the REFERENCE is wrong here, "
@@ -684,6 +693,47 @@ def compare_meter(reference: Path, parsed: Path) -> list[Row]:
             ("a change the page does not make" if bar in got_changes
              and bar not in want_changes else "changed to a different meter"),
             "meter", bar=bar, staff=0))
+    return rows
+
+
+def repeat_signs(path: Path) -> dict[str, set[str]]:
+    """The repeat signs each bar carries, read off every staff of the system.
+
+    A repeat sign is drawn across the whole system, so a bar has it when any
+    staff says so -- which is also how the choir app assembles it
+    (eerovil/musescore-choir-plugins#312).
+    """
+    found: dict[str, set[str]] = {}
+    for part in ET.parse(path).getroot().findall("part"):
+        for measure in part.findall("measure"):
+            for barline in measure.findall("barline"):
+                for repeat in barline.findall("repeat"):
+                    direction = repeat.get("direction", "")
+                    if direction:
+                        found.setdefault(measure.get("number", ""), set()).add(direction)
+    return found
+
+
+def compare_repeats(reference: Path, parsed: Path) -> list[Row]:
+    """Where the two disagree about a repeat sign: one row per bar and sign.
+
+    The note comparison cannot see one. A start repeat homr skipped leaves every
+    note right and the score repeating from the wrong bar -- the defect behind
+    eerovil/musescore-choir-plugins#312, which read 100% here while the practice
+    track went back to the wrong place.
+    """
+    want, got = repeat_signs(reference), repeat_signs(parsed)
+    names = {"forward": "start repeat", "backward": "end repeat"}
+    rows = []
+    for bar in sorted(set(want) | set(got), key=lambda b: (len(b), b)):
+        for direction in sorted(want.get(bar, set()) ^ got.get(bar, set())):
+            sign = names.get(direction, direction)
+            on_page = direction in want.get(bar, set())
+            rows.append(Row(
+                f"bar {bar}", sign if on_page else "none", "none" if on_page else sign,
+                f"a {sign} homr did not write" if on_page
+                else f"a {sign} the page does not print",
+                "repeat", bar=bar, staff=0))
     return rows
 
 
