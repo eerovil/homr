@@ -268,6 +268,7 @@ def test_no_second_reading_where_it_cannot_be_laid_beside_the_first() -> None:
     # A different number of voices.
     one = ET.fromstring(ET.tostring(first))
     measure = one.find("part/measure")
+    assert measure is not None
     for el in list(measure):
         if el.tag == "backup" or el.findtext("voice") == "2":
             measure.remove(el)
