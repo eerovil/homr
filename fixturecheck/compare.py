@@ -697,27 +697,36 @@ def compare_meter(reference: Path, parsed: Path) -> list[Row]:
 
 
 def repeat_signs(path: Path) -> dict[str, set[str]]:
-    """The repeat signs each bar carries, read off every staff of the system.
+    """The repeat signs and volta brackets each bar carries, read off every staff.
 
     A repeat sign is drawn across the whole system, so a bar has it when any
     staff says so -- which is also how the choir app assembles it
-    (eerovil/musescore-choir-plugins#312).
+    (eerovil/musescore-choir-plugins#312). A volta bracket is too, and is counted
+    the same way (#319): ``volta 1 start`` where "1." opens, ``volta 1 end`` where
+    it closes. Whether a bracket's far end is hooked (``stop``) or left open
+    (``discontinue``) is a drawing, not a form, so both are an end.
     """
     found: dict[str, set[str]] = {}
     for part in ET.parse(path).getroot().findall("part"):
         for measure in part.findall("measure"):
+            bar = found.setdefault(measure.get("number", ""), set())
             for barline in measure.findall("barline"):
                 for repeat in barline.findall("repeat"):
                     direction = repeat.get("direction", "")
                     if direction:
-                        found.setdefault(measure.get("number", ""), set()).add(direction)
-    return found
+                        bar.add(direction)
+                for ending in barline.findall("ending"):
+                    kind = ending.get("type", "")
+                    if kind:
+                        side = "start" if kind == "start" else "end"
+                        bar.add(f"volta {ending.get('number', '')} {side}")
+    return {bar: signs for bar, signs in found.items() if signs}
 
 
 def compare_repeats(reference: Path, parsed: Path) -> list[Row]:
-    """Where the two disagree about a repeat sign: one row per bar and sign.
+    """Where the two disagree about a repeat sign or volta: one row per bar and sign.
 
-    The note comparison cannot see one. A start repeat homr skipped leaves every
+    The note comparison cannot see either. A start repeat homr skipped leaves every
     note right and the score repeating from the wrong bar -- the defect behind
     eerovil/musescore-choir-plugins#312, which read 100% here while the practice
     track went back to the wrong place.

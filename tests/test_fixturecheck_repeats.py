@@ -82,3 +82,54 @@ def test_the_gate_remembers_repeats_and_reads_old_memories_as_none(tmp_path: Pat
     assert references.accepted(path) == {
         "old": {"score": 100.0, "structure": 0, "meter": 0, "repeat": 0}
     }
+
+
+def with_endings(tmp_path: Path, name: str, endings: list[tuple[int, str, str, str]]) -> Path:
+    """The three-bar score with ``(bar, side, number, type)`` endings on part 1."""
+    path = score(tmp_path, name, {})
+    text = path.read_text()
+    for bar, side, number, kind in endings:
+        mark = f'<barline location="{side}"><ending number="{number}" type="{kind}"/></barline>'
+        head = f'<measure number="{bar}">'
+        text = text.replace(head, head + "\x00" + mark, 1) if side == "left" else text
+        if side == "right":
+            first = text.index(head)
+            close = text.index("</measure>", first)
+            text = text[:close] + mark + text[close:]
+    path.write_text(text.replace("\x00", ""))
+    return path
+
+
+def test_a_volta_homr_did_not_write_is_a_repeat_fault(tmp_path: Path) -> None:
+    """eerovil/musescore-choir-plugins#319: a "1." / "2." bracket is the system's too."""
+    brackets = [
+        (2, "left", "1", "start"),
+        (2, "right", "1", "stop"),
+        (3, "left", "2", "start"),
+        (3, "right", "2", "discontinue"),
+    ]
+    page = with_endings(tmp_path, "page.musicxml", brackets)
+    homr = score(tmp_path, "homr.musicxml", {})
+    rows = compare.compare_repeats(page, homr)
+    assert [(row.bar, row.page) for row in rows] == [
+        ("2", "volta 1 end"),
+        ("2", "volta 1 start"),
+        ("3", "volta 2 end"),
+        ("3", "volta 2 start"),
+    ]
+    assert compare.compare_output(page, homr).repeat == 4  # noqa: PLR2004
+    assert compare.compare_repeats(page, with_endings(tmp_path, "same.musicxml", brackets)) == []
+
+
+def test_an_open_and_a_hooked_end_are_the_same_bracket(tmp_path: Path) -> None:
+    page = with_endings(tmp_path, "page.musicxml", [(3, "right", "2", "discontinue")])
+    homr = with_endings(tmp_path, "homr.musicxml", [(3, "right", "2", "stop")])
+    assert compare.compare_repeats(page, homr) == []
+
+
+def test_an_invented_volta_is_a_fault_too(tmp_path: Path) -> None:
+    page = score(tmp_path, "page.musicxml", {})
+    homr = with_endings(tmp_path, "homr.musicxml", [(2, "left", "1", "start")])
+    [row] = compare.compare_repeats(page, homr)
+    assert (row.bar, row.page, row.homr) == ("2", "none", "volta 1 start")
+    assert "the page does not print" in row.verdict
