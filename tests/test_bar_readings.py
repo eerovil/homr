@@ -17,9 +17,11 @@ from homr.bar_readings import (
     note_readings,
     read_note_readings,
     read_readings,
+    read_second_readings,
+    second_readings,
     value_of,
 )
-from homr.doubt import find_doubts
+from homr.doubt import SECOND_READING, find_doubts
 from homr.transformer.vocabulary import EncodedSymbol
 from tests.test_doubt import DATA, _symbols_from_sidecar
 
@@ -176,7 +178,8 @@ def test_an_unsure_pitch_offers_the_decoders_next_pitches() -> None:
     )
     offered = [(p["step"], p["alter"], p["octave"]) for p in first["pitches"]]
     assert offered == [("C", 0, 5), ("D", 0, 5), ("B", 0, 4)]
-    assert first["pitches"][0]["probability"] is None  # as written
+    # As written first, with the decoder's own probability for it, so it can be ranked.
+    assert first["pitches"][0]["probability"] == 0.6
     assert [m["value"] for m in first["moments"]] == ["note_4", "note_4"]
 
 
@@ -205,3 +208,81 @@ def test_other_pitches_travel_beside_the_readings() -> None:
     assert read_note_readings(again) == notes
     assert read_readings(again) == []
     assert read_note_readings(ET.fromstring("<score-partwise/>")) == []
+
+
+# ------------------------------------------ the second reading (choir-plugins#295)
+
+
+def _two_voice_bar(upper: str, lower: str) -> ET.Element:
+    """One 2/4 bar of two voices on one staff; each voice is "step octave value ..."."""
+
+    def notes(voice: str, text: str) -> str:
+        out = []
+        for spec in text.split(","):
+            step, octave, duration = spec.split()
+            pitch = (
+                "<rest/>"
+                if step == "R"
+                else f"<pitch><step>{step}</step><octave>{octave}</octave></pitch>"
+            )
+            out.append(f"<note>{pitch}<duration>{duration}</duration><voice>{voice}</voice></note>")
+        return "".join(out)
+
+    return ET.fromstring(
+        '<score-partwise version="4.0"><part-list><score-part id="P1"><part-name/>'
+        '</score-part></part-list><part id="P1"><measure number="1"><attributes>'
+        "<divisions>2</divisions><time><beats>2</beats><beat-type>4</beat-type></time>"
+        f"</attributes>{notes('1', upper)}<backup><duration>4</duration></backup>"
+        f"{notes('2', lower)}</measure></part></score-partwise>"
+    )
+
+
+_DOUBTED = {(0, 1, 1): {SECOND_READING}}
+
+
+def test_the_second_reading_of_a_voice_is_kept_beside_the_first() -> None:
+    first = _two_voice_bar("C 5 2,D 5 2", "A 4 4")
+    second = _two_voice_bar("C 5 3,E 5 1", "A 4 4")
+    [entry] = second_readings(first, second, _DOUBTED)
+    assert (entry["part"], entry["staff"], entry["bar"], entry["voice"]) == (0, 1, 1, "1")
+    assert [m["value"] for m in entry["moments"]] == ["note_4", "note_4"]
+    assert [(m["value"], m["pitches"][0]["step"]) for m in entry["second"]] == [
+        ("note_4.", "C"),
+        ("note_8", "E"),
+    ]
+
+
+def test_voices_are_paired_by_their_notes_not_their_numbers() -> None:
+    first = _two_voice_bar("C 5 2,D 5 2", "A 4 4")
+    # The second reading wrote the lower line first.
+    second = _two_voice_bar("A 4 4", "C 5 2,E 5 2")
+    [entry] = second_readings(first, second, _DOUBTED)
+    assert entry["voice"] == "1"
+    assert [m["pitches"][0]["step"] for m in entry["second"]] == ["C", "E"]
+
+
+def test_no_second_reading_where_it_cannot_be_laid_beside_the_first() -> None:
+    first = _two_voice_bar("C 5 2,D 5 2", "A 4 4")
+    # Short of the bar.
+    assert second_readings(first, _two_voice_bar("C 5 2,D 5 1", "A 4 4"), _DOUBTED) == []
+    # A different number of voices.
+    one = ET.fromstring(ET.tostring(first))
+    measure = one.find("part/measure")
+    for el in list(measure):
+        if el.tag == "backup" or el.findtext("voice") == "2":
+            measure.remove(el)
+    assert second_readings(first, one, _DOUBTED) == []
+    # Read the same, not doubted for it, or no second reading at all.
+    assert second_readings(first, first, _DOUBTED) == []
+    changed = _two_voice_bar("C 5 3,E 5 1", "A 4 4")
+    assert second_readings(first, changed, {(0, 1, 1): {"pitch unsure"}}) == []
+    assert second_readings(first, None, _DOUBTED) == []
+
+
+def test_the_second_reading_travels_in_the_musicxml() -> None:
+    first = _two_voice_bar("C 5 2,D 5 2", "A 4 4")
+    again = second_readings(first, _two_voice_bar("C 5 3,E 5 1", "A 4 4"), _DOUBTED)
+    embed_readings(first, [], [], again)
+    parsed = ET.fromstring(ET.tostring(first))
+    assert read_second_readings(parsed) == again
+    assert read_second_readings(ET.fromstring("<score-partwise/>")) == []
