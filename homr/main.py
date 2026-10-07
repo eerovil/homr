@@ -18,7 +18,12 @@ import onnxruntime as ort
 from homr import color_adjust, download_utils
 from homr.autocrop import autocrop_with_offset
 from homr.bar_line_detection import detect_bar_lines
-from homr.bar_readings import bar_readings, embed_readings, note_readings, second_readings
+from homr.bar_readings import (
+    bar_readings,
+    embed_readings,
+    note_readings,
+    second_readings,
+)
 from homr.bounding_boxes import create_rotated_bounding_boxes
 from homr.brace_dot_detection import (
     find_braces_brackets_and_grand_staff_lines,
