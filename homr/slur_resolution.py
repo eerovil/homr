@@ -8,6 +8,14 @@ verified slur spans at most one barline; longer pairs are recognition accidents.
 This module deliberately knows only about the generated MusicXML part. Tie
 conversion runs first, because ties and slurs share the model class and genuine
 ties must be removed from the slur stream before it is repaired.
+
+**A loose end at the edge of the part is kept** (eerovil/musescore-choir-plugins#318).
+A part is one system when the choir app reads a page a system at a time, and a
+slur the page carries over a system break is a start in the last bar with no
+stop, or a stop in the first bar with no start. Dropping those, as every other
+loose end is dropped, lost every slur crossing a break. Kept, the app pairs the
+two halves when it joins the systems. A reader that does not join them loses
+nothing either: MuseScore drops an unpaired slur when it opens the file.
 """
 
 from __future__ import annotations
@@ -22,7 +30,9 @@ _SlurRef = tuple[ET.Element, ET.Element, ET.Element]
 _OpenSlur = tuple[int, ET.Element, ET.Element, ET.Element]
 
 
-def resolve_slurs(part: ET.Element, max_bars: int = MAX_SLUR_BARS) -> int:
+def resolve_slurs(
+    part: ET.Element, max_bars: int = MAX_SLUR_BARS, keep_edges: bool = True
+) -> int:
     """Leave one unambiguous, short slur stream in ``part``.
 
     Starts/stops are paired independently per MusicXML slur number. A genuine
@@ -30,13 +40,18 @@ def resolve_slurs(part: ET.Element, max_bars: int = MAX_SLUR_BARS) -> int:
     stops, trailing starts, and both ends of longer pairs are removed. Empty
     ``<notations>`` containers created by the removals are removed as well.
 
+    With ``keep_edges`` an unmatched stop in the first bar and an unmatched
+    start in the last bar stay: they are a slur crossing the system edge.
+
     Returns the number of over-long pairs dropped. The operation is idempotent.
     """
     doomed: list[_SlurRef] = []
     dropped = 0
     open_slurs: dict[str, _OpenSlur] = {}
 
-    for bar, measure in enumerate(part.findall("measure")):
+    measures = part.findall("measure")
+    last = len(measures) - 1
+    for bar, measure in enumerate(measures):
         for note in measure.findall("note"):
             for notations in note.findall("notations"):
                 for slur in list(notations.findall("slur")):
@@ -52,13 +67,18 @@ def resolve_slurs(part: ET.Element, max_bars: int = MAX_SLUR_BARS) -> int:
                     elif kind == "stop":
                         began = open_slurs.pop(number, None)
                         if began is None:
-                            doomed.append((note, notations, slur))
+                            if not (keep_edges and bar == 0):
+                                doomed.append((note, notations, slur))
                         elif bar - began[0] > max_bars:
                             doomed.append((began[1], began[2], began[3]))
                             doomed.append((note, notations, slur))
                             dropped += 1
 
-    doomed.extend((note, notations, slur) for _, note, notations, slur in open_slurs.values())
+    doomed.extend(
+        (note, notations, slur)
+        for bar, note, notations, slur in open_slurs.values()
+        if not (keep_edges and bar == last)
+    )
 
     for note, notations, slur in doomed:
         notations.remove(slur)

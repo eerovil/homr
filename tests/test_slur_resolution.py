@@ -83,15 +83,65 @@ def test_start_made_while_same_number_is_open_is_removed() -> None:
 
 
 def test_stop_that_closes_nothing_is_removed() -> None:
-    part = slurred_part("1) 2( 2)")
+    part = slurred_part("2) 3( 3)")
     assert resolve_slurs(part) == 0
-    assert slur_pairs(part) == [(2, 2, "1")]
+    assert slur_pairs(part) == [(3, 3, "1")]
 
 
 def test_start_that_never_stops_is_removed() -> None:
     part = slurred_part("1( 1) 3(")
     assert resolve_slurs(part) == 0
     assert slur_pairs(part) == [(1, 1, "1")]
+
+
+def loose_ends(part: ET.Element) -> list[tuple[int, str]]:
+    """The slur ends left without a partner, as (measure, start|stop)."""
+    ends: list[tuple[int, str]] = []
+    opened: dict[str, list[int]] = {}
+    for bar, measure in enumerate(part.findall("measure"), 1):
+        for slur in measure.findall("note/notations/slur"):
+            number = slur.get("number", "1")
+            if slur.get("type") == "start":
+                opened.setdefault(number, []).append(bar)
+            elif opened.get(number):
+                opened[number].pop()
+            else:
+                ends.append((bar, "stop"))
+    ends.extend((bar, "start") for starts in opened.values() for bar in starts)
+    return ends
+
+
+def test_a_slur_from_the_system_before_keeps_its_stop() -> None:
+    part = slurred_part("1) 2( 2)", bars=4)
+    assert resolve_slurs(part) == 0
+    assert loose_ends(part) == [(1, "stop")]
+
+
+def test_a_slur_into_the_next_system_keeps_its_start() -> None:
+    part = slurred_part("1( 1) 4(", bars=4)
+    assert resolve_slurs(part) == 0
+    assert loose_ends(part) == [(4, "start")]
+
+
+def test_a_loose_end_away_from_the_edge_is_still_removed() -> None:
+    part = slurred_part("2) 3(", bars=4)
+    resolve_slurs(part)
+    assert loose_ends(part) == []
+
+
+def test_edges_are_only_kept_when_asked() -> None:
+    part = slurred_part("1) 4(", bars=4)
+    resolve_slurs(part, keep_edges=False)
+    assert loose_ends(part) == []
+
+
+def test_kept_edges_settle_in_one_pass() -> None:
+    part = slurred_part("1) 1( 2) 4( 4( 4) 4(", bars=4)
+    resolve_slurs(part)
+    once = ET.tostring(part)
+    resolve_slurs(part)
+    assert ET.tostring(part) == once
+    assert loose_ends(part) == [(1, "stop"), (4, "start")]
 
 
 def test_b5_shape_settles_in_one_pass() -> None:
