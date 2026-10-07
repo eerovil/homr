@@ -18,7 +18,7 @@ import onnxruntime as ort
 from homr import color_adjust, download_utils
 from homr.autocrop import autocrop_with_offset
 from homr.bar_line_detection import detect_bar_lines
-from homr.bar_readings import bar_readings, embed_readings
+from homr.bar_readings import bar_readings, embed_readings, note_readings
 from homr.bounding_boxes import create_rotated_bounding_boxes
 from homr.brace_dot_detection import (
     find_braces_brackets_and_grand_staff_lines,
@@ -286,11 +286,13 @@ def process_image(
             second = _second_reading(image_path, config, xml_generator_args)
             doubts = find_doubts(result_staffs, xml, second)
             readings = bar_readings(xml, result_staffs, doubts)
+            notes = note_readings(xml, result_staffs, doubts)
             spots, words = find_spots(result_staffs, xml, second, doubts)
             marked = mark_doubts(xml, doubts, spots, words)
-            embed_readings(xml, readings)
+            embed_readings(xml, readings, notes)
             eprint(f"Marked {marked} bar(s) to check against the page")
             eprint(f"Offered other readings for {len(readings)} voice(s) of those bars")
+            eprint(f"Offered other pitches for {len(notes)} note(s) of those bars")
         ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
         if config.write_confidence:
             confidence_file = replace_extension(image_path, ".confidence.json")
