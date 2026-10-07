@@ -793,6 +793,20 @@ barline . . . . ."""
         self.assertEqual(by_pitch["F5"], 2.0)
         self.assertEqual(by_pitch["G2"], 2.0)
 
+    def test_grace_notes_are_written_slashed(self) -> None:
+        """A grace note is written slashed, so MuseScore plays it short (an acciaccatura)."""
+        with_grace_note = """clef_G2 _ _ _ _ upper
+keySignature_0 . . . . .
+timeSignature/4 . . . . .
+note_8G D5 _ _ _ upper
+note_1 C5 _ _ _ upper
+barline . . . . ."""
+        tokens = read_token_lines(with_grace_note.splitlines())
+        xml = generate_xml(XmlGeneratorArguments(), [tokens], "")
+        graces = [note.find("grace") for note in xml.iter("note")]
+        written = [grace.attrib for grace in graces if grace is not None]
+        self.assertEqual(written, [{"slash": "yes"}])
+
     def test_image_position_is_written_as_comment(self) -> None:
         tokens = read_token_lines("""clef_G2 . . . . upper
 note_4 E4 _ _ _ upper

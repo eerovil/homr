@@ -1476,7 +1476,11 @@ def build_note_or_rest(
     model_duration = model_note.get_duration()
 
     if "G" in model_note.rhythm:
-        ET.SubElement(note, "grace")
+        # The model has one grace token and cannot tell a slashed grace note
+        # from an unslashed one. Choir and piano scores almost always print the
+        # slashed kind (acciaccatura), and a plain <grace/> imports into
+        # MuseScore as an appoggiatura, which plays for half its main note.
+        ET.SubElement(note, "grace", slash="yes")
 
     if model_pitch == empty:
         if model_duration.fraction.numerator == 0:
