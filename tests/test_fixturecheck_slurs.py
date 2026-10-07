@@ -14,7 +14,9 @@ def score(tmp_path: Path, notes: str) -> Path:
     path.write_text(
         "<score-partwise><part id='P1'>"
         "<measure number='1'><attributes><divisions>1</divisions></attributes>"
-        + notes + "</part></score-partwise>")
+        + notes
+        + "</part></score-partwise>"
+    )
     return path
 
 
@@ -25,8 +27,10 @@ def note(slur: str = "", tie: str = "", step: str = "C") -> str:
     if tie:
         marks += f"<tied type='{tie}'/>"
     marks = f"<notations>{marks}</notations>" if marks else ""
-    return (f"<note><pitch><step>{step}</step><octave>4</octave></pitch>"
-            f"<duration>1</duration>{marks}</note>")
+    return (
+        f"<note><pitch><step>{step}</step><octave>4</octave></pitch>"
+        f"<duration>1</duration>{marks}</note>"
+    )
 
 
 def test_a_slur_is_its_staff_and_both_ends(tmp_path: Path) -> None:
@@ -40,10 +44,14 @@ def test_a_tie_carries_its_pitch(tmp_path: Path) -> None:
 
 
 def test_loose_ends_are_arcs_over_the_system_edge(tmp_path: Path) -> None:
-    path = score(tmp_path, note("stop") + note() + "</measure>"
-                 "<measure number='2'>" + note() + note(tie="start") + "</measure>")
+    path = score(
+        tmp_path,
+        note("stop") + note() + "</measure>"
+        "<measure number='2'>" + note() + note(tie="start") + "</measure>",
+    )
     assert sorted(slurs.read_arcs(path), key=str) == sorted(
-        [("slur", 1, None, ("1", 0.0), ""), ("tie", 1, ("2", 1.0), None, "C")], key=str)
+        [("slur", 1, None, ("1", 0.0), ""), ("tie", 1, ("2", 1.0), None, "C")], key=str
+    )
 
 
 def test_slurs_and_ties_are_counted_apart() -> None:
@@ -65,9 +73,23 @@ def test_an_edge_end_is_found_by_either_kind() -> None:
 
 def test_a_case_listed_with_no_arcs_catches_an_invented_one(tmp_path: Path) -> None:
     key = tmp_path / "slurs.json"
-    key.write_text(json.dumps({"cases": {"empty": [], "a": [
-        {"kind": "slur", "staff": 1, "from": {"bar": "1", "onset": 1},
-         "to": {"bar": "1", "onset": 3}}]}}))
+    key.write_text(
+        json.dumps(
+            {
+                "cases": {
+                    "empty": [],
+                    "a": [
+                        {
+                            "kind": "slur",
+                            "staff": 1,
+                            "from": {"bar": "1", "onset": 1},
+                            "to": {"bar": "1", "onset": 3},
+                        }
+                    ],
+                }
+            }
+        )
+    )
     path = score(tmp_path, note() + note("start") + note() + note("stop") + "</measure>")
     listed = slurs.answer_key(key)
     assert slurs.judge("absent", path, listed) is None

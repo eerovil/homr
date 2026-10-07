@@ -124,7 +124,7 @@ def test_a_slur_into_the_next_system_keeps_its_start() -> None:
 
 
 def test_a_loose_end_away_from_the_edge_is_still_removed() -> None:
-    part = slurred_part("2) 3(", bars=4)
+    part = slurred_part("2) 2(", bars=4)
     resolve_slurs(part)
     assert loose_ends(part) == []
 
@@ -133,6 +133,30 @@ def test_edges_are_only_kept_when_asked() -> None:
     part = slurred_part("1) 4(", bars=4)
     resolve_slurs(part, keep_edges=False)
     assert loose_ends(part) == []
+
+
+def test_a_slur_into_the_next_system_may_start_a_bar_before_the_last() -> None:
+    """Finlandia s01 Bass 2: a slur from bar 7 of 8 into the next system."""
+    part = slurred_part("3(", bars=4)
+    resolve_slurs(part)
+    assert loose_ends(part) == [(3, "start")]
+    part = slurred_part("3(", bars=4)
+    resolve_slurs(part, edge_bars=1)
+    assert loose_ends(part) == []
+
+
+def test_a_slur_and_a_tie_both_into_the_next_system_keep_both_starts() -> None:
+    """Vielako s01: a slur from the eighth and a tie from the dotted half both
+    run off the edge; the second start shares the first's open number."""
+    part = slurred_part("4( 4(", bars=4)
+    resolve_slurs(part)
+    assert loose_ends(part) == [(4, "start"), (4, "start")]
+
+
+def test_a_redundant_start_a_stop_came_after_is_still_removed() -> None:
+    part = slurred_part("3( 3( 4)", bars=4)
+    resolve_slurs(part)
+    assert slur_pairs(part) == [(3, 4, "1")]
 
 
 def test_kept_edges_settle_in_one_pass() -> None:

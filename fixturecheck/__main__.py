@@ -64,8 +64,7 @@ def _local_read(image: Path) -> list[str]:
 
     The image goes last, which is homr's own CLI shape and the one thing the
     pod shim relies on."""
-    return [sys.executable, "-c", "from homr.main import main; main()",
-            "--gpu", "no", str(image)]
+    return [sys.executable, "-c", "from homr.main import main; main()", "--gpu", "no", str(image)]
 
 
 def parse(case: cases.Case, fingerprint: str) -> Path | None:
@@ -92,8 +91,7 @@ def parse(case: cases.Case, fingerprint: str) -> Path | None:
         copy = Path(tmp) / f"{case.name}.png"
         shutil.copy(case.image, copy)
         cmd = [reader, "--gpu", "no", str(copy)] if reader else _local_read(copy)
-        run = subprocess.run(cmd, capture_output=True, text=True, timeout=900,
-                             cwd=cases.ROOT)
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=cases.ROOT)
         produced = copy.with_suffix(".musicxml")
         if run.returncode != 0 or not produced.exists():
             if reader and not pod.alive():
@@ -113,12 +111,24 @@ def code_fingerprint() -> str:
     93 systems with a homr that had not moved a line, three quarters of an hour
     to arrive back at the same parses.
     """
-    head = subprocess.run(["git", "log", "-1", "--format=%h", "--", "homr"], cwd=cases.ROOT,
-                          capture_output=True, text=True).stdout.strip() or "nogit"
-    dirty = subprocess.run(["git", "diff", "--stat", "HEAD", "--", "homr"], cwd=cases.ROOT,
-                           capture_output=True, text=True).stdout
+    head = (
+        subprocess.run(
+            ["git", "log", "-1", "--format=%h", "--", "homr"],
+            cwd=cases.ROOT,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        or "nogit"
+    )
+    dirty = subprocess.run(
+        ["git", "diff", "--stat", "HEAD", "--", "homr"],
+        cwd=cases.ROOT,
+        capture_output=True,
+        text=True,
+    ).stdout
     if dirty.strip():
         import hashlib
+
         head += "+" + hashlib.sha256(dirty.encode()).hexdigest()[:6]
     return head
 
@@ -137,8 +147,7 @@ def gate_over(records: list[series.CaseRecord], adrift: list[str]) -> dict:
     evaluated nothing was a real bug once — the summary replaced a standing
     failure with a pass nobody had measured.
     """
-    read = {r.name: references.marks(r.counts)
-            for r in records if r.outcome == series.READ}
+    read = {r.name: references.marks(r.counts) for r in records if r.outcome == series.READ}
     unread = [r.name for r in records if r.outcome == series.UNREADABLE]
     gate = references.judge(read, unread, adrift)
     if not gate["judged"] and not gate["unreadable"]:
@@ -146,8 +155,7 @@ def gate_over(records: list[series.CaseRecord], adrift: list[str]) -> dict:
     return gate
 
 
-def ratchet(records: list[series.CaseRecord], memory: dict,
-            adrift: list[str]) -> list[str]:
+def ratchet(records: list[series.CaseRecord], memory: dict, adrift: list[str]) -> list[str]:
     """Move a case's memory up to a reading that is not worse than its own.
 
     **The ratchet only turns one way on its own.** An improvement is recorded
@@ -213,20 +221,31 @@ def run_cases(names: list[str], tier: str) -> int:
             slur_results[case.name] = slur
         before = standing.get(case.name)
         page = report.case_page(case, parsed, result, before, memory.get(case.name))
-        entries.append({"name": case.name, "page": page, "score": result.score,
-                        "agree": result.agree, "voice": result.voice,
-                        "pitch": result.pitch, "size": result.size,
-                        "timing": result.timing, "structure": result.structure,
-                        "staves_page": result.staves_page,
-                        "staves_homr": result.staves_homr,
-                        "at_fault": result.at_fault, "meter": result.meter,
-                        "repeat": result.repeat,
-                        "unison": result.unison, "before": before})
+        entries.append(
+            {
+                "name": case.name,
+                "page": page,
+                "score": result.score,
+                "agree": result.agree,
+                "voice": result.voice,
+                "pitch": result.pitch,
+                "size": result.size,
+                "timing": result.timing,
+                "structure": result.structure,
+                "staves_page": result.staves_page,
+                "staves_homr": result.staves_homr,
+                "at_fault": result.at_fault,
+                "meter": result.meter,
+                "repeat": result.repeat,
+                "unison": result.unison,
+                "before": before,
+            }
+        )
 
         counts = {k: getattr(result, k) for k in series.COUNTS}
-        record = series.CaseRecord(case.name, counts=counts,
-                                   at_fault=result.at_fault,
-                                   faults=series.first_faults(result))
+        record = series.CaseRecord(
+            case.name, counts=counts, at_fault=result.at_fault, faults=series.first_faults(result)
+        )
         # The whole table, but only for the five this repository owns -- and only
         # when it differs from the last one recorded, or a gated fixture would
         # append the same clean table forever and a real change would be one
@@ -242,11 +261,13 @@ def run_cases(names: list[str], tier: str) -> int:
 
         moved = ""
         if before:
-            change = (result.voice + result.pitch) - (before.get("voice", 0)
-                                                      + before.get("pitch", 0))
+            change = (result.voice + result.pitch) - (
+                before.get("voice", 0) + before.get("pitch", 0)
+            )
             moved = "  (no change)" if change == 0 else f"  ({change:+d} faults)"
-        staves = (f", staves {result.staves_page} vs {result.staves_homr}"
-                  if result.structure else "")
+        staves = (
+            f", staves {result.staves_page} vs {result.staves_homr}" if result.structure else ""
+        )
         # A misread meter is a wrong answer about the bars the notes are read
         # in, so it belongs on the line rather than only on the page.
         meter = f", {result.meter} bar(s) in the wrong meter" if result.meter else ""
@@ -256,17 +277,21 @@ def run_cases(names: list[str], tier: str) -> int:
         # scored, so the line said nothing at all about it -- and a case
         # carrying two of them read exactly like a case carrying none. It is
         # the part that is missing, not the note. See `Result.warnings`.
-        warned = (f", {result.warnings} unison(s) written as one voice"
-                  if result.warnings else "")
+        warned = f", {result.warnings} unison(s) written as one voice" if result.warnings else ""
         # Slurs are said beside the notes and never folded into them: see
         # `fixturecheck/slurs.py`.
-        slurred = (f", slurs {slur.slur.found}/{slur.slur.found + slur.slur.missed} "
-                   f"+{slur.slur.invented}, ties {slur.tie.found}/"
-                   f"{slur.tie.found + slur.tie.missed} +{slur.tie.invented}"
-                   if slur is not None else "")
-        print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
-              f"{result.pitch} pitch, {result.size} count, "
-              f"{result.timing} beat{meter}{warned}{staves}{slurred}{moved}")
+        slurred = (
+            f", slurs {slur.slur.found}/{slur.slur.found + slur.slur.missed} "
+            f"+{slur.slur.invented}, ties {slur.tie.found}/"
+            f"{slur.tie.found + slur.tie.missed} +{slur.tie.invented}"
+            if slur is not None
+            else ""
+        )
+        print(
+            f"  {case.name}: {result.agree} agree, {result.voice} voice, "
+            f"{result.pitch} pitch, {result.size} count, "
+            f"{result.timing} beat{meter}{warned}{staves}{slurred}{moved}"
+        )
 
     moved = references.drift(built)
     # Judged before anything is written back, and against the memory this run
@@ -282,51 +307,68 @@ def run_cases(names: list[str], tier: str) -> int:
     if moved["changed"]:
         extra["reference_drift"] = moved
     if slur_results:
-        extra["slurs"] = {"total": slurs.total(list(slur_results.values())),
-                          "cases": {name: r.to_json() for name, r in slur_results.items()}}
-    run = series.record_run("fixturecheck", tier, records,
-                            references=references.stamp(built), gate=gate,
-                            extra=extra, homr=shown)
+        extra["slurs"] = {
+            "total": slurs.total(list(slur_results.values())),
+            "cases": {name: r.to_json() for name, r in slur_results.items()},
+        }
+    run = series.record_run(
+        "fixturecheck",
+        tier,
+        records,
+        references=references.stamp(built),
+        gate=gate,
+        extra=extra,
+        homr=shown,
+    )
     quality.write()
 
     if entries:
         written = report.index_page(entries, tier, run)
-        print("\n" + (f"{report.URL.rstrip('/')}/index.html" if report.URL
-                      else str(written)))
+        print("\n" + (f"{report.URL.rstrip('/')}/index.html" if report.URL else str(written)))
     head = run["headline"]
-    print(f"\n{head['percent']:.1f}% of {head['judged']} judged are right "
-          f"(homr {run['homr']}, references {run['references']})")
+    print(
+        f"\n{head['percent']:.1f}% of {head['judged']} judged are right "
+        f"(homr {run['homr']}, references {run['references']})"
+    )
     if slur_results:
         t = slurs.total(list(slur_results.values()))
-        said = "; ".join(f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
-                         f"found, {t[kind]['invented']} invented" for kind in slurs.KINDS)
-        print(f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
-              f"({len(slur_results)} case(s) in the key {slurs.KEY})")
-    lost = (run["outcomes"].get(series.UNREADABLE, 0)
-            + run["outcomes"].get(series.UNBUILDABLE, 0))
+        said = "; ".join(
+            f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
+            f"found, {t[kind]['invented']} invented"
+            for kind in slurs.KINDS
+        )
+        print(
+            f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
+            f"({len(slur_results)} case(s) in the key {slurs.KEY})"
+        )
+    lost = run["outcomes"].get(series.UNREADABLE, 0) + run["outcomes"].get(series.UNBUILDABLE, 0)
     if lost:
         print(f"{lost} case(s) were not read at all — recorded, not skipped")
     if moved["changed"]:
-        print(f"references have moved since they were frozen: "
-              f"{', '.join(moved['changed'])}\n"
-              f"  run `python -m fixturecheck freeze` once you have looked at why")
+        print(
+            f"references have moved since they were frozen: "
+            f"{', '.join(moved['changed'])}\n"
+            f"  run `python -m fixturecheck freeze` once you have looked at why"
+        )
     if raised:
-        print(f"{len(raised)} case(s) now remembered higher: {', '.join(raised)}\n"
-              f"  {references.MANIFEST.name} has changed — commit it with the change "
-              f"that earned it")
+        print(
+            f"{len(raised)} case(s) now remembered higher: {', '.join(raised)}\n"
+            f"  {references.MANIFEST.name} has changed — commit it with the change "
+            f"that earned it"
+        )
     if gate and gate["adrift"]:
-        print(f"{len(gate['adrift'])} case(s) held out of the gate, their "
-              f"reference having moved: {', '.join(gate['adrift'])}")
+        print(
+            f"{len(gate['adrift'])} case(s) held out of the gate, their "
+            f"reference having moved: {', '.join(gate['adrift'])}"
+        )
     print(f"recorded in {series.SERIES.name}; summary in {quality.QUALITY.name}")
 
     if gate and not gate["passed"]:
-        print("\nGATE FAILED — a case read worse than the reading it was "
-              "accepted at:")
+        print("\nGATE FAILED — a case read worse than the reading it was " "accepted at:")
         for name, said in gate["below"].items():
             print(f"  {name}: {'; '.join(said)}")
         for name in gate["unreadable"]:
-            print(f"  {name}: homr could not read it at all, and it has a "
-                  f"remembered reading")
+            print(f"  {name}: homr could not read it at all, and it has a " f"remembered reading")
         return 1
     return 0
 
@@ -369,37 +411,37 @@ def accept(names: list[str]) -> int:
         if parsed is None:
             # Nothing to accept: there is no reading. Recording a zero here
             # would quietly retire the case, since nothing can fall below it.
-            print(f"{case.name}: homr could not read it, so there is no reading "
-                  f"to accept")
+            print(f"{case.name}: homr could not read it, so there is no reading " f"to accept")
             return 1
         result = compare_output(case.reference, parsed, case.name)
-        readings[case.name] = references.marks(
-            {k: getattr(result, k) for k in series.COUNTS})
+        readings[case.name] = references.marks({k: getattr(result, k) for k in series.COUNTS})
 
     moved = references.remember(readings)
     for name in sorted(readings):
         now, was = readings[name], memory.get(name)
         if was is None:
-            print(f"  {name}: accepted at {now['score']:.2f}% "
-                  f"(nothing was remembered before)")
+            print(f"  {name}: accepted at {now['score']:.2f}% " f"(nothing was remembered before)")
         elif name in moved:
             way = "DOWN" if references.worse(now, was) else "up"
-            print(f"  {name}: {way} from {was['score']:.2f}% to "
-                  f"{now['score']:.2f}%")
+            print(f"  {name}: {way} from {was['score']:.2f}% to " f"{now['score']:.2f}%")
         else:
             print(f"  {name}: unchanged at {now['score']:.2f}%")
     if moved:
-        print(f"{references.MANIFEST.name} has changed — commit it with the "
-              f"reason you accepted this")
+        print(
+            f"{references.MANIFEST.name} has changed — commit it with the "
+            f"reason you accepted this"
+        )
     return 0
 
 
 def make_pin(argv: list[str]) -> int:
     """`pin <name> <case> <first>-<last> <why>` — tier 1, in one command."""
     if len(argv) < 4:
-        print("pin <name> <case> <first>-<last> <why it is being pinned>\n"
-              "  e.g. pin hanget-m3-beats hanget-soi 3-3 "
-              "'a duration read differently; the six notes land on the wrong beats'")
+        print(
+            "pin <name> <case> <first>-<last> <why it is being pinned>\n"
+            "  e.g. pin hanget-m3-beats hanget-soi 3-3 "
+            "'a duration read differently; the six notes land on the wrong beats'"
+        )
         return 2
     name, source_name, span, why = argv[0], argv[1], argv[2], " ".join(argv[3:])
     first, _, last = span.partition("-")
@@ -415,12 +457,14 @@ def make_pin(argv: list[str]) -> int:
     except cases.CannotPin as refused:
         print(f"not pinned: {refused}")
         return 1
-    print(f"pinned {pinned.name} from {found[0].name} bars {first}-{last or first}\n"
-          f"  {pinned.image}\n  {pinned.reference}\n  registered in "
-          f"{cases.PINS.name}\n"
-          f"Run it to record what it reads at today — that reading, broken or "
-          f"not, becomes the memory nothing may fall below:\n"
-          f"  python -m fixturecheck one {pinned.name}")
+    print(
+        f"pinned {pinned.name} from {found[0].name} bars {first}-{last or first}\n"
+        f"  {pinned.image}\n  {pinned.reference}\n  registered in "
+        f"{cases.PINS.name}\n"
+        f"Run it to record what it reads at today — that reading, broken or "
+        f"not, becomes the memory nothing may fall below:\n"
+        f"  python -m fixturecheck one {pinned.name}"
+    )
     return 0
 
 
@@ -436,19 +480,25 @@ def main() -> int:
         wanted = sys.argv[2:]
         if not wanted:
             # Deliberately no accept-all: see `accept`.
-            print("accept <case> [<case> ...]  — name the cases whose current "
-                  "reading you are accepting, including a fall")
+            print(
+                "accept <case> [<case> ...]  — name the cases whose current "
+                "reading you are accepting, including a fall"
+            )
             return 2
         return accept(wanted)
     if tier == "freeze":
         wanted = sys.argv[2:] or cases.every()
         manifest, forgotten = references.write(cases.resolve(wanted))
-        print(f"froze {len(manifest['cases'])} reference(s), "
-              f"digest {manifest['digest']} -> {references.MANIFEST.name}")
+        print(
+            f"froze {len(manifest['cases'])} reference(s), "
+            f"digest {manifest['digest']} -> {references.MANIFEST.name}"
+        )
         if forgotten:
-            print(f"{len(forgotten)} case(s) lost their remembered reading, their "
-                  f"files having moved: {', '.join(forgotten)}\n"
-                  f"  the next run over them records what they read now")
+            print(
+                f"{len(forgotten)} case(s) lost their remembered reading, their "
+                f"files having moved: {', '.join(forgotten)}\n"
+                f"  the next run over them records what they read now"
+            )
         return 0
 
     if tier == "one":

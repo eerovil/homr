@@ -106,8 +106,9 @@ def read_arcs(path: Path) -> list[Arc]:
                         start = waiting.pop(0) if waiting else None
                         found.append((kind, staff, start, here, label if kind == "tie" else ""))
         for (kind, staff, label), waiting in open_.items():
-            found.extend((kind, staff, start, None, label if kind == "tie" else "")
-                         for start in waiting)
+            found.extend(
+                (kind, staff, start, None, label if kind == "tie" else "") for start in waiting
+            )
     return found
 
 
@@ -155,8 +156,12 @@ class SlurResult:
     edge_found: int = 0
 
     def to_json(self) -> dict:
-        return {"slur": self.slur.to_json(), "tie": self.tie.to_json(),
-                "edge": self.edge, "edge_found": self.edge_found}
+        return {
+            "slur": self.slur.to_json(),
+            "tie": self.tie.to_json(),
+            "edge": self.edge,
+            "edge_found": self.edge_found,
+        }
 
 
 def _edge(arc: Arc) -> bool:

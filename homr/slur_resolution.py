@@ -24,6 +24,13 @@ import xml.etree.ElementTree as ET
 
 MAX_SLUR_BARS = 1
 
+#: How many bars from the end of the part a start left open may stand in and
+#: still be a slur over the system edge. Two, because a slur crossing one
+#: barline before the edge is common (Finlandia's basses, bars 7-8): measured on
+#: the owner-checked key for eerovil/musescore-choir-plugins#318, one bar keeps
+#: 17 of 21 arc ends at the edge and two keep 19, with nothing more invented.
+EDGE_BARS = 2
+
 # note, notations, slur
 _SlurRef = tuple[ET.Element, ET.Element, ET.Element]
 # zero-based measure index, note, notations, slur
@@ -31,7 +38,10 @@ _OpenSlur = tuple[int, ET.Element, ET.Element, ET.Element]
 
 
 def resolve_slurs(
-    part: ET.Element, max_bars: int = MAX_SLUR_BARS, keep_edges: bool = True
+    part: ET.Element,
+    max_bars: int = MAX_SLUR_BARS,
+    keep_edges: bool = True,
+    edge_bars: int = EDGE_BARS,
 ) -> int:
     """Leave one unambiguous, short slur stream in ``part``.
 
@@ -40,14 +50,23 @@ def resolve_slurs(
     stops, trailing starts, and both ends of longer pairs are removed. Empty
     ``<notations>`` containers created by the removals are removed as well.
 
-    With ``keep_edges`` an unmatched stop in the first bar and an unmatched
-    start in the last bar stay: they are a slur crossing the system edge.
+    With ``keep_edges`` an unmatched stop in the first bar and every start left
+    unmatched in the last ``edge_bars`` bars stay: they are slurs crossing the
+    system edge, which the choir app joins. That includes a start made while
+    its number was open, the rule that otherwise removes it: at the edge a slur
+    and a tie both running into the next system are two such starts, and
+    keeping only the first lost the second (ties at the edge 36 -> 41 of 43 on
+    the owner-checked key).
 
     Returns the number of over-long pairs dropped. The operation is idempotent.
     """
     doomed: list[_SlurRef] = []
     dropped = 0
     open_slurs: dict[str, _OpenSlur] = {}
+    # Starts made while their number was already open, and whether a stop of
+    # that number came after them.
+    redundant: list[tuple[_OpenSlur, str]] = []
+    stopped_after: set[int] = set()
 
     measures = part.findall("measure")
     last = len(measures) - 1
@@ -61,10 +80,13 @@ def resolve_slurs(
                         if number in open_slurs:
                             # MusicXML cannot distinguish overlapping slurs
                             # that share a number. Keep the first open start.
-                            doomed.append((note, notations, slur))
+                            redundant.append(((bar, note, notations, slur), number))
                         else:
                             open_slurs[number] = (bar, note, notations, slur)
                     elif kind == "stop":
+                        for index, (_, earlier) in enumerate(redundant):
+                            if earlier == number:
+                                stopped_after.add(index)
                         began = open_slurs.pop(number, None)
                         if began is None:
                             if not (keep_edges and bar == 0):
@@ -74,15 +96,25 @@ def resolve_slurs(
                             doomed.append((note, notations, slur))
                             dropped += 1
 
+    def at_edge(bar: int) -> bool:
+        return keep_edges and bar > last - edge_bars
+
+    left_open = list(open_slurs.values()) + [
+        began for index, (began, _) in enumerate(redundant) if index not in stopped_after
+    ]
     doomed.extend(
-        (note, notations, slur)
-        for bar, note, notations, slur in open_slurs.values()
-        if not (keep_edges and bar == last)
+        (began[1], began[2], began[3])
+        for index, (began, _) in enumerate(redundant)
+        if index in stopped_after
     )
+    for bar, note, notations, slur in left_open:
+        if not at_edge(bar):
+            doomed.append((note, notations, slur))
 
     for note, notations, slur in doomed:
-        notations.remove(slur)
-        if len(notations) == 0:
+        if slur in list(notations):
+            notations.remove(slur)
+        if len(notations) == 0 and notations in list(note):
             note.remove(notations)
 
     return dropped
