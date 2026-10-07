@@ -262,7 +262,8 @@
   },
   "illan-s06": {
    "meter": 0,
-   "score": 94.03,
+   "repeat": 0,
+   "score": 97.1,
    "structure": 0
   },
   "illan-s07": {
@@ -277,7 +278,8 @@
   },
   "illan-s09": {
    "meter": 0,
-   "score": 98.97,
+   "repeat": 0,
+   "score": 100.0,
    "structure": 0
   },
   "illan-s10": {
