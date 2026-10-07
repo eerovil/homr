@@ -260,8 +260,10 @@ def run_cases(names: list[str], tier: str) -> int:
                   if result.warnings else "")
         # Slurs are said beside the notes and never folded into them: see
         # `fixturecheck/slurs.py`.
-        slurred = (f", slurs {slur.found}/{slur.found + slur.missed} found "
-                   f"{slur.invented} invented" if slur is not None else "")
+        slurred = (f", slurs {slur.slur.found}/{slur.slur.found + slur.slur.missed} "
+                   f"+{slur.slur.invented}, ties {slur.tie.found}/"
+                   f"{slur.tie.found + slur.tie.missed} +{slur.tie.invented}"
+                   if slur is not None else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
               f"{result.timing} beat{meter}{warned}{staves}{slurred}{moved}")
@@ -296,9 +298,10 @@ def run_cases(names: list[str], tier: str) -> int:
           f"(homr {run['homr']}, references {run['references']})")
     if slur_results:
         t = slurs.total(list(slur_results.values()))
-        print(f"slurs: {t['found']} of {t['found'] + t['missed']} on the page found, "
-              f"{t['invented']} invented; across a system edge {t['edge_found']} "
-              f"of {t['edge']} (key: {slurs.KEY})")
+        said = "; ".join(f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
+                         f"found, {t[kind]['invented']} invented" for kind in slurs.KINDS)
+        print(f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
+              f"({len(slur_results)} case(s) in the key {slurs.KEY})")
     lost = (run["outcomes"].get(series.UNREADABLE, 0)
             + run["outcomes"].get(series.UNBUILDABLE, 0))
     if lost:

@@ -108,21 +108,23 @@ the system**, since it is drawn across the whole system and the choir app copies
 it to every staff. `repeat` is counted and remembered like `meter`. A memory
 written before it existed holds none.
 
-## Slurs, against their own answer key
+## Slurs and ties, against their own answer key
 
-The references' slurs came from homr and nobody checked them, so slurs are not
-compared against the reference. They have a key of their own,
-`homr-fixtures/slurs.json` in the private songs repository: every slur the page
-prints, read off a 400 dpi crop and checked by the owner
-(eerovil/musescore-choir-plugins#318). A slur is its staff and the bar and onset of
-each end; an end that runs over the system edge is `null`. `fixturecheck/slurs.py`
-counts each case's slurs found, missed and invented, and how many of the page's
-slur ends at a system edge homr kept. The run line and the run record carry them
-(`slurs` in `series.jsonl`). **They stay out of the note score and the gate**: a
-missed slur costs a singer a syllable, not a note, and every percentage here is
-quoted against a history that never counted them. A case the key does not list is
-not judged. One caveat: a system-edge end is matched on its one end alone, so a
-tie half on the same note counts as found.
+The references' slurs and ties came from homr and nobody checked them, so arcs are
+not compared against the reference. They have a key of their own,
+`homr-fixtures/slurs.json` in the private songs repository: every slur and tie the
+page prints on the cases it lists, each checked by the owner arc by arc against the
+page (eerovil/musescore-choir-plugins#318). It starts small on purpose: nine systems,
+four of them printing no arc at all, which is what catches an invented one. An arc
+is its kind, its staff and the bar and onset of each end, and a tie its pitch; an
+end that runs over the system edge is `null`. `fixturecheck/slurs.py` counts slurs
+and ties apart -- found, missed, invented -- and how many of the page's arc ends at
+a system edge homr kept. At the edge the kind is not asked: homr makes a pair into a
+tie only once it sees both ends, and over a line break it sees one.
+
+The run line and the run record carry them (`slurs` in `series.jsonl`). **They stay
+out of the note score and the gate**: every percentage here is quoted against a
+history that never counted arcs. A case the key does not list is not judged.
 
 ## When the two disagree about the staves
 

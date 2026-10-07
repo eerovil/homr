@@ -1,20 +1,27 @@
-"""Slurs against an answer key read off the page -- found, missed and invented.
+"""Slurs and ties against an answer key read off the page -- found, missed, invented.
 
-The note score never looked at slurs, and the references could not be used to:
-their slurs came from homr itself and nobody checked them. So the truth lives in
-its own file, `homr-fixtures/slurs.json` in the private songs repository, made
-by reading every slur off the printed system and checked by the owner
-(eerovil/musescore-choir-plugins#318). A case with no entry there is not judged.
+The note score never looked at the arcs, and the references could not be used to:
+their slurs and ties came from homr itself and nobody checked them. So the truth
+lives in its own file, `homr-fixtures/slurs.json` in the private songs repository,
+read off the printed system and checked by the owner, arc by arc
+(eerovil/musescore-choir-plugins#318). A case with no entry there is not judged; a
+case listed with no arcs is judged, and catches an invented one.
 
-A slur is its staff and its two ends, each end a bar and an onset in quarter
-notes -- the same keys `compare.read_score` places notes on, so a slur is found
-when homr put both ends on the notes the page joins. An end that is `None` runs
-off the edge of the system: a slur arriving from the system before has no start
-here, one continuing into the next has no stop.
+Slurs and ties are counted apart. Both take a syllable away from the note they
+reach, so a singer meets either one missing, but they are different marks on the
+page and homr reads them with one model head: a tie read as a slur is a fault.
 
-Kept out of the note score and out of the gate on purpose. The note percentage
-has a history every figure in QUALITY.md is quoted against, and a slur is not a
-note: missing one costs a singer a syllable, not a pitch.
+An arc is its kind, its staff and its two ends, each end a bar and an onset in
+quarter notes -- the keys `compare.read_score` places notes on -- and, for a tie,
+the pitch (letter and accidental: a male-choir reference writes an octave away
+from homr), so the two tied notes of a chord are two ties. An end that is `None`
+runs over the edge of the system. **homr cannot tell a slur from a tie there**:
+it turns a pair into a tie only once it sees both ends, and over a line break it
+sees one. So an edge end in the key is found by an edge end of either kind at the
+same place, and the choir app, which sees both systems, decides which it is.
+
+Kept out of the note score and the gate on purpose. The note percentage has a
+history every figure in QUALITY.md is quoted against, and an arc is not a note.
 """
 
 from __future__ import annotations
@@ -27,31 +34,42 @@ from pathlib import Path
 from fixturecheck import cases
 
 KEY = cases.PRIVATE / "slurs.json"
+KINDS = ("slur", "tie")
 
-#: Where a slur end sits: (bar, onset in quarters), or None off the system edge.
+#: Where an arc end sits: (bar, onset in quarters), or None off the system edge.
 End = tuple[str, float] | None
-Slur = tuple[int, End, End]
+#: (kind, staff, start, stop, pitch) -- pitch only for a tie, "" for a slur.
+Arc = tuple[str, int, End, End, str]
 
 
 def _where(bar: object, onset: object) -> tuple[str, float]:
     return str(bar), round(float(onset), 3)
 
 
-def read_slurs(path: Path) -> list[Slur]:
-    """Every slur in a MusicXML file, as (staff, start, stop).
+def _pitch(note: ET.Element) -> str:
+    pitch = note.find("pitch")
+    if pitch is None:
+        return ""
+    alter = {"1": "#", "-1": "b", "2": "##", "-2": "bb"}.get(pitch.findtext("alter") or "", "")
+    # Without the octave: a male-choir reference writes an octave from homr.
+    return f"{pitch.findtext('step')}{alter}"
 
-    Starts and stops are paired per printed staff and slur `number`, in the
-    order they are written -- what MuseScore does when it opens the file. A stop
-    with nothing open is a slur arriving from before this system; a start left
-    open at the end is one continuing past it.
+
+def read_arcs(path: Path) -> list[Arc]:
+    """Every slur and tie in a MusicXML file.
+
+    Slurs pair per printed staff and `number`, ties per staff and pitch, both in
+    the order they are written -- what MuseScore does when it opens the file. A
+    stop with nothing open arrives from before this system; a start left open
+    continues past it.
     """
-    found: list[Slur] = []
+    found: list[Arc] = []
     printed = 0
     for part in ET.parse(path).getroot().findall("part"):
         staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
         base, printed = printed, printed + staves
         divisions = 1.0
-        open_slurs: dict[tuple[int, str], list[tuple[str, float]]] = {}
+        open_: dict[tuple, list[tuple[str, float]]] = {}
         for measure in part.findall("measure"):
             for attributes in measure.findall("attributes"):
                 declared = attributes.findtext("divisions")
@@ -75,88 +93,131 @@ def read_slurs(path: Path) -> list[Slur]:
                     previous, at = at, at + length
                 staff = base + int(node.findtext("staff", "1"))
                 here = _where(measure.get("number", "?"), onset)
-                for slur in node.iter("slur"):
-                    key = (staff, slur.get("number", "1"))
-                    if slur.get("type") == "start":
-                        open_slurs.setdefault(key, []).append(here)
-                    elif slur.get("type") == "stop":
-                        waiting = open_slurs.get(key)
+                marks = [("slur", s.get("number", "1"), s.get("type")) for s in node.iter("slur")]
+                marks += [("tie", _pitch(node), t.get("type")) for t in node.iter("tied")]
+                # A note both ending one arc and starting the next: the stop first.
+                marks.sort(key=lambda m: m[2] != "stop")
+                for kind, label, what in marks:
+                    key = (kind, staff, label)
+                    if what == "start":
+                        open_.setdefault(key, []).append(here)
+                    elif what == "stop":
+                        waiting = open_.get(key)
                         start = waiting.pop(0) if waiting else None
-                        found.append((staff, start, here))
-        for (staff, _), waiting in open_slurs.items():
-            found.extend((staff, start, None) for start in waiting)
+                        found.append((kind, staff, start, here, label if kind == "tie" else ""))
+        for (kind, staff, label), waiting in open_.items():
+            found.extend((kind, staff, start, None, label if kind == "tie" else "")
+                         for start in waiting)
     return found
 
 
 def answer_key(path: Path = KEY) -> dict[str, list[dict]]:
-    """The checked slurs per case, `{}` when the key is absent."""
+    """The checked arcs per case, `{}` when the key is absent."""
     if not path.exists():
         return {}
     return json.loads(path.read_text()).get("cases", {})
 
 
-def key_slurs(entries: list[dict]) -> list[Slur]:
+def key_arcs(entries: list[dict]) -> list[Arc]:
     def end(e: dict | None) -> End:
         return None if e is None else _where(e["bar"], e["onset"])
-    return [(int(e["staff"]), end(e.get("from")), end(e.get("to"))) for e in entries]
+
+    arcs = []
+    for e in entries:
+        kind = e.get("kind", "slur")
+        pitch = ""
+        if kind == "tie":
+            pitch = (e.get("from") or e.get("to") or {}).get("pitch", "").rstrip("0123456789")
+        arcs.append((kind, int(e["staff"]), end(e.get("from")), end(e.get("to")), pitch))
+    return arcs
+
+
+@dataclass
+class KindResult:
+    found: int = 0
+    missed: int = 0
+    invented: int = 0
+    missed_list: list[Arc] = field(default_factory=list)
+    invented_list: list[Arc] = field(default_factory=list)
+
+    def to_json(self) -> dict:
+        return {"found": self.found, "missed": self.missed, "invented": self.invented}
 
 
 @dataclass
 class SlurResult:
-    found: int = 0
-    missed: int = 0
-    invented: int = 0
-    #: Of the page's slurs, how many cross the system edge, and of those found.
+    """One case: slurs and ties, and the ends at the system edge apart."""
+
+    slur: KindResult = field(default_factory=KindResult)
+    tie: KindResult = field(default_factory=KindResult)
+    #: The page's arc ends at a system edge, and how many homr left an end at.
     edge: int = 0
     edge_found: int = 0
-    missed_list: list[Slur] = field(default_factory=list)
-    invented_list: list[Slur] = field(default_factory=list)
 
     def to_json(self) -> dict:
-        return {"found": self.found, "missed": self.missed, "invented": self.invented,
+        return {"slur": self.slur.to_json(), "tie": self.tie.to_json(),
                 "edge": self.edge, "edge_found": self.edge_found}
 
 
-def compare_slurs(want: list[Slur], got: list[Slur]) -> SlurResult:
-    """Match the page's slurs to homr's, both ends exactly, each used once."""
+def _edge(arc: Arc) -> bool:
+    return arc[2] is None or arc[3] is None
+
+
+def _edge_place(arc: Arc) -> tuple:
+    return (arc[1], arc[2] is None, arc[3] if arc[2] is None else arc[2])
+
+
+def compare_arcs(want: list[Arc], got: list[Arc]) -> SlurResult:
+    """Match the page's arcs to homr's, both ends exactly, each used once.
+
+    Inside the system a slur is matched by a slur and a tie by a tie at the same
+    pitch. At the edge the kind is not asked (see the module docstring)."""
     result = SlurResult()
     left = list(got)
-    for slur in want:
-        crosses = slur[1] is None or slur[2] is None
-        result.edge += crosses
-        if slur in left:
-            left.remove(slur)
-            result.found += 1
-            result.edge_found += crosses
+    for arc in want:
+        kind = result.slur if arc[0] == "slur" else result.tie
+        if _edge(arc):
+            result.edge += 1
+            hit = next((g for g in left if _edge(g) and _edge_place(g) == _edge_place(arc)), None)
+            result.edge_found += hit is not None
         else:
-            result.missed += 1
-            result.missed_list.append(slur)
-    result.invented = len(left)
-    result.invented_list = left
+            hit = arc if arc in left else None
+        if hit is not None:
+            left.remove(hit)
+            kind.found += 1
+        else:
+            kind.missed += 1
+            kind.missed_list.append(arc)
+    for arc in left:
+        kind = result.slur if arc[0] == "slur" else result.tie
+        kind.invented += 1
+        kind.invented_list.append(arc)
     return result
 
 
 def judge(case_name: str, parsed: Path, key: dict | None = None) -> SlurResult | None:
-    """The case's slurs against the key, or None when the key has no entry."""
+    """The case's arcs against the key, or None when the key has no entry."""
     key = answer_key() if key is None else key
     if case_name not in key:
         return None
-    return compare_slurs(key_slurs(key[case_name]), read_slurs(parsed))
+    return compare_arcs(key_arcs(key[case_name]), read_arcs(parsed))
 
 
 def total(results: list[SlurResult]) -> dict:
     out = SlurResult()
     for r in results:
-        out.found += r.found
-        out.missed += r.missed
-        out.invented += r.invented
+        for kind in KINDS:
+            mine, theirs = getattr(out, kind), getattr(r, kind)
+            mine.found += theirs.found
+            mine.missed += theirs.missed
+            mine.invented += theirs.invented
         out.edge += r.edge
         out.edge_found += r.edge_found
     return out.to_json()
 
 
-def describe(slur: Slur) -> str:
-    staff, start, stop = slur
+def describe(arc: Arc) -> str:
+    kind, staff, start, stop, pitch = arc
     a = "from the system before" if start is None else f"bar {start[0]} beat {start[1]:g}"
     b = "into the next system" if stop is None else f"bar {stop[0]} beat {stop[1]:g}"
-    return f"staff {staff}: {a} -> {b}"
+    return f"{kind} staff {staff}{' ' + pitch if pitch else ''}: {a} -> {b}"
