@@ -20,6 +20,11 @@ matches keeps the value it was written with.
 
 They travel inside the MusicXML (`identification/miscellaneous`, field
 `homr-bar-readings`), so a crop saved to disk carries its own options.
+
+eerovil/musescore-choir-plugins#295: a bar marked "notes?" is one the second
+reading (the crop read again at 80% of its size) read differently, and that
+second reading is a whole bar a person may want instead -- pitches and lengths
+together. `second_readings` keeps it, per voice, beside the first.
 """
 
 import json
@@ -27,13 +32,18 @@ import math
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from fractions import Fraction
+from itertools import permutations
 
 from homr.doubt import (
     _ALTERNATIVES,
+    _LIFT,
+    _PITCH,
     _UNRANKED,
+    SECOND_READING,
     Doubts,
     _confidence,
     _duration,
+    _probability,
     _staff,
     _staves_of,
     bar_lengths,
@@ -41,12 +51,20 @@ from homr.doubt import (
 from homr.transformer.vocabulary import EncodedSymbol
 
 FIELD = "homr-bar-readings"
-VERSION = 1
+#: 2 adds `notes`: other pitches for the notes of a doubted bar the decoder was
+#: unsure of the pitch or the accidental of (eerovil/musescore-choir-plugins#290).
+#: 3 adds `second`: a doubted bar as the second reading read it (#295), and
+#: gives the pitch a note was written with the decoder's probability for it.
+VERSION = 3
 
 #: How many readings of a voice are offered at most.
 TOP = 3
 
 _ALTER = {"#": 1, "b": -1, "N": 0}
+_LIFT_ALTER = {"#": 1, "##": 2, "N": 0, "b": -1, "bb": -2}
+_SHARP_ORDER = "FCGDAEB"
+#: An alternative the decoder gave less than this is not worth a person's look.
+_PITCH_FLOOR = 0.02
 
 
 def value_of(duration: Fraction, kind: str = "note") -> str | None:
@@ -319,7 +337,236 @@ def bar_readings(
     return out
 
 
-def embed_readings(xml: ET.Element, readings: list[dict]) -> None:
+def _key_alter(step: str, fifths: int) -> int:
+    if fifths > 0 and step in _SHARP_ORDER[:fifths]:
+        return 1
+    if fifths < 0 and step in _SHARP_ORDER[::-1][:-fifths]:
+        return -1
+    return 0
+
+
+def _fifths(measures: list[ET.Element], bar: int) -> int:
+    fifths = 0
+    for measure in measures[:bar]:
+        text = measure.findtext("attributes/key/fifths")
+        if text:
+            fifths = int(text)
+    return fifths
+
+
+def _alternative_pitches(written: dict, head: EncodedSymbol, fifths: int, top: int) -> list[dict]:
+    """The pitches one written note could be: as written first, then the decoder's next.
+
+    A pitch alternative keeps the step's accidental the key gives (nothing else was
+    printed in that reading); an accidental alternative keeps the step and octave.
+    Each carries the decoder's probability for the field that changed.
+    """
+    # The pitch as written is the decoder's own first choice for the field it doubted,
+    # so it carries that probability, and a reader can rank it against the others.
+    doubted = "pitch" if _probability(head, "pitch") < _PITCH else "lift"
+    out = [{**written, "probability": round(_probability(head, doubted), 3)}]
+    seen = {(written["step"], written["alter"], written["octave"])}
+    candidates: list[tuple[float, dict]] = []
+    if _probability(head, "pitch") < _PITCH:
+        for alternative in _confidence(head, "pitch").get("alternatives", [])[:_ALTERNATIVES]:
+            value = alternative["value"]
+            if len(value) < 2 or value[0] not in "CDEFGAB" or not value[1:].isdigit():
+                continue
+            step, octave = value[0], int(value[1:])
+            candidates.append(
+                (
+                    alternative["probability"],
+                    {"step": step, "alter": _key_alter(step, fifths), "octave": octave},
+                )
+            )
+    if _probability(head, "lift") < _LIFT:
+        for alternative in _confidence(head, "lift").get("alternatives", [])[:_ALTERNATIVES]:
+            value = alternative["value"]
+            if value == "_":
+                alter = _key_alter(written["step"], fifths)
+            elif value in _LIFT_ALTER:
+                alter = _LIFT_ALTER[value]
+            else:
+                continue
+            candidates.append((alternative["probability"], {**written, "alter": alter}))
+    for probability, pitch in sorted(candidates, key=lambda c: -c[0]):
+        key = (pitch["step"], pitch["alter"], pitch["octave"])
+        if probability < _PITCH_FLOOR or key in seen:
+            continue
+        seen.add(key)
+        out.append({**pitch, "probability": round(probability, 3)})
+    return out[:top]
+
+
+def note_readings(
+    xml: ET.Element, staffs: list[list[EncodedSymbol]], doubts: Doubts, top: int = TOP
+) -> list[dict]:
+    """For each doubted bar, each note whose pitch or accidental the decoder doubted.
+
+    One entry per notehead with more than one pitch worth offering: the voice as
+    written (so a reader can find the bar again), which moment and which head of
+    its chord, and the pitches -- as written first, then the decoder's next.
+    """
+    parts = xml.findall("part")
+    out = []
+    for part_index, staff, bar in sorted(doubts):
+        if part_index >= len(parts) or part_index >= len(staffs):
+            continue
+        measures = parts[part_index].findall("measure")
+        if bar > len(measures) or staff > _staves_of(parts[part_index]):
+            continue
+        divisions = 1
+        for measure in measures[: bar - 1]:
+            text = measure.findtext("attributes/divisions")
+            if text:
+                divisions = int(text)
+        voices, _ = _voices(measures[bar - 1], staff, divisions)
+        heads = _heads_in_bar(staffs[part_index], staff, bar)
+        fifths = _fifths(measures, bar)
+        for voice, moments in sorted(voices.items()):
+            written = [
+                {"kind": m.kind, "pitches": m.pitches, "value": value_of(m.duration, m.kind)}
+                for m in moments
+            ]
+            # The k-th head at a pitch in the voice is the k-th decoded head at it.
+            seen: dict[tuple[str, int], int] = defaultdict(int)
+            for index, moment in enumerate(moments):
+                if moment.kind != "note":
+                    continue
+                for chord, pitch in enumerate(moment.pitches):
+                    occurrence = seen[(pitch["step"], pitch["octave"])]
+                    seen[(pitch["step"], pitch["octave"])] += 1
+                    single = _Moment(moment.onset, "note", moment.duration)
+                    single.pitches = [pitch]
+                    matched = _heads_for(single, occurrence, heads)
+                    if not matched:
+                        continue
+                    pitches = _alternative_pitches(pitch, matched[0], fifths, top)
+                    if len(pitches) < 2:
+                        continue
+                    out.append(
+                        {
+                            "part": part_index,
+                            "staff": staff,
+                            "bar": bar,
+                            "voice": voice,
+                            "moment": index,
+                            "chord": chord,
+                            "moments": written,
+                            "pitches": pitches,
+                        }
+                    )
+    return out
+
+
+def _divisions_before(measures: list[ET.Element], bar: int) -> int:
+    divisions = 1
+    for measure in measures[: bar - 1]:
+        text = measure.findtext("attributes/divisions")
+        if text:
+            divisions = int(text)
+    return divisions
+
+
+def _sounding(voices: dict[str, list]) -> dict[str, list]:
+    return {v: m for v, m in voices.items() if any(x.kind == "note" for x in m)}
+
+
+def _fills(moments: list, length: Fraction) -> bool:
+    at = Fraction(0)
+    for moment in moments:
+        if moment.onset != at:
+            return False
+        at += moment.duration
+    return at == length
+
+
+def _heard(moments: list) -> set[tuple]:
+    # The accidental is part of the note: two voices a semitone apart on one step
+    # are different lines, and pairing them by step alone could hand a voice the
+    # other's second reading.
+    return {
+        (m.onset, p["step"], p.get("alter", 0), p["octave"]) for m in moments for p in m.pitches
+    }
+
+
+def _as_written(moments: list) -> list[dict] | None:
+    out = []
+    for m in moments:
+        value = value_of(m.duration, m.kind)
+        if value is None:
+            return None
+        out.append({"kind": m.kind, "pitches": m.pitches, "value": value})
+    return out
+
+
+def second_readings(xml: ET.Element, second: ET.Element | None, doubts: Doubts) -> list[dict]:
+    """For each bar the second reading read differently, each voice as it read it.
+
+    Only where the two can be laid side by side: the same parts, staves and bars,
+    the same number of sounding voices on the staff -- paired by the notes they
+    share most, since a voice's number means nothing between two readings -- and
+    both readings of the voice running from the head of the bar to its end
+    without a gap. A voice the second reading read the same is left out.
+    """
+    if second is None:
+        return []
+    parts, theirs = xml.findall("part"), second.findall("part")
+    if len(parts) != len(theirs):
+        return []
+    lengths = bar_lengths(xml)
+    out = []
+    for key in sorted(doubts):
+        part_index, staff, bar = key
+        if not any(reason.endswith(SECOND_READING) for reason in doubts[key]):
+            continue
+        if part_index >= len(parts) or part_index >= len(lengths):
+            continue
+        mine, other = parts[part_index], theirs[part_index]
+        ours, read = mine.findall("measure"), other.findall("measure")
+        if len(ours) != len(read) or bar > len(ours):
+            continue
+        if _staves_of(mine) != _staves_of(other) or staff > _staves_of(mine):
+            continue
+        first, _ = _voices(ours[bar - 1], staff, _divisions_before(ours, bar))
+        again, _ = _voices(read[bar - 1], staff, _divisions_before(read, bar))
+        first, again = _sounding(first), _sounding(again)
+        if not first or len(first) != len(again):
+            continue
+        names = sorted(first)
+        best = max(
+            permutations(sorted(again)),
+            key=lambda order: sum(
+                len(_heard(first[a]) & _heard(again[b])) for a, b in zip(names, order, strict=True)
+            ),
+        )
+        length = lengths[part_index][bar - 1]
+        for voice, paired in zip(names, best, strict=True):
+            if not (_fills(first[voice], length) and _fills(again[paired], length)):
+                continue
+            written, reread = _as_written(first[voice]), _as_written(again[paired])
+            if written is None or reread is None or written == reread:
+                continue
+            out.append(
+                {
+                    "part": part_index,
+                    "staff": staff,
+                    "bar": bar,
+                    "voice": voice,
+                    "length": str(length),
+                    "moments": written,
+                    "second": reread,
+                }
+            )
+    return out
+
+
+def embed_readings(
+    xml: ET.Element,
+    readings: list[dict],
+    notes: list[dict] | None = None,
+    second: list[dict] | None = None,
+) -> None:
     """Write the readings into the score's identification, replacing any there."""
     identification = xml.find("identification")
     if identification is None:
@@ -336,7 +583,10 @@ def embed_readings(xml: ET.Element, readings: list[dict]) -> None:
         if field.get("name") == FIELD:
             miscellaneous.remove(field)
     field = ET.SubElement(miscellaneous, "miscellaneous-field", name=FIELD)
-    field.text = json.dumps({"version": VERSION, "bars": readings}, separators=(",", ":"))
+    field.text = json.dumps(
+        {"version": VERSION, "bars": readings, "notes": notes or [], "second": second or []},
+        separators=(",", ":"),
+    )
 
 
 def read_readings(xml: ET.Element) -> list[dict]:
@@ -344,4 +594,20 @@ def read_readings(xml: ET.Element) -> list[dict]:
     for field in xml.iterfind("identification/miscellaneous/miscellaneous-field"):
         if field.get("name") == FIELD and field.text:
             return json.loads(field.text).get("bars", [])
+    return []
+
+
+def read_note_readings(xml: ET.Element) -> list[dict]:
+    """The other pitches a score carries for its doubted notes, or none (version 1)."""
+    for field in xml.iterfind("identification/miscellaneous/miscellaneous-field"):
+        if field.get("name") == FIELD and field.text:
+            return json.loads(field.text).get("notes", [])
+    return []
+
+
+def read_second_readings(xml: ET.Element) -> list[dict]:
+    """The bars a score carries as the second reading read them, or none (version 3)."""
+    for field in xml.iterfind("identification/miscellaneous/miscellaneous-field"):
+        if field.get("name") == FIELD and field.text:
+            return json.loads(field.text).get("second", [])
     return []
