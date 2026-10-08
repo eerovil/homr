@@ -27,6 +27,8 @@ from homr.time_signature_reader import attach_printed_meters
 from homr.transformer.configs import Config, default_config
 from homr.transformer.vocabulary import EncodedSymbol, remove_duplicated_symbols
 from homr.type_definitions import NDArray
+from homr.volta_brackets import add_missing_voltas
+from homr.volta_brackets import log_added as log_added_voltas
 
 
 def _flatten_staffs(staffs: list[MultiStaff]) -> list[Staff]:
@@ -405,6 +407,17 @@ def parse_staff_image(
     # opening it, after the clef and key (eerovil/musescore-choir-plugins#312).
     if add_missing_start_repeat(result, staff, image, staff_to_page):
         log_added(index)
+    # A volta bracket stands above the room the staff image keeps, so the decoder
+    # never sees one (eerovil/musescore-choir-plugins#319).
+    voltas = add_missing_voltas(
+        result,
+        staff,
+        image,
+        regions.get_start_of_closest_staff_above(staff.min_y),
+        staff_to_page,
+    )
+    if voltas:
+        log_added_voltas(index, voltas)
     if debug.debug:
         result_image = staff_image.copy()
         for i, symbol in enumerate(result):

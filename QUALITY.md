@@ -23,12 +23,12 @@ The two are **not averaged**. `fixturecheck` scores notes across the printed sys
 
 | when | harness | tier | homr | references | right |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-06T13:34:29+00:00 | `fixturecheck` | private | `b424362~pod` | `f26eeff6c43ce42b+new71` | 99.8% |
-| 2026-10-06T13:35:41+00:00 | `fixturecheck` | fixtures | `b424362~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-06T14:08:24+00:00 | `fixturecheck` | private | `bd62876~pod` | `f26eeff6c43ce42b+new71` | 99.8% |
 | 2026-10-06T14:09:38+00:00 | `fixturecheck` | fixtures | `bd62876~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-07T16:17:36+00:00 | `fixturecheck` | private | `e59f8d8~pod` | `f26eeff6c43ce42b+new71` | 99.9% |
 | 2026-10-07T16:19:03+00:00 | `fixturecheck` | fixtures | `e59f8d8~pod` | `f26eeff6c43ce42b` | 99.2% |
+| 2026-10-07T18:48:53+00:00 | `fixturecheck` | private | `3c4310c~pod` | `f26eeff6c43ce42b+new71` | 99.9% |
+| 2026-10-07T18:52:10+00:00 | `fixturecheck` | fixtures | `3c4310c~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-07T18:36:41+00:00 | `fixturecheck` | private | `365b061~pod` | `f26eeff6c43ce42b+new71` | 99.9% |
 | 2026-10-07T18:39:06+00:00 | `fixturecheck` | fixtures | `365b061~pod` | `f26eeff6c43ce42b` | 99.2% |
 | 2026-10-07T19:21:10+00:00 | `fixturecheck` | private | `365b061~pod` | `f26eeff6c43ce42b+new71` | 99.9% |

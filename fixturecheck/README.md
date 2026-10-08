@@ -108,6 +108,11 @@ the system**, since it is drawn across the whole system and the choir app copies
 it to every staff. `repeat` is counted and remembered like `meter`. A memory
 written before it existed holds none.
 
+A "1." / "2." volta bracket is counted the same way and under the same `repeat`
+kind ([musescore-choir-plugins#319](https://github.com/eerovil/musescore-choir-plugins/issues/319)):
+`volta N start` where a bracket opens and `volta N end` where it closes. Whether the
+far end is hooked (`stop`) or open (`discontinue`) is a drawing, so either is an end.
+
 ## Slurs and ties, against their own answer key
 
 The references' slurs and ties came from homr and nobody checked them, so arcs are
