@@ -20,6 +20,11 @@ it turns a pair into a tie only once it sees both ends, and over a line break it
 sees one. So an edge end in the key is found by an edge end of either kind at the
 same place, and the choir app, which sees both systems, decides which it is.
 
+A missed arc is **marked** when homr put a red ``⚠ slur?`` or ``⚠ tie?`` in the bar
+of either of its ends on that staff (eerovil/musescore-choir-plugins#328): it is
+not in the file, but a person reading the score is sent to it. Marks are written
+only under ``--mark-doubt``, so a run without it reports none.
+
 Kept out of the note score and the gate on purpose. The note percentage has a
 history every figure in QUALITY.md is quoted against, and an arc is not a note.
 """
@@ -169,11 +174,18 @@ class KindResult:
     found: int = 0
     missed: int = 0
     invented: int = 0
+    #: Of the missed, how many have a ⚠ slur?/tie? mark in an end's bar.
+    marked: int = 0
     missed_list: list[Arc] = field(default_factory=list)
     invented_list: list[Arc] = field(default_factory=list)
 
     def to_json(self) -> dict:
-        return {"found": self.found, "missed": self.missed, "invented": self.invented}
+        return {
+            "found": self.found,
+            "missed": self.missed,
+            "invented": self.invented,
+            "marked": self.marked,
+        }
 
 
 @dataclass
@@ -203,7 +215,28 @@ def _edge_place(arc: Arc) -> tuple:
     return (arc[1], arc[2], arc[3] is None, arc[4] if arc[3] is None else arc[3])
 
 
-def compare_arcs(want: list[Arc], got: list[Arc]) -> SlurResult:
+#: (printed staff from 1, bar) carrying a ⚠ mark about an arc
+Marks = set[tuple[int, str]]
+
+
+def read_marks(path: Path) -> Marks:
+    """Where homr marked a slur or tie it was unsure of (``--mark-doubt``)."""
+    found: Marks = set()
+    printed = 0
+    for part in ET.parse(path).getroot().findall("part"):  # noqa: S314
+        staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
+        base, printed = printed, printed + staves
+        for measure in part.findall("measure"):
+            for direction in measure.findall("direction"):
+                words = "".join(w.text or "" for w in direction.iter("words"))
+                if words.startswith("⚠") and ("slur?" in words or "tie?" in words):
+                    found.add(
+                        (base + int(direction.findtext("staff", "1")), measure.get("number", "?"))
+                    )
+    return found
+
+
+def compare_arcs(want: list[Arc], got: list[Arc], marks: Marks | None = None) -> SlurResult:
     """Match the page's arcs to homr's, both ends exactly, each used once.
 
     Staff and voice must agree, so a slur read on the wrong voice is missed and
@@ -226,6 +259,8 @@ def compare_arcs(want: list[Arc], got: list[Arc]) -> SlurResult:
         else:
             kind.missed += 1
             kind.missed_list.append(arc)
+            ends = [end for end in (arc[3], arc[4]) if end is not None]
+            kind.marked += any((arc[1], end[0]) in (marks or set()) for end in ends)
     for arc in left:
         kind = result.slur if arc[0] == "slur" else result.tie
         kind.invented += 1
@@ -243,7 +278,9 @@ def judge(
     key = answer_key() if key is None else key
     if case_name not in key:
         return None
-    return compare_arcs(key_arcs(key[case_name], voice_ranks(reference)), read_arcs(parsed))
+    return compare_arcs(
+        key_arcs(key[case_name], voice_ranks(reference)), read_arcs(parsed), read_marks(parsed)
+    )
 
 
 def total(results: list[SlurResult]) -> dict:
@@ -254,6 +291,7 @@ def total(results: list[SlurResult]) -> dict:
             mine.found += theirs.found
             mine.missed += theirs.missed
             mine.invented += theirs.invented
+            mine.marked += theirs.marked
         out.edge += r.edge
         out.edge_found += r.edge_found
     return out.to_json()

@@ -299,7 +299,8 @@ def run_cases(names: list[str], tier: str) -> int:
     if slur_results:
         t = slurs.total(list(slur_results.values()))
         said = "; ".join(f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
-                         f"found, {t[kind]['invented']} invented" for kind in slurs.KINDS)
+                         f"found, {t[kind]['marked']} more marked, {t[kind]['invented']} invented"
+                         for kind in slurs.KINDS)
         print(f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
               f"({len(slur_results)} case(s) in the key {slurs.KEY})")
     lost = (run["outcomes"].get(series.UNREADABLE, 0)

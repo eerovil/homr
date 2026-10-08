@@ -156,3 +156,19 @@ def test_a_slur_on_the_wrong_voice_is_not_found(tmp_path: Path) -> None:
     miss = slurs.judge("case", wrong, reference, key)
     assert hit is not None and (hit.slur.found, hit.slur.invented) == (1, 0)
     assert miss is not None and (miss.slur.found, miss.slur.missed, miss.slur.invented) == (0, 1, 1)
+
+
+def test_a_missed_arc_with_a_mark_in_its_bar_is_counted_as_marked(tmp_path: Path) -> None:
+    mark = (
+        "<direction placement='above'><direction-type>"
+        "<words color='#FF0000'>⚠ slur?</words></direction-type></direction>"
+    )
+    path = score(tmp_path, mark + note() + note() + "</measure>")
+    assert slurs.read_marks(path) == {(1, "1")}
+    want = [
+        ("slur", 1, 1, ("1", 0.0), ("1", 1.0), ""),
+        ("slur", 1, 1, ("2", 0.0), ("2", 1.0), ""),
+    ]
+    result = slurs.compare_arcs(want, slurs.read_arcs(path), slurs.read_marks(path))
+    assert (result.slur.missed, result.slur.marked) == (2, 1)
+    assert slurs.total([result])["slur"]["marked"] == 1
