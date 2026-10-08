@@ -16,6 +16,8 @@ import numpy as np
 import onnxruntime as ort
 
 from homr import color_adjust, download_utils
+from homr.arc_finder import correct as correct_arcs
+from homr.arc_finder import forget as forget_arc_doubts
 from homr.autocrop import autocrop_with_offset
 from homr.bar_line_detection import detect_bar_lines
 from homr.bar_readings import (
@@ -228,6 +230,8 @@ def process_image(
     eprint("Processing " + image_path)
     xml_file = replace_extension(image_path, ".musicxml")
     debug_cleanup: Debug | None = None
+    printed_staffs: list[Staff] = []
+    predictions: InputPredictions | None = None
     try:
         if config.read_staff_positions:
             image = cv2.imread(image_path)
@@ -248,9 +252,15 @@ def process_image(
             # two code paths feed the symbol-recognition encoder consistent input.
             image = color_adjust.apply_clahe(image)
         else:
-            multi_staffs, image, debug, title_future, _, to_input_image = detect_staffs_in_image(
-                image_path, config
-            )
+            (
+                multi_staffs,
+                image,
+                debug,
+                title_future,
+                printed_staffs,
+                to_input_image,
+                predictions,
+            ) = detect_staffs_with_predictions(image_path, config)
         debug_cleanup = debug
 
         transformer_config = Config()
@@ -287,6 +297,13 @@ def process_image(
             reconstruction_changes=reconstruction_changes,
             keep_inferred=config.mark_doubt and not config.read_staff_positions,
         )
+        if predictions is not None:
+            arcs = correct_arcs(xml, predictions, printed_staffs, to_input_image)
+            if arcs is not None:
+                eprint(
+                    f"Arcs from the picture: {arcs.kept} kept, {arcs.added} added, "
+                    f"{arcs.moved} moved, {arcs.removed} removed, {arcs.unsure} unsure"
+                )
         if config.mark_doubt and config.read_staff_positions:
             eprint("--mark-doubt needs a second reading of the image; skipped with staff positions")
         elif config.mark_doubt:
@@ -303,6 +320,7 @@ def process_image(
             eprint(f"Offered other readings for {len(readings)} voice(s) of those bars")
             eprint(f"Offered other pitches for {len(notes)} note(s) of those bars")
             eprint(f"Offered the second reading of {len(again)} voice(s) of those bars")
+        forget_arc_doubts(xml)
         ET.ElementTree(xml).write(xml_file, encoding="unicode", xml_declaration=True)
         if config.write_confidence:
             confidence_file = replace_extension(image_path, ".confidence.json")
@@ -461,6 +479,15 @@ def _load_score_settings(path: str) -> RhythmSettings:
 def detect_staffs_in_image(
     image_path: str, config: ProcessingConfig
 ) -> tuple[list[MultiStaff], NDArray, Debug, Future[str], list[Staff], PointMapping]:
+    found = detect_staffs_with_predictions(image_path, config)
+    return found[0], found[1], found[2], found[3], found[4], found[5]
+
+
+def detect_staffs_with_predictions(
+    image_path: str, config: ProcessingConfig
+) -> tuple[
+    list[MultiStaff], NDArray, Debug, Future[str], list[Staff], PointMapping, InputPredictions
+]:
     """Detect staffs and their symbols.
 
     The fifth element is the printed staffs as they were detected, before grand
@@ -543,7 +570,15 @@ def detect_staffs_in_image(
 
     debug.write_all_bounding_boxes_alternating_colors("notes", multi_staffs, notes)
 
-    return multi_staffs, predictions.preprocessed, debug, title_future, staffs, to_input_image
+    return (
+        multi_staffs,
+        predictions.preprocessed,
+        debug,
+        title_future,
+        staffs,
+        to_input_image,
+        predictions,
+    )
 
 
 def get_all_image_files_in_folder(folder: str) -> list[str]:
