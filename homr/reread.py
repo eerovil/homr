@@ -123,6 +123,8 @@ def _as_lower(symbol: EncodedSymbol) -> EncodedSymbol:
         confidence=symbol.confidence,
         stem_direction=symbol.stem_direction,
     )
+    # where the note is on the page, which the arc finder hangs curves on
+    copy.image_coordinates = symbol.image_coordinates
     return copy
 
 
