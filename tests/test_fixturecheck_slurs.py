@@ -55,8 +55,14 @@ def test_loose_ends_are_arcs_over_the_system_edge(tmp_path: Path) -> None:
 
 
 def test_slurs_and_ties_are_counted_apart() -> None:
-    page = [("slur", 1, ("1", 0.0), ("1", 2.0), ""), ("tie", 1, ("1", 2.0), ("1", 3.0), "C")]
-    homr = [("slur", 1, ("1", 0.0), ("1", 2.0), ""), ("slur", 1, ("1", 2.0), ("1", 3.0), "")]
+    page: list[slurs.Arc] = [
+        ("slur", 1, ("1", 0.0), ("1", 2.0), ""),
+        ("tie", 1, ("1", 2.0), ("1", 3.0), "C"),
+    ]
+    homr: list[slurs.Arc] = [
+        ("slur", 1, ("1", 0.0), ("1", 2.0), ""),
+        ("slur", 1, ("1", 2.0), ("1", 3.0), ""),
+    ]
     result = slurs.compare_arcs(page, homr)
     assert (result.slur.found, result.slur.missed, result.slur.invented) == (1, 0, 1)
     assert (result.tie.found, result.tie.missed, result.tie.invented) == (0, 1, 0)
@@ -64,8 +70,8 @@ def test_slurs_and_ties_are_counted_apart() -> None:
 
 def test_an_edge_end_is_found_by_either_kind() -> None:
     """Over a line break homr cannot tell a tie from a slur: it sees one end."""
-    page = [("tie", 1, ("8", 1.0), None, "A")]
-    homr = [("slur", 1, ("8", 1.0), None, "")]
+    page: list[slurs.Arc] = [("tie", 1, ("8", 1.0), None, "A")]
+    homr: list[slurs.Arc] = [("slur", 1, ("8", 1.0), None, "")]
     result = slurs.compare_arcs(page, homr)
     assert (result.tie.found, result.slur.invented) == (1, 0)
     assert (result.edge, result.edge_found) == (1, 1)
@@ -93,6 +99,8 @@ def test_a_case_listed_with_no_arcs_catches_an_invented_one(tmp_path: Path) -> N
     path = score(tmp_path, note() + note("start") + note() + note("stop") + "</measure>")
     listed = slurs.answer_key(key)
     assert slurs.judge("absent", path, listed) is None
-    assert slurs.judge("a", path, listed).slur.found == 1
-    assert slurs.judge("empty", path, listed).slur.invented == 1
+    found = slurs.judge("a", path, listed)
+    assert found is not None and found.slur.found == 1
+    empty = slurs.judge("empty", path, listed)
+    assert empty is not None and empty.slur.invented == 1
     assert slurs.answer_key(tmp_path / "absent.json") == {}
