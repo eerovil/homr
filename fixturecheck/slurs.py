@@ -32,14 +32,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fixturecheck import cases
+from fixturecheck.compare import _voice_rank, collapse_unisons, read_score
 
 KEY = cases.PRIVATE / "slurs.json"
 KINDS = ("slur", "tie")
 
 #: Where an arc end sits: (bar, onset in quarters), or None off the system edge.
 End = tuple[str, float] | None
-#: (kind, staff, start, stop, pitch) -- pitch only for a tie, "" for a slur.
-Arc = tuple[str, int, End, End, str]
+#: (kind, staff, voice, start, stop, pitch) -- pitch only for a tie, "" for a
+#: slur. The voice is its rank on the staff (1 = the higher line), not the file's
+#: own voice number: the reference and homr number voices differently, so they
+#: are ranked the way the note score ranks them (`compare._voice_rank`).
+Arc = tuple[str, int, int, End, End, str]
 
 
 def _where(bar: object, onset: object) -> tuple[str, float]:
@@ -55,6 +59,15 @@ def _pitch(note: ET.Element) -> str:
     return f"{pitch.findtext('step')}{alter}"
 
 
+def voice_ranks(path: Path) -> dict[int, dict[str, int]]:
+    """Each staff's voices ranked as the note score ranks them."""
+    return _voice_rank(collapse_unisons(read_score(path)))
+
+
+def _rank(ranks: dict[int, dict[str, int]], staff: int, voice: str) -> int:
+    return ranks.get(staff, {}).get(voice, 1)
+
+
 def read_arcs(path: Path) -> list[Arc]:
     """Every slur and tie in a MusicXML file.
 
@@ -64,12 +77,13 @@ def read_arcs(path: Path) -> list[Arc]:
     continues past it.
     """
     found: list[Arc] = []
+    ranks = voice_ranks(path)
     printed = 0
     for part in ET.parse(path).getroot().findall("part"):
         staves = max((int(n.text or 1) for n in part.iter("staves")), default=1)
         base, printed = printed, printed + staves
         divisions = 1.0
-        open_: dict[tuple, list[tuple[str, float]]] = {}
+        open_: dict[tuple, list[tuple[tuple[str, float], str]]] = {}
         for measure in part.findall("measure"):
             for attributes in measure.findall("attributes"):
                 declared = attributes.findtext("divisions")
@@ -93,6 +107,7 @@ def read_arcs(path: Path) -> list[Arc]:
                     previous, at = at, at + length
                 staff = base + int(node.findtext("staff", "1"))
                 here = _where(measure.get("number", "?"), onset)
+                voice = node.findtext("voice", "1")
                 marks = [("slur", s.get("number", "1"), s.get("type")) for s in node.iter("slur")]
                 marks += [("tie", _pitch(node), t.get("type")) for t in node.iter("tied")]
                 # A note both ending one arc and starting the next: the stop first.
@@ -100,14 +115,24 @@ def read_arcs(path: Path) -> list[Arc]:
                 for kind, label, what in marks:
                     key = (kind, staff, label)
                     if what == "start":
-                        open_.setdefault(key, []).append(here)
+                        open_.setdefault(key, []).append((here, voice))
                     elif what == "stop":
                         waiting = open_.get(key)
-                        start = waiting.pop(0) if waiting else None
-                        found.append((kind, staff, start, here, label if kind == "tie" else ""))
+                        start, by = waiting.pop(0) if waiting else (None, voice)
+                        found.append(
+                            (
+                                kind,
+                                staff,
+                                _rank(ranks, staff, by),
+                                start,
+                                here,
+                                label if kind == "tie" else "",
+                            )
+                        )
         for (kind, staff, label), waiting in open_.items():
             found.extend(
-                (kind, staff, start, None, label if kind == "tie" else "") for start in waiting
+                (kind, staff, _rank(ranks, staff, by), start, None, label if kind == "tie" else "")
+                for start, by in waiting
             )
     return found
 
@@ -119,7 +144,11 @@ def answer_key(path: Path = KEY) -> dict[str, list[dict]]:
     return json.loads(path.read_text()).get("cases", {})
 
 
-def key_arcs(entries: list[dict]) -> list[Arc]:
+def key_arcs(entries: list[dict], ranks: dict[int, dict[str, int]] | None = None) -> list[Arc]:
+    """The key's arcs; ``ranks`` are the reference's voice ranks, which its
+    voice numbers are written in."""
+    ranks = ranks or {}
+
     def end(e: dict | None) -> End:
         return None if e is None else _where(e["bar"], e["onset"])
 
@@ -129,7 +158,9 @@ def key_arcs(entries: list[dict]) -> list[Arc]:
         pitch = ""
         if kind == "tie":
             pitch = (e.get("from") or e.get("to") or {}).get("pitch", "").rstrip("0123456789")
-        arcs.append((kind, int(e["staff"]), end(e.get("from")), end(e.get("to")), pitch))
+        staff = int(e["staff"])
+        voice = _rank(ranks, staff, str(e.get("voice", "1")))
+        arcs.append((kind, staff, voice, end(e.get("from")), end(e.get("to")), pitch))
     return arcs
 
 
@@ -165,18 +196,20 @@ class SlurResult:
 
 
 def _edge(arc: Arc) -> bool:
-    return arc[2] is None or arc[3] is None
+    return arc[3] is None or arc[4] is None
 
 
 def _edge_place(arc: Arc) -> tuple:
-    return (arc[1], arc[2] is None, arc[3] if arc[2] is None else arc[2])
+    return (arc[1], arc[2], arc[3] is None, arc[4] if arc[3] is None else arc[3])
 
 
 def compare_arcs(want: list[Arc], got: list[Arc]) -> SlurResult:
     """Match the page's arcs to homr's, both ends exactly, each used once.
 
-    Inside the system a slur is matched by a slur and a tie by a tie at the same
-    pitch. At the edge the kind is not asked (see the module docstring)."""
+    Staff and voice must agree, so a slur read on the wrong voice is missed and
+    invented, not found. Inside the system a slur is matched by a slur and a tie
+    by a tie at the same pitch. At the edge the kind is not asked (see the module
+    docstring)."""
     result = SlurResult()
     left = list(got)
     for arc in want:
@@ -200,12 +233,17 @@ def compare_arcs(want: list[Arc], got: list[Arc]) -> SlurResult:
     return result
 
 
-def judge(case_name: str, parsed: Path, key: dict | None = None) -> SlurResult | None:
-    """The case's arcs against the key, or None when the key has no entry."""
+def judge(
+    case_name: str, parsed: Path, reference: Path, key: dict | None = None
+) -> SlurResult | None:
+    """The case's arcs against the key, or None when the key has no entry.
+
+    ``reference`` is the case's reference score: the key names voices by its
+    numbers, and they are ranked off it."""
     key = answer_key() if key is None else key
     if case_name not in key:
         return None
-    return compare_arcs(key_arcs(key[case_name]), read_arcs(parsed))
+    return compare_arcs(key_arcs(key[case_name], voice_ranks(reference)), read_arcs(parsed))
 
 
 def total(results: list[SlurResult]) -> dict:
@@ -222,7 +260,7 @@ def total(results: list[SlurResult]) -> dict:
 
 
 def describe(arc: Arc) -> str:
-    kind, staff, start, stop, pitch = arc
+    kind, staff, voice, start, stop, pitch = arc
     a = "from the system before" if start is None else f"bar {start[0]} beat {start[1]:g}"
     b = "into the next system" if stop is None else f"bar {stop[0]} beat {stop[1]:g}"
-    return f"{kind} staff {staff}{' ' + pitch if pitch else ''}: {a} -> {b}"
+    return f"{kind} staff {staff} voice {voice}{' ' + pitch if pitch else ''}: {a} -> {b}"

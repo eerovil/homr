@@ -121,8 +121,10 @@ not compared against the reference. They have a key of their own,
 page prints on the cases it lists, each checked by the owner arc by arc against the
 page (eerovil/musescore-choir-plugins#318). It starts small on purpose: nine systems,
 four of them printing no arc at all, which is what catches an invented one. An arc
-is its kind, its staff and the bar and onset of each end, and a tie its pitch; an
-end that runs over the system edge is `null`. `fixturecheck/slurs.py` counts slurs
+is its kind, its staff, its voice and the bar and onset of each end, and a tie its
+pitch; an end that runs over the system edge is `null`. The voice is compared by its
+rank on the staff, the way the note score ranks voices, since the reference and homr
+number them differently; a slur read on the wrong voice is missed and invented. `fixturecheck/slurs.py` counts slurs
 and ties apart -- found, missed, invented -- and how many of the page's arc ends at
 a system edge homr kept. At the edge the kind is not asked: homr makes a pair into a
 tie only once it sees both ends, and over a line break it sees one.

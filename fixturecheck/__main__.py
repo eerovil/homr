@@ -208,7 +208,7 @@ def run_cases(names: list[str], tier: str) -> int:
             continue
 
         result = compare_output(case.reference, parsed, case.name)
-        slur = slurs.judge(case.name, parsed, key)
+        slur = slurs.judge(case.name, parsed, case.reference, key)
         if slur is not None:
             slur_results[case.name] = slur
         before = standing.get(case.name)
