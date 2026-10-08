@@ -14,11 +14,15 @@ themselves and corrects the arcs homr wrote:
   two notes. Dashed arcs are chained back together.
 - ``attach`` hangs each end of a curve on a notehead the detector found, and each
   notehead on the notes homr wrote for it.
-- ``apply`` compares those arcs with what homr wrote: an arc homr wrote on the
-  same notes is kept, one on the wrong voice or chord note is moved, a missing one
-  is added, and one with no curve anywhere near it is taken out. An end that could
-  belong to more than one note gets its best guess and a doubt flag, which
-  ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
+- ``apply`` compares those arcs with what homr wrote. **By default it changes no
+  arc**: every place the page shows an arc that homr's output does not match gets
+  a doubt flag, which ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
+  Writing the picture's arcs (``marks_only=False``), and moving homr's to the voice
+  the picture suggests (``cautious=False``), are there but off: measured on the
+  owner-checked key, writing arcs helped on the systems it was tuned on and did
+  not on held-out ones -- a scanned page's specks read as arcs -- so the words of
+  a practice track came out no better, while the flags alone pointed at 10 of the
+  14 wrongly set notes on the held-out systems and invented nothing.
 
 Everything here is pure geometry on arrays the pipeline already has; it runs no
 model.
@@ -275,16 +279,15 @@ def find_curves(
     unit = float(np.median([s.unit for s in staffs])) if staffs else 10.0
     ink = (gray < settings.ink_threshold).astype(np.uint8)
     ink = _remove_staff_lines(ink, staffs)
-    take_out = np.zeros_like(ink)
-    take_out |= cv2.dilate(notehead.astype(np.uint8), np.ones((3, 3), np.uint8))
+    take_out: NDArray = cv2.dilate(notehead.astype(np.uint8), np.ones((3, 3), np.uint8))
     # The network labels an arc touching an accidental or a stem as part of it, so
     # those masks are only trusted where the ink stands upright: an arc is never
     # more than a few pixels tall in any one column.
     upright = _vertical_runs(ink) > max(4, int(0.4 * unit))
     for mask in (stems_rest, clefs_keys, symbols):
-        solid = (mask.astype(np.uint8) & upright.astype(np.uint8))
-        take_out |= cv2.dilate(solid, np.ones((1, 3), np.uint8))
-    residue = ink & (1 - take_out)
+        solid = mask.astype(np.uint8) & upright.astype(np.uint8)
+        take_out = take_out | cv2.dilate(solid, np.ones((1, 3), np.uint8))
+    residue: NDArray = (ink & (1 - take_out)).astype(np.uint8)
     # close the small gaps left where a curve crossed a line or a stem
     residue = cv2.morphologyEx(residue, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
 
@@ -376,7 +379,9 @@ def _fermata(xs: NDArray, ys: NDArray, unit: float, over: bool) -> bool:
     return (xs[-1] - xs[0]) <= 2.2 * unit and abs(_bend(xs, ys)) >= 0.25 * (xs[-1] - xs[0])
 
 
-def _solid_curves(strokes: list[_Stroke], unit: float, settings: CurveFinderSettings) -> list[Curve]:
+def _solid_curves(
+    strokes: list[_Stroke], unit: float, settings: CurveFinderSettings
+) -> list[Curve]:
     curves = []
     for stroke in strokes:
         if stroke.filled < 0.8:
@@ -470,7 +475,7 @@ class XmlNote:
 
 def _imgpos(note: ET.Element) -> tuple[float, float] | None:
     for child in note:
-        if child.tag is ET.Comment and child.text and "imgpos:" in child.text:
+        if callable(child.tag) and child.text and "imgpos:" in child.text:
             x, y = child.text.split("imgpos:", 1)[1].split(",")
             return float(x), float(y)
     return None
@@ -498,7 +503,9 @@ def read_notes(xml: ET.Element) -> list[XmlNote]:
                 if node.tag != "note":
                     continue
                 grace = node.find("grace") is not None
-                length = Fraction(0) if grace else Fraction(node.findtext("duration", "0")) / divisions
+                length = (
+                    Fraction(0) if grace else Fraction(node.findtext("duration", "0")) / divisions
+                )
                 chord = node.find("chord") is not None
                 onset = previous if chord else at
                 if not chord:
@@ -567,7 +574,8 @@ def match_heads(
             ]
             if fitting:
                 note.head = min(
-                    fitting, key=lambda i: abs(heads[i].x - x) + unit * abs(heads[i].position - want)
+                    fitting,
+                    key=lambda i: abs(heads[i].x - x) + unit * abs(heads[i].position - want),
                 )
     return True
 
@@ -663,16 +671,23 @@ def attach(
     A clear curve that could not be hung on anything is not dropped in silence:
     the note nearest to it goes into ``unplaced``, for a mark saying so."""
     arcs = []
-    first_x = {s: min((where[i][0] for i in where if notes[i].staff == s), default=math.inf)
-               for s in range(len(staffs))}
-    last_x = {s: max((where[i][0] for i in where if notes[i].staff == s), default=-math.inf)
-              for s in range(len(staffs))}
+    first_x = {
+        s: min((where[i][0] for i in where if notes[i].staff == s), default=math.inf)
+        for s in range(len(staffs))
+    }
+    last_x = {
+        s: max((where[i][0] for i in where if notes[i].staff == s), default=-math.inf)
+        for s in range(len(staffs))
+    }
     for curve in curves:
         width = curve.width
         lefts = _end_candidates(curve.left, True, curve.over, notes, where, staffs, width)
         rights = _end_candidates(curve.right, False, curve.over, notes, where, staffs, width)
         staff_here = _staff_at(curve, staffs)
-        edge_left = staff_here is not None and curve.left[0] < first_x[staff_here] - 0.5 * staffs[staff_here].unit
+        edge_left = (
+            staff_here is not None
+            and curve.left[0] < first_x[staff_here] - 0.5 * staffs[staff_here].unit
+        )
         edge_right = staff_here is not None and (
             curve.right[0] > last_x[staff_here] + 1.0 * staffs[staff_here].unit
             or (
@@ -684,8 +699,10 @@ def attach(
             rights = []
         best: tuple[float, int | None, int | None] | None = None
         runner_up = math.inf
-        for a in lefts[:4] or ([None] if edge_left else []):
-            for b in rights[:4] or ([None] if edge_right else []):
+        left_choices: list[_End | None] = list(lefts[:4]) or ([None] if edge_left else [])
+        right_choices: list[_End | None] = list(rights[:4]) or ([None] if edge_right else [])
+        for a in left_choices:
+            for b in right_choices:
                 if a is None and b is None:
                     continue
                 na = notes[a.note] if a else None
@@ -703,7 +720,11 @@ def attach(
                 else:
                     runner_up = min(runner_up, cost)
         if best is None:
-            if unplaced is not None and staff_here is not None and _clear(curve, staffs[staff_here]):
+            if (
+                unplaced is not None
+                and staff_here is not None
+                and _clear(curve, staffs[staff_here])
+            ):
                 nearest = _nearest_note(curve, staff_here, notes, where)
                 if nearest is not None:
                     unplaced.append(nearest)
@@ -761,9 +782,7 @@ def _pick_voice(index: int | None, notes: list[XmlNote], over: bool) -> int | No
     if note.head < 0:
         return index
     twins = [
-        i
-        for i, other in enumerate(notes)
-        if other.head == note.head and other.staff == note.staff
+        i for i, other in enumerate(notes) if other.head == note.head and other.staff == note.staff
     ]
     if len(twins) == 1:
         return index
@@ -840,7 +859,9 @@ def read_written(notes: list[XmlNote]) -> list[WrittenArc]:
             elif what == "stop":
                 if open_[key]:
                     start, start_marks = open_[key].pop(0)
-                    arcs.append(WrittenArc(kind, start, i, note.staff, start_marks + [(element, mark)]))
+                    arcs.append(
+                        WrittenArc(kind, start, i, note.staff, start_marks + [(element, mark)])
+                    )
                 else:
                     arcs.append(WrittenArc(kind, None, i, note.staff, [(element, mark)]))
     for (kind, staff, _), waiting in open_.items():
@@ -904,6 +925,7 @@ def apply(
     staffs: list[StaffGeometry],
     unplaced: list[int] | None = None,
     cautious: bool = True,
+    marks_only: bool = True,
 ) -> Outcome:
     """Make the arcs in the file the arcs on the page."""
     outcome = Outcome()
@@ -914,8 +936,13 @@ def apply(
     keep: list[WrittenArc] = []
     for arc in written:
         twin = next(
-            (p for p in picture if p.kind == arc.kind and _same(notes, p.start, arc.start)
-             and _same(notes, p.stop, arc.stop)),
+            (
+                p
+                for p in picture
+                if p.kind == arc.kind
+                and _same(notes, p.start, arc.start)
+                and _same(notes, p.stop, arc.stop)
+            ),
             None,
         )
         if twin is not None:
@@ -930,7 +957,9 @@ def apply(
                 if p.staff == arc.staff
                 and _place(notes, p.start) == _place(notes, arc.start)
                 and _place(notes, p.stop) == _place(notes, arc.stop)
-                and not (p.kind == arc.kind == "tie" and _pitch_of(notes, p) != _pitch_of(notes, arc))
+                and not (
+                    p.kind == arc.kind == "tie" and _pitch_of(notes, p) != _pitch_of(notes, arc)
+                )
             ),
             None,
         )
@@ -962,25 +991,32 @@ def apply(
         outcome.kept += 1
     if cautious:
         taken = {i for w in keep for i in (w.start, w.stop) if i is not None}
-        for arc in [p for p in picture if p.start in taken or p.stop in taken]:
-            # an end homr already hangs another arc on: mark it, do not add a rival
-            index = arc.start if arc.start is not None else arc.stop
-            notes[index].element.set(UNPLACED, "1")  # type: ignore[index]
-            outcome.unsure += 1
-        picture = [p for p in picture if p.start not in taken and p.stop not in taken]
+        # an end homr already hangs another arc on: mark it, do not add a rival
+        rivals = [p for p in picture if p.start in taken or p.stop in taken]
+        picture = [p for p in picture if p not in rivals]
         # a short slur homr saw nothing of is as often a flag or a beam's end on a
         # scan: say there is something there rather than write it
-        for arc in [p for p in picture if p.kind == "slur" and p.short]:
-            index = arc.start if arc.start is not None else arc.stop
-            notes[index].element.set(UNPLACED, "1")  # type: ignore[index]
-            outcome.unsure += 1
-        picture = [p for p in picture if not (p.kind == "slur" and p.short)]
-    for label, arc in enumerate(picture):
-        _write(arc, notes, f"new{label}")
+        flags = [p for p in picture if p.kind == "slur" and p.short]
+        picture = [p for p in picture if p not in flags]
+        outcome.unsure += _mark_beside(notes, rivals + flags)
+    if marks_only:
+        outcome.unsure += _mark_beside(notes, picture)
+        picture = []
+    for label, new_arc in enumerate(picture):
+        _write(new_arc, notes, f"new{label}")
         outcome.added += 1
-        outcome.unsure += arc.unsure
+        outcome.unsure += new_arc.unsure
     _number_slurs(notes)
     return outcome
+
+
+def _mark_beside(notes: list[XmlNote], arcs: list[PictureArc]) -> int:
+    """Flag the first note of each arc for a mark, writing no arc."""
+    for arc in arcs:
+        index = arc.start if arc.start is not None else arc.stop
+        if index is not None:
+            notes[index].element.set(UNPLACED, "1")
+    return len(arcs)
 
 
 def _flag(arc: WrittenArc) -> None:
@@ -1121,9 +1157,9 @@ def detected_heads(staffs: list[Staff]) -> list[Head]:
     return heads
 
 
-def invert(mapping: Callable[[tuple[float, float]], tuple[float, float]]) -> Callable[
-    [tuple[float, float]], tuple[float, float]
-]:
+def invert(
+    mapping: Callable[[tuple[float, float]], tuple[float, float]],
+) -> Callable[[tuple[float, float]], tuple[float, float]]:
     """The pipeline's page-to-input mapping is a scale and a shift: undo it."""
     ox, oy = mapping((0.0, 0.0))
     ax, ay = mapping((1000.0, 1000.0))
@@ -1168,7 +1204,11 @@ def correct(
     arcs = attach(curves, notes, where, geometry, unplaced)
     extend_over_ties(
         arcs,
-        [(a.start, a.stop) for a in arcs if a.kind == "tie" and a.start is not None and a.stop is not None]
+        [
+            (a.start, a.stop)
+            for a in arcs
+            if a.kind == "tie" and a.start is not None and a.stop is not None
+        ]
         + [
             (w.start, w.stop)
             for w in read_written(notes)

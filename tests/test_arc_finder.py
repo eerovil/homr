@@ -38,7 +38,9 @@ def _head(gray: np.ndarray, heads: np.ndarray, x: int, y: int) -> None:
 
 def _arc(gray: np.ndarray, x0: int, x1: int, y: int, height: int, over: bool) -> None:
     centre = ((x0 + x1) // 2, y)
-    cv2.ellipse(gray, centre, ((x1 - x0) // 2, height), 0, 180 if over else 0, 360 if over else 180, 0, 2)
+    cv2.ellipse(
+        gray, centre, ((x1 - x0) // 2, height), 0, 180 if over else 0, 360 if over else 180, 0, 2
+    )
 
 
 def _find(gray: np.ndarray, heads: np.ndarray) -> list[A.Curve]:
@@ -135,7 +137,7 @@ def _arcs(xml: ET.Element) -> list[tuple[str, int | None, int | None]]:
 def _apply(xml: ET.Element, picture: list[A.PictureArc], curves: list[A.Curve]) -> A.Outcome:
     notes = A.read_notes(xml)
     where = {i: (100.0 + 100 * i, 120.0) for i in range(len(notes))}
-    return A.apply(notes, picture, curves, where, [_staff()])
+    return A.apply(notes, picture, curves, where, [_staff()], cautious=False, marks_only=False)
 
 
 def _curve(x0: float, x1: float) -> A.Curve:
@@ -152,7 +154,9 @@ def test_a_tie_on_the_page_that_homr_did_not_write_is_added() -> None:
 
 
 def test_homr_s_arc_on_the_same_notes_is_kept_as_it_is() -> None:
-    xml = _score(_note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>"))
+    xml = _score(
+        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
+    )
     outcome = _apply(xml, [A.PictureArc("slur", 0, 1, 0, over=True)], [_curve(110, 190)])
     assert (outcome.kept, outcome.added) == (1, 0)
     assert _arcs(xml) == [("slur", 0, 1)]
@@ -169,13 +173,23 @@ def test_a_slur_homr_hung_on_the_other_voice_moves_to_the_page_s_voice() -> None
     for i, onset in enumerate([0, 0, 1, 1]):
         notes[i].onset = Fraction(onset)
     where = {i: (100.0 + 100 * (i // 2), 120.0) for i in range(len(notes))}
-    outcome = A.apply(notes, [A.PictureArc("slur", 1, 3, 0, over=False)], [_curve(110, 190)], where, [_staff()])
+    outcome = A.apply(
+        notes,
+        [A.PictureArc("slur", 1, 3, 0, over=False)],
+        [_curve(110, 190)],
+        where,
+        [_staff()],
+        cautious=False,
+        marks_only=False,
+    )
     assert (outcome.moved, outcome.added) == (1, 1)
     assert _arcs(xml) == [("slur", 1, 3)]
 
 
 def test_an_arc_with_no_curve_anywhere_near_it_is_taken_out() -> None:
-    xml = _score(_note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>"))
+    xml = _score(
+        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
+    )
     outcome = _apply(xml, [], [])
     assert outcome.removed == 1
     assert _arcs(xml) == []
@@ -183,7 +197,9 @@ def test_an_arc_with_no_curve_anywhere_near_it_is_taken_out() -> None:
 
 
 def test_an_arc_the_picture_could_not_place_is_never_taken_out() -> None:
-    xml = _score(_note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>"))
+    xml = _score(
+        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
+    )
     outcome = _apply(xml, [], [_curve(90, 210)])
     assert outcome.kept == 1
     assert _arcs(xml) == [("slur", 0, 1)]
@@ -222,3 +238,37 @@ def test_a_slur_drawn_over_tied_notes_ends_on_the_last_of_them() -> None:
     arcs = [A.PictureArc("slur", 0, 2, 0, over=True)]
     A.extend_over_ties(arcs, [(2, 3), (3, 4)])
     assert arcs[0].stop == 4  # noqa: PLR2004
+
+
+def test_by_default_no_arc_is_changed_and_the_page_s_arc_is_marked() -> None:
+    xml = _score(
+        _note("C", "<slur type='start' number='1'/>")
+        + _note("D", "<slur type='stop' number='1'/>")
+        + _note("E")
+        + _note("E")
+    )
+    before = ET.tostring(xml)
+    notes = A.read_notes(xml)
+    where = {i: (100.0 + 100 * i, 120.0) for i in range(len(notes))}
+    outcome = A.apply(notes, [A.PictureArc("tie", 2, 3, 0, over=False)], [], where, [_staff()])
+    assert outcome.added == 0 and outcome.removed == 0 and outcome.moved == 0
+    assert mark_words(picture_arc_doubts(xml)[(0, 1, 1)]) == ["slur?"]
+    A.forget(xml)
+    assert ET.tostring(xml) == before
+
+
+def test_by_default_homr_s_arc_on_another_voice_stays_and_is_marked() -> None:
+    xml = _score(
+        _note("E", "<slur type='start' number='1'/>")
+        + _note("C", voice="2")
+        + _note("F", "<slur type='stop' number='1'/>")
+        + _note("D", voice="2")
+    )
+    notes = A.read_notes(xml)
+    for i, onset in enumerate([0, 0, 1, 1]):
+        notes[i].onset = Fraction(onset)
+    where = {i: (100.0 + 100 * (i // 2), 120.0) for i in range(len(notes))}
+    outcome = A.apply(notes, [A.PictureArc("slur", 1, 3, 0, over=False)], [], where, [_staff()])
+    assert outcome.moved == 0
+    assert _arcs(xml) == [("slur", 0, 2)]
+    assert picture_arc_doubts(xml)
