@@ -38,6 +38,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from fractions import Fraction
 
+from homr.slur_resolution import INFERRED
 from homr.transformer.vocabulary import EncodedSymbol
 
 #: What every mark starts with; the choir app recognises a mark by it.
@@ -61,6 +62,7 @@ SECOND_READING_FAILED = "the second reading failed"
 ODD_TIME = "a note starts at an odd time"
 ODD_INTERVAL = "an accidental makes an interval music does not use"
 SILENT_BESIDE_CHORD = "a voice falls silent where the other holds two notes"
+SLUR_INFERRED = "a slur end inferred, not read"
 
 # (part index, staff within the part from 1, bar from 1) -> reasons
 Doubts = dict[tuple[int, int, int], set[str]]
@@ -433,6 +435,24 @@ def silent_beside_chord_doubts(xml: ET.Element) -> Doubts:
     return doubts
 
 
+def _inferred_slur_notes(xml: ET.Element) -> dict[tuple[int, int, int], list[ET.Element]]:
+    """Notes carrying a slur stop inferred rather than read, by (part, staff, bar)."""
+    found: dict[tuple[int, int, int], list[ET.Element]] = defaultdict(list)
+    for part_index, part in enumerate(xml.findall("part")):
+        for bar, measure in enumerate(part.findall("measure"), 1):
+            for note in measure.findall("note"):
+                if any(slur.get(INFERRED) for slur in note.iter("slur")):
+                    found[(part_index, int(note.findtext("staff", "1")), bar)].append(note)
+    return found
+
+
+def slur_doubts(xml: ET.Element) -> Doubts:
+    """A slur whose stop was inferred (`slur_resolution._close_on_tie`) is written
+    and marked `slur?`: the owner chose a missed slur as the worse error, and an
+    inferred one is never silent (eerovil/musescore-choir-plugins#318)."""
+    return {key: {SLUR_INFERRED} for key in _inferred_slur_notes(xml)}
+
+
 def find_doubts(
     staffs: list[list[EncodedSymbol]], xml: ET.Element, second: ET.Element | None
 ) -> Doubts:
@@ -443,6 +463,7 @@ def find_doubts(
         odd_time_doubts(xml),
         interval_doubts(xml),
         silent_beside_chord_doubts(xml),
+        slur_doubts(xml),
     ):
         for key, reasons in found.items():
             doubts[key] |= reasons
@@ -458,6 +479,7 @@ _ORDER = [
     ODD_TIME,
     ODD_INTERVAL,
     SILENT_BESIDE_CHORD,
+    SLUR_INFERRED,
     SECOND_READING,
     SECOND_READING_FAILED,
 ]
@@ -479,10 +501,11 @@ _WORD = {
     ODD_TIME: "rhythm?",
     ODD_INTERVAL: "accidental?",
     SILENT_BESIDE_CHORD: "voice?",
+    SLUR_INFERRED: "slur?",
     SECOND_READING: "notes?",
     SECOND_READING_FAILED: "unchecked?",
 }
-_WORD_ORDER = ["pitch?", "accidental?", "rhythm?", "voice?", "notes?", "unchecked?"]
+_WORD_ORDER = ["pitch?", "accidental?", "rhythm?", "voice?", "slur?", "notes?", "unchecked?"]
 
 
 def mark_words(reasons: set[str]) -> list[str]:
@@ -769,6 +792,9 @@ def find_spots(
                     for two in together[i + 1 :]:
                         if one[1] == two[1] and one[2] != two[2]:
                             add(key, [one[3], two[3]])
+
+    for key, inferred in _inferred_slur_notes(xml).items():
+        add(key, inferred)
 
     if second is not None:
         theirs = _located(second)

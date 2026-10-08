@@ -24,7 +24,7 @@ from homr.score_reconstruction import (
     system_bar_targets,
 )
 from homr.simple_logging import eprint
-from homr.slur_resolution import resolve_slurs
+from homr.slur_resolution import forget_inferred, resolve_slurs
 from homr.stem_voice_hints import SHARED
 from homr.transformer.vocabulary import (
     EncodedSymbol,
@@ -116,7 +116,14 @@ def generate_xml(
     staffs: list[list[EncodedSymbol]],
     title: str,
     reconstruction_changes: list[list[ReconstructionChange]] | None = None,
+    keep_inferred: bool = False,
 ) -> ET.Element:
+    """The MusicXML for ``staffs``.
+
+    ``keep_inferred`` leaves the working mark on each slur stop inferred rather
+    than read (`slur_resolution.INFERRED`) for the doubt pass; the caller then
+    calls `slur_resolution.forget_inferred`.
+    """
     root = ET.Element("score-partwise", version="4.0")
     root.append(build_work(title))
     root.append(build_identification())
@@ -141,6 +148,8 @@ def generate_xml(
         if reconstruction_changes is not None:
             assert changes is not None
             reconstruction_changes.append(changes)
+    if not keep_inferred:
+        forget_inferred(root)
     return root
 
 
