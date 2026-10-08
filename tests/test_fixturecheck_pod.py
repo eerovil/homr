@@ -100,7 +100,9 @@ def test_a_pod_parse_is_cached_under_its_own_name(
     # different architecture, and a parse says where it was read.
     local_reader = reader(tmp_path / "local", WRITES)
     monkeypatch.setattr(pod, "shim", lambda: None)
-    monkeypatch.setattr(check, "_local_read", lambda image: [local_reader, str(image)])
+    monkeypatch.setattr(
+        check, "_local_read", lambda image, flags=(): [local_reader, *flags, str(image)]
+    )
     local = check.parse(case, "abc123")
     assert local is not None
     assert local.name == "little@abc123.musicxml"
@@ -120,7 +122,9 @@ def test_losing_the_pod_midrun_reads_the_case_here(
     monkeypatch.setattr(pod, "alive", lambda: False)
     monkeypatch.delenv("CHOIR_K8S", raising=False)
     local_reader = reader(tmp_path / "local", WRITES)
-    monkeypatch.setattr(check, "_local_read", lambda image: [local_reader, str(image)])
+    monkeypatch.setattr(
+        check, "_local_read", lambda image, flags=(): [local_reader, *flags, str(image)]
+    )
     parsed = check.parse(case, "abc123")
     assert parsed is not None
     assert parsed.name == "little@abc123.musicxml"  # the local name, no ~pod
@@ -140,3 +144,19 @@ def test_losing_the_pod_under_require_stops_the_run(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("CHOIR_K8S", "require")
     with pytest.raises(SystemExit):
         pod.lose()
+
+
+def test_a_mark_doubt_read_is_cached_apart_and_asks_homr_for_the_marks(
+    tmp_path: Path, case: cases.Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the stand-in writes the flags it was given into the parse, so the test can
+    # see what the pod was asked for
+    script = 'for a in "$@"; do img="$a"; done\necho "<x>$*</x>" > "${img%.*}.musicxml"\n'
+    shim = reader(tmp_path, script)
+    monkeypatch.setattr(pod, "shim", lambda: shim)
+    plain = check.parse(case, "abc123")
+    doubted = check.parse(case, "abc123", check.DOUBT)
+    assert plain is not None and doubted is not None
+    assert doubted.name == f"little@abc123+mark-doubt{pod.TAG}.musicxml"
+    assert "--mark-doubt" in doubted.read_text()
+    assert "--mark-doubt" not in plain.read_text()

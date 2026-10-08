@@ -156,3 +156,53 @@ def test_a_slur_on_the_wrong_voice_is_not_found(tmp_path: Path) -> None:
     miss = slurs.judge("case", wrong, reference, key)
     assert hit is not None and (hit.slur.found, hit.slur.invented) == (1, 0)
     assert miss is not None and (miss.slur.found, miss.slur.missed, miss.slur.invented) == (0, 1, 1)
+
+
+def test_a_missed_arc_with_a_mark_in_its_bar_is_counted_as_marked(tmp_path: Path) -> None:
+    mark = (
+        "<direction placement='above'><direction-type>"
+        "<words color='#FF0000'>⚠ slur?</words></direction-type></direction>"
+    )
+    path = score(tmp_path, mark + note() + note() + "</measure>")
+    assert slurs.read_marks(path) == {(1, "1")}
+    want: list[slurs.Arc] = [
+        ("slur", 1, 1, ("1", 0.0), ("1", 1.0), ""),
+        ("slur", 1, 1, ("2", 0.0), ("2", 1.0), ""),
+    ]
+    result = slurs.compare_arcs(want, slurs.read_arcs(path), slurs.read_marks(path))
+    assert (result.slur.missed, result.slur.marked) == (2, 1)
+    assert slurs.total([result])["slur"]["marked"] == 1
+
+
+def test_the_marks_can_come_from_a_second_read(tmp_path: Path) -> None:
+    mark = (
+        "<direction placement='above'><direction-type>"
+        "<words color='#FF0000'>⚠ tie?</words></direction-type></direction>"
+    )
+    plain = score(tmp_path, note() + note() + "</measure>")
+    doubted = tmp_path / "d.musicxml"
+    doubted.write_text(plain.read_text().replace("<note>", mark + "<note>", 1))
+    reference = plain
+    key = {
+        "c": [
+            {
+                "kind": "tie",
+                "staff": 1,
+                "voice": "1",
+                "from": {"bar": "1", "onset": 0, "pitch": "C4"},
+                "to": {"bar": "1", "onset": 1, "pitch": "C4"},
+            }
+        ]
+    }
+    alone = slurs.judge("c", plain, reference, key)
+    with_marks = slurs.judge("c", plain, reference, key, marks_from=doubted)
+    assert alone is not None and with_marks is not None
+    assert (alone.tie.missed, alone.tie.marked) == (1, 0)
+    assert (with_marks.tie.missed, with_marks.tie.marked) == (1, 1)
+
+
+def test_held_out_cases_are_read_from_the_key(tmp_path: Path) -> None:
+    key = tmp_path / "slurs.json"
+    key.write_text(json.dumps({"cases": {}, "held_out": ["a", "b"]}))
+    assert slurs.held_out(key) == {"a", "b"}
+    assert slurs.held_out(tmp_path / "missing.json") == set()

@@ -166,6 +166,10 @@ kube() { "\$KUBECTL" -n "$NAMESPACE" "\$@"; }
 image=""
 for arg in "\$@"; do image="\$arg"; done      # homr takes the image last
 [ -n "\$image" ] || { echo "no image argument" >&2; exit 2; }
+# Every argument before the image is a flag for homr (--mark-doubt, say), passed
+# on as written; the image itself is copied into the pod and read from there.
+flags=""
+for arg in "\${@:1:\$#-1}"; do flags="\$flags \$(printf '%q' "\$arg")"; done
 name="\$(basename "\$image")"
 base="\${name%.*}"
 remote="/work/run/\$\$"
@@ -177,7 +181,7 @@ kube exec -i "$POD" -- bash -lc "mkdir -p \$remote && cat > \$remote/\$name" < "
 
 status=0
 kube exec "$POD" -- bash -lc "
-    cd \$remote && PYTHONPATH=$SRC $VENV/bin/python -c 'from homr.main import main; main()' --gpu no \$remote/\$name
+    cd \$remote && PYTHONPATH=$SRC $VENV/bin/python -c 'from homr.main import main; main()' --gpu no \$flags \$remote/\$name
 " || status=\$?
 
 # Only bring the answer back if there is one. Base64 so nothing in the pipe can

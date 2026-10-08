@@ -38,6 +38,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from fractions import Fraction
 
+from homr.arc_finder import ARC_DOUBT
 from homr.slur_resolution import INFERRED
 from homr.transformer.vocabulary import EncodedSymbol
 
@@ -63,6 +64,8 @@ ODD_TIME = "a note starts at an odd time"
 ODD_INTERVAL = "an accidental makes an interval music does not use"
 SILENT_BESIDE_CHORD = "a voice falls silent where the other holds two notes"
 SLUR_INFERRED = "a slur end inferred, not read"
+SLUR_PICTURE = "a slur on the page whose notes the picture left open"
+TIE_PICTURE = "a tie on the page whose notes the picture left open"
 
 # (part index, staff within the part from 1, bar from 1) -> reasons
 Doubts = dict[tuple[int, int, int], set[str]]
@@ -446,6 +449,29 @@ def _inferred_slur_notes(xml: ET.Element) -> dict[tuple[int, int, int], list[ET.
     return found
 
 
+def _picture_arc_notes(xml: ET.Element) -> dict[tuple[int, int, int], dict[str, list[ET.Element]]]:
+    """Notes the arc finder was unsure about, by (part, staff, bar) and reason."""
+    found: dict[tuple[int, int, int], dict[str, list[ET.Element]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for part_index, part in enumerate(xml.findall("part")):
+        for bar, measure in enumerate(part.findall("measure"), 1):
+            for note in measure.findall("note"):
+                key = (part_index, int(note.findtext("staff", "1")), bar)
+                kinds = (note.get(ARC_DOUBT) or "").split(",")
+                if "slur" in kinds:
+                    found[key][SLUR_PICTURE].append(note)
+                if "tie" in kinds:
+                    found[key][TIE_PICTURE].append(note)
+    return found
+
+
+def picture_arc_doubts(xml: ET.Element) -> Doubts:
+    """An arc the page shows but the picture could not place for certain is
+    written as its best guess and marked (eerovil/musescore-choir-plugins#328)."""
+    return {key: set(reasons) for key, reasons in _picture_arc_notes(xml).items()}
+
+
 def slur_doubts(xml: ET.Element) -> Doubts:
     """A slur whose stop was inferred (`slur_resolution._close_on_tie`) is written
     and marked `slur?`: the owner chose a missed slur as the worse error, and an
@@ -464,6 +490,7 @@ def find_doubts(
         interval_doubts(xml),
         silent_beside_chord_doubts(xml),
         slur_doubts(xml),
+        picture_arc_doubts(xml),
     ):
         for key, reasons in found.items():
             doubts[key] |= reasons
@@ -480,6 +507,8 @@ _ORDER = [
     ODD_INTERVAL,
     SILENT_BESIDE_CHORD,
     SLUR_INFERRED,
+    SLUR_PICTURE,
+    TIE_PICTURE,
     SECOND_READING,
     SECOND_READING_FAILED,
 ]
@@ -502,10 +531,21 @@ _WORD = {
     ODD_INTERVAL: "accidental?",
     SILENT_BESIDE_CHORD: "voice?",
     SLUR_INFERRED: "slur?",
+    SLUR_PICTURE: "slur?",
+    TIE_PICTURE: "tie?",
     SECOND_READING: "notes?",
     SECOND_READING_FAILED: "unchecked?",
 }
-_WORD_ORDER = ["pitch?", "accidental?", "rhythm?", "voice?", "slur?", "notes?", "unchecked?"]
+_WORD_ORDER = [
+    "pitch?",
+    "accidental?",
+    "rhythm?",
+    "voice?",
+    "slur?",
+    "tie?",
+    "notes?",
+    "unchecked?",
+]
 
 
 def mark_words(reasons: set[str]) -> list[str]:
@@ -795,6 +835,9 @@ def find_spots(
 
     for key, inferred in _inferred_slur_notes(xml).items():
         add(key, inferred)
+    for key, by_reason in _picture_arc_notes(xml).items():
+        for unsure in by_reason.values():
+            add(key, unsure)
 
     if second is not None:
         theirs = _located(second)

@@ -105,6 +105,21 @@ def test_the_two_staffs_sound_together_where_they_start_together() -> None:
     ]
 
 
+def test_the_lower_staff_keeps_where_its_notes_are_on_the_page() -> None:
+    """The arc finder hangs curves on those positions (eerovil/musescore-choir-plugins#333):
+    without them a re-read pair's lower staff had no arcs found at all."""
+    upper = [note("note_4", "B4")]
+    lower = [note("note_4", "F3")]
+    upper[0].image_coordinates = (100.0, 50.0)
+    lower[0].image_coordinates = (101.0, 90.0)
+    spliced = reread.splice(upper, lower)
+    assert spliced is not None
+    assert [s.image_coordinates for s in spliced if s.rhythm != "chord"] == [
+        (100.0, 50.0),
+        (101.0, 90.0),
+    ]
+
+
 def test_a_staff_moving_faster_than_the_other_keeps_its_own_onsets() -> None:
     upper = [note("note_2", "C5"), note("note_2", "D5")]
     lower = [note("note_4", "C3"), note("note_4", "D3"), note("note_4", "E3"), note("note_4", "F3")]

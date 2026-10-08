@@ -59,16 +59,20 @@ from fixturecheck.compare import compare_output  # noqa: E402
 PARSES = cases.CACHE / "parses"
 
 
-def _local_read(image: Path) -> list[str]:
+#: The flags of the second read a slur-key case gets, for the marks alone.
+DOUBT = ("--mark-doubt",)
+
+
+def _local_read(image: Path, flags: tuple[str, ...] = ()) -> list[str]:
     """This interpreter, this tree's homr -- the read `parse` always made.
 
     The image goes last, which is homr's own CLI shape and the one thing the
     pod shim relies on."""
     return [sys.executable, "-c", "from homr.main import main; main()",
-            "--gpu", "no", str(image)]
+            "--gpu", "no", *flags, str(image)]
 
 
-def parse(case: cases.Case, fingerprint: str) -> Path | None:
+def parse(case: cases.Case, fingerprint: str, flags: tuple[str, ...] = ()) -> Path | None:
     """Read the case's picture with this homr, reusing the last read if it stands.
 
     Keyed on the code: a parse is only stale when homr changes, so editing the
@@ -82,23 +86,28 @@ def parse(case: cases.Case, fingerprint: str) -> Path | None:
     that stops answering mid-run costs the case in flight one local re-read and
     takes the pod out of the rest of the run; a page homr genuinely could not
     read is still `None`, on either side.
+
+    ``flags`` make a different read, so it is cached under its own name: the
+    ``--mark-doubt`` read a slur-key case gets for its marks never stands in for
+    the plain read the note score is taken from.
     """
     PARSES.mkdir(parents=True, exist_ok=True)
     reader = pod.shim()
-    out = PARSES / f"{case.name}@{fingerprint}{pod.TAG if reader else ''}.musicxml"
+    flagged = "".join(f"+{flag.lstrip('-')}" for flag in flags)
+    out = PARSES / f"{case.name}@{fingerprint}{flagged}{pod.TAG if reader else ''}.musicxml"
     if out.exists():
         return out
     with tempfile.TemporaryDirectory(prefix="parse-") as tmp:
         copy = Path(tmp) / f"{case.name}.png"
         shutil.copy(case.image, copy)
-        cmd = [reader, "--gpu", "no", str(copy)] if reader else _local_read(copy)
+        cmd = [reader, "--gpu", "no", *flags, str(copy)] if reader else _local_read(copy, flags)
         run = subprocess.run(cmd, capture_output=True, text=True, timeout=900,
                              cwd=cases.ROOT)
         produced = copy.with_suffix(".musicxml")
         if run.returncode != 0 or not produced.exists():
             if reader and not pod.alive():
                 pod.lose()
-                return parse(case, fingerprint)
+                return parse(case, fingerprint, flags)
             return None
         shutil.copy(produced, out)
     return out
@@ -208,7 +217,11 @@ def run_cases(names: list[str], tier: str) -> int:
             continue
 
         result = compare_output(case.reference, parsed, case.name)
-        slur = slurs.judge(case.name, parsed, case.reference, key)
+        # The arcs are judged on the plain read; the marks pointing at the ones it
+        # got wrong come from a second, --mark-doubt read of the same picture,
+        # which is the read the choir app makes (`slurs` module docstring).
+        doubted = parse(case, fingerprint, DOUBT) if case.name in key else None
+        slur = slurs.judge(case.name, parsed, case.reference, key, marks_from=doubted)
         if slur is not None:
             slur_results[case.name] = slur
         before = standing.get(case.name)
@@ -283,6 +296,8 @@ def run_cases(names: list[str], tier: str) -> int:
         extra["reference_drift"] = moved
     if slur_results:
         extra["slurs"] = {"total": slurs.total(list(slur_results.values())),
+                          "held_out": slurs.total(
+                              [r for n, r in slur_results.items() if n in slurs.held_out()]),
                           "cases": {name: r.to_json() for name, r in slur_results.items()}}
     run = series.record_run("fixturecheck", tier, records,
                             references=references.stamp(built), gate=gate,
@@ -299,9 +314,17 @@ def run_cases(names: list[str], tier: str) -> int:
     if slur_results:
         t = slurs.total(list(slur_results.values()))
         said = "; ".join(f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
-                         f"found, {t[kind]['invented']} invented" for kind in slurs.KINDS)
+                         f"found, {t[kind]['marked']} more marked, {t[kind]['invented']} invented"
+                         for kind in slurs.KINDS)
         print(f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
               f"({len(slur_results)} case(s) in the key {slurs.KEY})")
+        held = [r for n, r in slur_results.items() if n in slurs.held_out()]
+        if held:
+            h = slurs.total(held)
+            said = "; ".join(f"{kind}s {h[kind]['found']} + {h[kind]['marked']} marked of "
+                             f"{h[kind]['found'] + h[kind]['missed']}, {h[kind]['invented']} invented"
+                             for kind in slurs.KINDS)
+            print(f"arcs on the {len(held)} held-out case(s): {said}")
     lost = (run["outcomes"].get(series.UNREADABLE, 0)
             + run["outcomes"].get(series.UNBUILDABLE, 0))
     if lost:
