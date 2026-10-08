@@ -23,7 +23,13 @@ same place, and the choir app, which sees both systems, decides which it is.
 A missed arc is **marked** when homr put a red ``⚠ slur?`` or ``⚠ tie?`` in the bar
 of either of its ends on that staff (eerovil/musescore-choir-plugins#328): it is
 not in the file, but a person reading the score is sent to it. Marks are written
-only under ``--mark-doubt``, so a run without it reports none.
+only under ``--mark-doubt``, so fixturecheck reads each case in the key a second
+time with it and takes only the marks from that read; the arcs and the note score
+still come from the plain read.
+
+The key may also name ``held_out`` cases: systems the arc finder was never tuned
+on (#328). They are totalled apart, since a figure over the systems a rule was
+tuned on flatters it.
 
 Kept out of the note score and the gate on purpose. The note percentage has a
 history every figure in QUALITY.md is quoted against, and an arc is not a note.
@@ -268,18 +274,32 @@ def compare_arcs(want: list[Arc], got: list[Arc], marks: Marks | None = None) ->
     return result
 
 
+def held_out(path: Path = KEY) -> set[str]:
+    """The key's cases no rule was tuned on, empty when it names none."""
+    if not path.exists():
+        return set()
+    return set(json.loads(path.read_text()).get("held_out", []))
+
+
 def judge(
-    case_name: str, parsed: Path, reference: Path, key: dict | None = None
+    case_name: str,
+    parsed: Path,
+    reference: Path,
+    key: dict | None = None,
+    marks_from: Path | None = None,
 ) -> SlurResult | None:
     """The case's arcs against the key, or None when the key has no entry.
 
     ``reference`` is the case's reference score: the key names voices by its
-    numbers, and they are ranked off it."""
+    numbers, and they are ranked off it. ``marks_from`` is the read the marks
+    are taken from (the ``--mark-doubt`` one); without it, ``parsed``'s own."""
     key = answer_key() if key is None else key
     if case_name not in key:
         return None
     return compare_arcs(
-        key_arcs(key[case_name], voice_ranks(reference)), read_arcs(parsed), read_marks(parsed)
+        key_arcs(key[case_name], voice_ranks(reference)),
+        read_arcs(parsed),
+        read_marks(marks_from or parsed),
     )
 
 
