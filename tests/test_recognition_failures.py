@@ -127,8 +127,8 @@ def test_incomplete_page_never_reaches_xml_generation(
     if previous_output:
         output.write_text("old output")
     debug = Mock()
-    detection: tuple = ([], np.zeros((1, 1)), debug, Mock(), [], identity)
-    monkeypatch.setattr(cli, "detect_staffs_in_image", Mock(return_value=detection))
+    detection: tuple = ([], np.zeros((1, 1)), debug, Mock(), [], identity, Mock())
+    monkeypatch.setattr(cli, "detect_staffs_with_predictions", Mock(return_value=detection))
     monkeypatch.setattr(
         cli, "parse_staffs", Mock(side_effect=IncompleteRecognitionError("partial"))
     )
