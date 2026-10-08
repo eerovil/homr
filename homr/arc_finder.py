@@ -11,10 +11,20 @@ themselves and points a person at every arc homr got wrong:
 
 - ``find_curves`` takes the ink that is left once staff lines, noteheads, stems
   and signs are taken away, and keeps the thin, bent strokes long enough to join
-  two notes. Dashed arcs are chained back together.
+  two notes. Dashed arcs are chained back together. Round two
+  (eerovil/musescore-choir-plugins#333) went after the ties that were still
+  neither found nor marked, and each had lost its curve a different way: a slur
+  and a tie arriving at one note touch and come out as one blob (followed apart
+  as two strands); a tie arriving from the line before is as short and deep as a
+  fermata (a fermata now needs its dot); an arc grazing or lying along a staff
+  line went with the line (only the line's own rows are cleared now); a speck
+  the network called a notehead cut an arc in two (only blobs holding a detected
+  head are taken out). A clef's curl, freed from the line by the same change, is
+  dropped where the network says a clef is.
 - ``attach`` hangs each end of a curve on a notehead the detector found, and each
   notehead on the notes homr wrote for it.
-- ``mark`` compares those arcs with what homr wrote and **changes no arc**: every
+- ``mark`` compares those arcs with what homr wrote, one written arc for one
+  curve, and **changes no arc**: every
   place the page shows a slur or tie that homr wrote differently or not at all
   gets a flag, which ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
   Writing the picture's arcs instead was measured on the owner-checked key and
@@ -136,8 +146,10 @@ def _remove_staff_lines(ink: NDArray, staffs: list[StaffGeometry]) -> NDArray:
         horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, reach), np.uint8))
         x0 = max(0, int(staff.min_x) - 2)
         x1 = min(width, int(staff.max_x) + 3)
-        for x in range(x0, x1):
-            for y in staff.line_ys(float(x)):
+        for line in range(5):
+            runs: dict[int, tuple[int, int]] = {}
+            for x in range(x0, x1):
+                y = staff.line_ys(float(x))[line]
                 yi = int(round(y))
                 lo, hi = max(0, yi - 4), min(height, yi + 5)
                 rows = [r for r in range(lo, hi) if horizontal[r, x]]
@@ -150,7 +162,23 @@ def _remove_staff_lines(ink: NDArray, staffs: list[StaffGeometry]) -> NDArray:
                 bottom = centre
                 while bottom + 1 < height and ink[bottom + 1, x]:
                     bottom += 1
-                if bottom - top + 1 <= 3:
+                runs[x] = (top, bottom)
+            alone = {x: r for x, r in runs.items() if r[1] - r[0] + 1 <= 3}  # noqa: PLR2004
+            span = max(8, int(4 * staff.unit))
+            for x, (top, bottom) in runs.items():
+                # where the line lies beside: an arc grazing it or running along it
+                # adds rows on one side, and only the line's own rows are cleared
+                beside = [alone[n] for n in range(x - span, x + span + 1) if n in alone]
+                if len(beside) >= span // 2:
+                    line_top = int(np.median([b[0] for b in beside]))
+                    line_bottom = int(np.median([b[1] for b in beside]))
+                    if top < line_top and bottom > line_bottom:
+                        continue  # a stroke crossing the line keeps its ink
+                    extra = (bottom - top) - (line_bottom - line_top)
+                    if extra > max(3, 0.35 * staff.unit):
+                        continue  # a beam or a notehead on the line, not an arc
+                    out[max(top, line_top) : min(bottom, line_bottom) + 1, x] = 0
+                elif bottom - top + 1 <= 3:  # noqa: PLR2004
                     out[top : bottom + 1, x] = 0
     return out
 
@@ -226,7 +254,7 @@ class _Stroke:
         return self.ys + self.y0
 
 
-def _strokes(residue: NDArray, unit: float) -> list[_Stroke]:
+def _strokes(residue: NDArray, unit: float, max_runs_share: float = 0.25) -> list[_Stroke]:
     count, labels, stats, _ = cv2.connectedComponentsWithStats(residue, connectivity=8)
     strokes = []
     for i in range(1, count):
@@ -238,7 +266,63 @@ def _strokes(residue: NDArray, unit: float) -> list[_Stroke]:
         if len(xs) == 0:
             continue
         strokes.append(_Stroke(int(x), int(y), xs, ys, thickness, multi, filled))
+        if multi > max_runs_share:
+            strokes += [_Stroke(int(x), int(y), *strand) for strand in _strands(component)]
     return strokes
+
+
+def _strands(component: NDArray) -> list[tuple[NDArray, NDArray, float, float, float]]:
+    """Two curves drawn one inside the other -- a slur and a tie arriving at one
+    note -- touch where they meet the note and come out as one component with two
+    runs of ink in most columns. Follow the upper and the lower run apart."""
+    columns = component.shape[1]
+    runs = [_runs(component[:, x]) for x in range(columns)]
+    two = sum(1 for r in runs if len(r) == 2)  # noqa: PLR2004
+    inked = sum(1 for r in runs if r)
+    if inked == 0 or two < 0.5 * inked or any(len(r) > 2 for r in runs):  # noqa: PLR2004
+        return []
+    strands: list[tuple[list[float], list[float], list[float]]] = [([], [], []), ([], [], [])]
+    for x, column in enumerate(runs):
+        if len(column) == 2:  # noqa: PLR2004
+            for strand, (a, b) in zip(strands, column, strict=True):
+                strand[0].append(x)
+                strand[1].append((a + b - 1) / 2)
+                strand[2].append(b - a)
+        elif len(column) == 1:
+            a, b = column[0]
+            y = (a + b - 1) / 2
+            # where the two have met, the run belongs to the one it continues
+            near = min(strands, key=lambda st: abs(st[1][-1] - y) if st[1] else math.inf)
+            if near[1] and b - a <= 1.5 * float(np.median(near[2])) + 1:
+                near[0].append(x)
+                near[1].append(y)
+                near[2].append(b - a)
+    out: list[tuple[NDArray, NDArray, float, float, float]] = []
+    for columns_at, centres, thickness in strands:
+        if len(columns_at) < 5:  # noqa: PLR2004
+            return []
+        out.append(
+            (
+                np.array(columns_at, dtype=float),
+                np.array(centres, dtype=float),
+                float(np.median(thickness)),
+                0.0,
+                len(columns_at) / (columns_at[-1] - columns_at[0] + 1),
+            )
+        )
+    # a letter or a clef's loop also has two runs of ink in a column; two arcs
+    # are two clean parabolas bending the same way over mostly the same columns
+    (xa, ya, *_), (xb, yb, *_) = out
+    bends = [_bend(xa, ya), _bend(xb, yb)]
+    overlap = min(xa[-1], xb[-1]) - max(xa[0], xb[0])
+    if (
+        bends[0] * bends[1] <= 0
+        or min(abs(b) for b in bends) < 2.5  # noqa: PLR2004
+        or max(_fit_error(xa, ya), _fit_error(xb, yb)) > 1.5  # noqa: PLR2004
+        or overlap < 0.7 * min(xa[-1] - xa[0], xb[-1] - xb[0])
+    ):
+        return []
+    return out
 
 
 def _bend(xs: NDArray, ys: NDArray) -> float:
@@ -270,12 +354,13 @@ def find_curves(
     symbols: NDArray,
     staffs: list[StaffGeometry],
     settings: CurveFinderSettings | None = None,
+    heads: list[Head] | None = None,
 ) -> list[Curve]:
     settings = settings or CurveFinderSettings()
     unit = float(np.median([s.unit for s in staffs])) if staffs else 10.0
     ink = (gray < settings.ink_threshold).astype(np.uint8)
     ink = _remove_staff_lines(ink, staffs)
-    take_out: NDArray = cv2.dilate(notehead.astype(np.uint8), np.ones((3, 3), np.uint8))
+    take_out: NDArray = cv2.dilate(_real_heads(notehead, heads), np.ones((3, 3), np.uint8))
     # The network labels an arc touching an accidental or a stem as part of it, so
     # those masks are only trusted where the ink stands upright: an arc is never
     # more than a few pixels tall in any one column.
@@ -287,20 +372,49 @@ def find_curves(
     # close the small gaps left where a curve crossed a line or a stem
     residue = cv2.morphologyEx(residue, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
 
-    strokes = _strokes(residue, unit)
+    strokes = _strokes(residue, unit, settings.max_runs_share)
     thin = [
         s
         for s in strokes
         if s.thickness <= max(2.5, settings.max_thickness_units * unit)
         and s.multi <= settings.max_runs_share
     ]
-    curves = _solid_curves(thin, unit, settings)
+    # a fermata's dot is looked for in the ink that is not a notehead: the head an
+    # arc arrives at stands right beside it
+    near_head: NDArray = cv2.dilate(notehead.astype(np.uint8), np.ones((5, 5), np.uint8))
+    head_free: NDArray = (ink & (1 - near_head)).astype(np.uint8)
+    curves = _solid_curves(thin, unit, settings, head_free)
     curves += [
         c
         for c in _dashed_curves(thin, unit, settings, curves)
         if not _along_lines(c, staffs) and abs(c.sag()) >= 0.3 * unit
     ]
-    return curves
+    # a clef's curl is a clean curve too; the network says where the clefs are
+    clef = cv2.dilate(clefs_keys.astype(np.uint8), np.ones((5, 5), np.uint8))
+    return [c for c in curves if _share_on(c, clef) <= 0.5]  # noqa: PLR2004
+
+
+def _real_heads(notehead: NDArray, heads: list[Head] | None) -> NDArray:
+    """The notehead mask, less the blobs no head was detected in: the network
+    marks a speck of an arc as a notehead now and then, and taking it out cuts
+    the arc in two."""
+    mask = (notehead > 0).astype(np.uint8)
+    if heads is None:
+        return mask
+    count, labels = cv2.connectedComponents(mask, connectivity=8)
+    keep = np.zeros(count, dtype=np.uint8)
+    for head in heads:
+        x0, x1 = int(head.x - head.width / 2) - 1, int(head.x + head.width / 2) + 2
+        y0, y1 = int(head.y - head.height / 2) - 1, int(head.y + head.height / 2) + 2
+        keep[np.unique(labels[max(0, y0) : max(0, y1), max(0, x0) : max(0, x1)])] = 1
+    keep[0] = 0
+    return keep[labels]
+
+
+def _share_on(curve: Curve, mask: NDArray) -> float:
+    xs = np.clip(curve.xs.astype(int), 0, mask.shape[1] - 1)
+    ys = np.clip(np.round(curve.ys).astype(int), 0, mask.shape[0] - 1)
+    return float(np.mean(mask[ys, xs] > 0))
 
 
 def _along_lines(curve: Curve, staffs: list[StaffGeometry]) -> bool:
@@ -370,23 +484,66 @@ def _split(xs: NDArray, ys: NDArray, unit: float) -> list[tuple[NDArray, NDArray
     return pieces
 
 
-def _fermata(xs: NDArray, ys: NDArray, unit: float, over: bool) -> bool:
-    """A fermata's arc is short and stands over (or under) one point."""
-    return (xs[-1] - xs[0]) <= 2.2 * unit and abs(_bend(xs, ys)) >= 0.25 * (xs[-1] - xs[0])
+def _fermata(xs: NDArray, ys: NDArray, unit: float, ink: NDArray) -> bool:
+    """A fermata's arc is short and deep, with a dot inside it.
+
+    Anything this deep and narrower than 1.6 spaces goes too: it is a piece of a
+    letter or a flag far more often than an arc. Between that and 2.2 spaces the
+    dot is what tells them apart: a tie arriving from the line before is just as
+    deep where it meets the system's first note, and has none."""
+    width = xs[-1] - xs[0]
+    if width > 2.2 * unit or abs(_bend(xs, ys)) < 0.25 * width:
+        return False
+    return width < 1.6 * unit or _dot_inside(xs, ys, unit, ink)
+
+
+def _dot_inside(xs: NDArray, ys: NDArray, unit: float, ink: NDArray) -> bool:
+    """A small solid blob between the arc and the line joining its ends."""
+    width = xs[-1] - xs[0]
+    chord = (ys[0] + ys[-1]) / 2
+    apex = ys[len(ys) // 2]
+    x0 = max(0, int(xs[0] + 0.2 * width))
+    x1 = min(ink.shape[1], int(xs[-1] - 0.2 * width) + 1)
+    # inside the arc only: from its apex to just past the line joining its ends
+    if apex < chord:
+        y0, y1 = int(apex), int(chord + 0.4 * unit) + 1
+    else:
+        y0, y1 = int(chord - 0.4 * unit), int(apex) + 1
+    y0, y1 = max(0, y0), min(ink.shape[0], y1)
+    window = ink[y0:y1, x0:x1].copy()
+    if window.size == 0:
+        return False
+    # the arc's own ink is not a dot, nor is a staff line left thick where it runs
+    # along the arc: a fermata's dot stands clear of its arc
+    clear = int(0.35 * unit) + 1
+    for x, y in zip(xs, ys, strict=True):
+        if x0 <= x < x1:
+            window[max(0, int(y) - clear - y0) : max(0, int(y) + clear + 1 - y0), int(x) - x0] = 0
+    count, _, stats, _ = cv2.connectedComponentsWithStats(window, connectivity=8)
+    for i in range(1, count):
+        _, _, w, h, area = stats[i]
+        if 2 <= w <= 0.8 * unit and 2 <= h <= 0.8 * unit and area >= 0.5 * w * h:  # noqa: PLR2004
+            return True
+    return False
 
 
 def _solid_curves(
-    strokes: list[_Stroke], unit: float, settings: CurveFinderSettings
+    strokes: list[_Stroke], unit: float, settings: CurveFinderSettings, ink: NDArray
 ) -> list[Curve]:
     curves = []
     for stroke in strokes:
         if stroke.filled < 0.8:
             continue
-        for xs, ys in _split(stroke.gx, stroke.gy, unit):
+        pieces = _split(stroke.gx, stroke.gy, unit)
+        if not any(_is_curve(xs, ys, unit, settings) for xs, ys in pieces):
+            # lumps where an arc merges with a staff line are not the turns
+            # between ties: an arc cut into nothing but scraps is one arc
+            pieces = [(stroke.gx, stroke.gy)]
+        for xs, ys in pieces:
             if not _is_curve(xs, ys, unit, settings):
                 continue
             over = _bend(xs, ys) > 0
-            if _fermata(xs, ys, unit, over):
+            if _fermata(xs, ys, unit, ink):
                 continue
             curves.append(Curve(xs, ys, over=over))
     return curves
@@ -878,8 +1035,14 @@ def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -
     flags the note beside it as ``slur?``."""
     outcome = Outcome()
     written = read_written(notes)
+    # each arc homr wrote answers for one arc on the page: a slur and a tie both
+    # arriving at one note are two curves, and homr writing one of them leaves the
+    # other to be marked
+    unused = list(written)
     for arc in picture:
-        if any(_agrees(notes, arc, w) for w in written):
+        match = next((w for w in unused if _agrees(notes, arc, w)), None)
+        if match is not None:
+            unused.remove(match)
             outcome.agreed += 1
             continue
         index = arc.start if arc.start is not None else arc.stop
@@ -953,20 +1116,32 @@ def mark_arcs(
     geometry = [staff_geometry(s) for s in printed]
     if any(len(g.lines[0]) != 5 for g in geometry):  # noqa: PLR2004
         return None
-    heads = detected_heads(printed)
+    return mark_page(
+        xml,
+        predictions.preprocessed,
+        [predictions.notehead, predictions.stems_rest, predictions.clefs_keys, predictions.symbols],
+        geometry,
+        detected_heads(printed),
+        invert(page_to_input),
+    )
+
+
+def mark_page(
+    xml: ET.Element,
+    gray: NDArray,
+    masks: list[NDArray],
+    geometry: list[StaffGeometry],
+    heads: list[Head],
+    to_page: Callable[[tuple[float, float]], tuple[float, float]],
+) -> Outcome | None:
+    """``mark_arcs`` on what the pipeline has already worked out: the page, the
+    network's notehead, stem, clef and symbol masks, the staffs and the heads."""
     notes = read_notes(xml)
-    to_page = invert(page_to_input)
     if not match_heads(notes, heads, geometry, to_page):
         return None
     where = anchors(notes, heads, geometry, to_page)
-    curves = find_curves(
-        predictions.preprocessed,
-        predictions.notehead,
-        predictions.stems_rest,
-        predictions.clefs_keys,
-        predictions.symbols,
-        geometry,
-    )
+    notehead, stems_rest, clefs_keys, symbols = masks
+    curves = find_curves(gray, notehead, stems_rest, clefs_keys, symbols, geometry, heads=heads)
     unplaced: list[int] = []
     arcs = attach(curves, notes, where, geometry, unplaced)
     extend_over_ties(

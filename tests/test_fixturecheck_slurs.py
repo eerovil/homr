@@ -165,7 +165,7 @@ def test_a_missed_arc_with_a_mark_in_its_bar_is_counted_as_marked(tmp_path: Path
     )
     path = score(tmp_path, mark + note() + note() + "</measure>")
     assert slurs.read_marks(path) == {(1, "1")}
-    want = [
+    want: list[slurs.Arc] = [
         ("slur", 1, 1, ("1", 0.0), ("1", 1.0), ""),
         ("slur", 1, 1, ("2", 0.0), ("2", 1.0), ""),
     ]
