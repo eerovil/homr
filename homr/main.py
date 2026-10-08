@@ -16,8 +16,8 @@ import numpy as np
 import onnxruntime as ort
 
 from homr import color_adjust, download_utils
-from homr.arc_finder import correct as correct_arcs
 from homr.arc_finder import forget as forget_arc_doubts
+from homr.arc_finder import mark_arcs
 from homr.autocrop import autocrop_with_offset
 from homr.bar_line_detection import detect_bar_lines
 from homr.bar_readings import (
@@ -222,6 +222,26 @@ class ProcessingConfig:
     mark_doubt: bool = False
 
 
+def _mark_arcs(
+    xml: ET.Element,
+    predictions: InputPredictions,
+    staffs: list[Staff],
+    to_input_image: PointMapping,
+) -> None:
+    """Flag the arcs the page shows that the reading does not match (homr/arc_finder.py).
+
+    It changes no arc, so a failure in it costs the marks and never the page."""
+    try:
+        outcome = mark_arcs(xml, predictions, staffs, to_input_image)
+    except Exception as error:  # noqa: BLE001 - the page must not be lost to a mark
+        eprint(f"Arcs from the picture were not checked: {error!r}")
+        return
+    if outcome is None:
+        eprint("Arcs from the picture were not checked: the staffs did not line up")
+    else:
+        eprint(f"Arcs from the picture: {outcome.agreed} agree, {outcome.marked} marked")
+
+
 def process_image(
     image_path: str,
     config: ProcessingConfig,
@@ -297,16 +317,11 @@ def process_image(
             reconstruction_changes=reconstruction_changes,
             keep_inferred=config.mark_doubt and not config.read_staff_positions,
         )
-        if predictions is not None:
-            arcs = correct_arcs(xml, predictions, printed_staffs, to_input_image)
-            if arcs is not None:
-                eprint(
-                    f"Arcs from the picture: {arcs.kept} kept, {arcs.added} added, "
-                    f"{arcs.moved} moved, {arcs.removed} removed, {arcs.unsure} unsure"
-                )
         if config.mark_doubt and config.read_staff_positions:
             eprint("--mark-doubt needs a second reading of the image; skipped with staff positions")
         elif config.mark_doubt:
+            if predictions is not None:
+                _mark_arcs(xml, predictions, printed_staffs, to_input_image)
             second = _second_reading(image_path, config, xml_generator_args)
             doubts = find_doubts(result_staffs, xml, second)
             readings = bar_readings(xml, result_staffs, doubts)

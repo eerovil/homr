@@ -7,22 +7,20 @@ owner-checked key of eerovil/musescore-choir-plugins#328 (27 systems, 110 slurs,
 171 ties), every arc homr missed had a mark nearby: it saw the arc and wrote it
 in the wrong place — two arcs sharing one mark, the other voice, one tie for a
 whole chord, two nested slurs sharing one number. This module looks at the curves
-themselves and corrects the arcs homr wrote:
+themselves and points a person at every arc homr got wrong:
 
 - ``find_curves`` takes the ink that is left once staff lines, noteheads, stems
   and signs are taken away, and keeps the thin, bent strokes long enough to join
   two notes. Dashed arcs are chained back together.
 - ``attach`` hangs each end of a curve on a notehead the detector found, and each
   notehead on the notes homr wrote for it.
-- ``apply`` compares those arcs with what homr wrote. **By default it changes no
-  arc**: every place the page shows an arc that homr's output does not match gets
-  a doubt flag, which ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
-  Writing the picture's arcs (``marks_only=False``), and moving homr's to the voice
-  the picture suggests (``cautious=False``), are there but off: measured on the
-  owner-checked key, writing arcs helped on the systems it was tuned on and did
-  not on held-out ones -- a scanned page's specks read as arcs -- so the words of
-  a practice track came out no better, while the flags alone pointed at 10 of the
-  14 wrongly set notes on the held-out systems and invented nothing.
+- ``mark`` compares those arcs with what homr wrote and **changes no arc**: every
+  place the page shows a slur or tie that homr wrote differently or not at all
+  gets a flag, which ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
+  Writing the picture's arcs instead was measured on the owner-checked key and
+  dropped: it helped on the systems it was tuned on and not on held-out ones -- a
+  scanned page's specks read as arcs -- while the flags alone pointed at 10 of
+  the 14 wrongly set notes on the held-out systems and invented nothing.
 
 Everything here is pure geometry on arrays the pipeline already has; it runs no
 model.
@@ -34,7 +32,7 @@ import math
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from fractions import Fraction
 
 import cv2
@@ -91,7 +89,6 @@ class Curve:
     ys: NDArray
     over: bool  # bends upwards (an arc drawn above its notes)
     dashed: bool = False
-    pieces: int = 1
 
     @property
     def left(self) -> tuple[float, float]:
@@ -123,7 +120,6 @@ class CurveFinderSettings:
     min_sag_ratio: float = 0.008
     max_runs_share: float = 0.25
     dash_gap_units: float = 2.2
-    extra: dict[str, float] = field(default_factory=dict)
 
 
 def _remove_staff_lines(ink: NDArray, staffs: list[StaffGeometry]) -> NDArray:
@@ -443,7 +439,7 @@ def _dashed_curves(
         if not _is_curve(xs, ys, unit, settings):
             continue
         used.update(chain)
-        curves.append(Curve(xs, ys, over=_bend(xs, ys) > 0, dashed=True, pieces=len(chain)))
+        curves.append(Curve(xs, ys, over=_bend(xs, ys) > 0, dashed=True))
     return curves
 
 
@@ -612,8 +608,6 @@ class PictureArc:
     stop: int | None  # None = into the next system
     staff: int
     over: bool
-    unsure: bool = False
-    short: bool = False  # under three staff spaces long
 
 
 @dataclass
@@ -698,7 +692,6 @@ def attach(
         if edge_right:
             rights = []
         best: tuple[float, int | None, int | None] | None = None
-        runner_up = math.inf
         left_choices: list[_End | None] = list(lefts[:4]) or ([None] if edge_left else [])
         right_choices: list[_End | None] = list(rights[:4]) or ([None] if edge_right else [])
         for a in left_choices:
@@ -714,11 +707,7 @@ def attach(
                 if na and nb and na.pitch == nb.pitch and width <= 6 * staffs[na.staff].unit:
                     cost -= 0.6  # a short arc between two equal notes is a tie
                 if best is None or cost < best[0]:
-                    if best is not None:
-                        runner_up = min(runner_up, best[0])
                     best = (cost, a.note if a else None, b.note if b else None)
-                else:
-                    runner_up = min(runner_up, cost)
         if best is None:
             if (
                 unplaced is not None
@@ -729,20 +718,14 @@ def attach(
                 if nearest is not None:
                     unplaced.append(nearest)
             continue
-        cost, start, stop = best
+        _, start, stop = best
         staff = notes[start if start is not None else stop].staff  # type: ignore[index]
         start, stop = _pick_voice(start, notes, curve.over), _pick_voice(stop, notes, curve.over)
         kind = "slur"
         if start is not None and stop is not None and _tied(notes[start], notes[stop], notes):
             kind = "tie"
-        unsure = runner_up - cost < 0.25 and not _same_place(notes, best, runner_up)
-        short = width < 3 * staffs[staff].unit
-        arcs.append(PictureArc(kind, start, stop, staff, curve.over, unsure=unsure, short=short))
+        arcs.append(PictureArc(kind, start, stop, staff, curve.over))
     return arcs
-
-
-def _same_place(notes: list[XmlNote], best: tuple, runner_up: float) -> bool:
-    return False
 
 
 def _clear(curve: Curve, staff: StaffGeometry) -> bool:
@@ -815,14 +798,13 @@ def extend_over_ties(arcs: list[PictureArc], ties: list[tuple[int, int]]) -> Non
 
 
 # ----------------------------------------------------------------------------
-# Comparing with what homr wrote, and writing the result
+# Comparing with what homr wrote
 # ----------------------------------------------------------------------------
 
-#: Set on a slur or tie whose ends the picture left open; ``--mark-doubt`` turns it
-#: into a red mark (homr/doubt.py), and it is taken off the output otherwise.
-UNSURE = "homr-unsure-arc"
-#: Set on a note beside a curve the picture shows but could not hang on notes.
-UNPLACED = "homr-unplaced-arc"
+#: Set on a note, valued ``slur`` or ``tie``, where the page shows an arc homr's
+#: output does not match; ``--mark-doubt`` turns it into a red mark
+#: (homr/doubt.py), and ``forget`` takes it off otherwise.
+ARC_DOUBT = "homr-arc-doubt"
 
 
 @dataclass
@@ -831,43 +813,29 @@ class WrittenArc:
     start: int | None
     stop: int | None
     staff: int
-    marks: list[tuple[ET.Element, ET.Element]]  # (note, the <slur>/<tied>/<tie> on it)
-
-
-def _full_pitch(note: XmlNote) -> tuple[str, int, int]:
-    return note.pitch
 
 
 def read_written(notes: list[XmlNote]) -> list[WrittenArc]:
     """The slurs and ties homr wrote, paired the way a reader of the file pairs them:
     slurs per staff and number, ties per staff and pitch, in the order written."""
     arcs: list[WrittenArc] = []
-    open_: dict[tuple, list[tuple[int, list]]] = defaultdict(list)
-    index_of = {id(n.element): i for i, n in enumerate(notes)}
+    open_: dict[tuple, list[int]] = defaultdict(list)
     for i, note in enumerate(notes):
-        element = note.element
-        marks: list[tuple[str, str, str, ET.Element]] = []
-        for slur in element.iter("slur"):
-            marks.append(("slur", slur.get("number", "1"), slur.get("type", ""), slur))
-        for tied in element.iter("tied"):
-            marks.append(("tie", str(note.pitch), tied.get("type", ""), tied))
+        marks: list[tuple[str, str, str]] = []
+        for slur in note.element.iter("slur"):
+            marks.append(("slur", slur.get("number", "1"), slur.get("type", "")))
+        for tied in note.element.iter("tied"):
+            marks.append(("tie", str(note.pitch), tied.get("type", "")))
         marks.sort(key=lambda m: m[2] != "stop")
-        for kind, label, what, mark in marks:
+        for kind, label, what in marks:
             key = (kind, note.staff, label)
             if what == "start":
-                open_[key].append((i, [(element, mark)]))
+                open_[key].append(i)
             elif what == "stop":
-                if open_[key]:
-                    start, start_marks = open_[key].pop(0)
-                    arcs.append(
-                        WrittenArc(kind, start, i, note.staff, start_marks + [(element, mark)])
-                    )
-                else:
-                    arcs.append(WrittenArc(kind, None, i, note.staff, [(element, mark)]))
+                start = open_[key].pop(0) if open_[key] else None
+                arcs.append(WrittenArc(kind, start, i, note.staff))
     for (kind, staff, _), waiting in open_.items():
-        for start, start_marks in waiting:
-            arcs.append(WrittenArc(kind, start, None, staff, start_marks))
-    del index_of
+        arcs.extend(WrittenArc(kind, start, None, staff) for start in waiting)
     return arcs
 
 
@@ -878,257 +846,56 @@ def _place(notes: list[XmlNote], index: int | None) -> tuple | None:
     return note.bar, note.onset
 
 
-def _same(notes: list[XmlNote], a: int | None, b: int | None) -> bool:
-    return (a is None and b is None) or (a is not None and b is not None and a == b)
-
-
-def _covered(
-    arc: WrittenArc,
-    notes: list[XmlNote],
-    where: dict[int, tuple[float, float]],
-    curves: list[Curve],
-    staffs: list[StaffGeometry],
-) -> bool:
-    """Is any curve on the page where this arc would be drawn?"""
-    xs = [where[i][0] for i in (arc.start, arc.stop) if i is not None and i in where]
-    if not xs:
-        return True  # nowhere to look: never take an arc out blind
-    staff = staffs[arc.staff]
-    if arc.start is None:
-        xs.append(staff.min_x)
-    if arc.stop is None:
-        xs.append(staff.max_x)
-    lo, hi = min(xs), max(xs)
-    for curve in curves:
-        if _staff_at(curve, staffs) != arc.staff:
-            continue
-        overlap = min(hi, curve.xs[-1]) - max(lo, curve.xs[0])
-        if overlap >= 0.5 * max(1.0, min(hi - lo, curve.width)):
-            return True
-    return False
+def _agrees(notes: list[XmlNote], arc: PictureArc, written: WrittenArc) -> bool:
+    """homr wrote the arc the picture shows -- or a tie between two equal notes of
+    a chord where the picture, hanging the curve on the chord, chose another of its
+    notes: a chord's tie is to its own note, so homr's is the one to believe."""
+    if written.kind == arc.kind and (written.start, written.stop) == (arc.start, arc.stop):
+        return True
+    return (
+        written.kind == "tie"
+        and written.staff == arc.staff
+        and _place(notes, written.start) == _place(notes, arc.start)
+        and _place(notes, written.stop) == _place(notes, arc.stop)
+        and written.start is not None
+        and written.stop is not None
+        and _tied(notes[written.start], notes[written.stop], notes)
+        and (arc.kind == "slur" or notes[arc.start or 0].pitch == notes[written.start].pitch)
+    )
 
 
 @dataclass
 class Outcome:
-    kept: int = 0
-    added: int = 0
-    moved: int = 0
-    removed: int = 0
-    unsure: int = 0
+    agreed: int = 0
+    marked: int = 0
 
 
-def apply(
-    notes: list[XmlNote],
-    picture: list[PictureArc],
-    curves: list[Curve],
-    where: dict[int, tuple[float, float]],
-    staffs: list[StaffGeometry],
-    unplaced: list[int] | None = None,
-    cautious: bool = True,
-    marks_only: bool = True,
-) -> Outcome:
-    """Make the arcs in the file the arcs on the page."""
+def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -> Outcome:
+    """Flag every arc on the page that homr's output does not match, changing none.
+
+    The flag goes on the arc's first note and names the picture's kind, so a tie
+    homr missed is marked ``tie?``. A curve that could not be hung on notes at all
+    flags the note beside it as ``slur?``."""
     outcome = Outcome()
-    for index in unplaced or []:
-        notes[index].element.set(UNPLACED, "1")
-        outcome.unsure += 1
     written = read_written(notes)
-    keep: list[WrittenArc] = []
-    for arc in written:
-        twin = next(
-            (
-                p
-                for p in picture
-                if p.kind == arc.kind
-                and _same(notes, p.start, arc.start)
-                and _same(notes, p.stop, arc.stop)
-            ),
-            None,
-        )
-        if twin is not None:
-            keep.append(arc)
-            picture = [p for p in picture if p is not twin]
-            outcome.kept += 1
+    for arc in picture:
+        if any(_agrees(notes, arc, w) for w in written):
+            outcome.agreed += 1
             continue
-        clash = next(
-            (
-                p
-                for p in picture
-                if p.staff == arc.staff
-                and _place(notes, p.start) == _place(notes, arc.start)
-                and _place(notes, p.stop) == _place(notes, arc.stop)
-                and not (
-                    p.kind == arc.kind == "tie" and _pitch_of(notes, p) != _pitch_of(notes, arc)
-                )
-            ),
-            None,
-        )
-        if clash is not None and arc.kind == "tie" and clash.kind == "slur" and _is_tie(arc, notes):
-            # homr's tie joins two equal notes where the picture put a slur between
-            # two members of the chords: a chord's tie is to its own note
-            picture = [p for p in picture if p is not clash]
-            keep.append(arc)
-            outcome.kept += 1
-            continue
-        if clash is not None and cautious:
-            # say so, keep homr's: the picture is as often wrong about the voice
-            clash.unsure = True
-            _flag(arc)
-            picture = [p for p in picture if p is not clash]
-            keep.append(arc)
-            outcome.kept += 1
-            outcome.unsure += 1
-            continue
-        if clash is not None:
-            _remove(arc)  # the same arc on another voice, note or kind: the picture's
-            outcome.moved += 1
-            continue
-        if not cautious and not _covered(arc, notes, where, curves, staffs):
-            _remove(arc)
-            outcome.removed += 1
-            continue
-        keep.append(arc)
-        outcome.kept += 1
-    if cautious:
-        taken = {i for w in keep for i in (w.start, w.stop) if i is not None}
-        # an end homr already hangs another arc on: mark it, do not add a rival
-        rivals = [p for p in picture if p.start in taken or p.stop in taken]
-        picture = [p for p in picture if p not in rivals]
-        # a short slur homr saw nothing of is as often a flag or a beam's end on a
-        # scan: say there is something there rather than write it
-        flags = [p for p in picture if p.kind == "slur" and p.short]
-        picture = [p for p in picture if p not in flags]
-        outcome.unsure += _mark_beside(notes, rivals + flags)
-    if marks_only:
-        outcome.unsure += _mark_beside(notes, picture)
-        picture = []
-    for label, new_arc in enumerate(picture):
-        _write(new_arc, notes, f"new{label}")
-        outcome.added += 1
-        outcome.unsure += new_arc.unsure
-    _number_slurs(notes)
+        index = arc.start if arc.start is not None else arc.stop
+        if index is not None:
+            _flag(notes[index].element, arc.kind)
+            outcome.marked += 1
+    for index in unplaced:
+        _flag(notes[index].element, "slur")
+        outcome.marked += 1
     return outcome
 
 
-def _mark_beside(notes: list[XmlNote], arcs: list[PictureArc]) -> int:
-    """Flag the first note of each arc for a mark, writing no arc."""
-    for arc in arcs:
-        index = arc.start if arc.start is not None else arc.stop
-        if index is not None:
-            notes[index].element.set(UNPLACED, "1")
-    return len(arcs)
-
-
-def _flag(arc: WrittenArc) -> None:
-    for _, mark in arc.marks:
-        if mark.tag in ("slur", "tied"):
-            mark.set(UNSURE, "1")
-
-
-def _pitch_of(notes: list[XmlNote], arc: PictureArc | WrittenArc) -> tuple[str, int, int] | None:
-    """Two ties at the same place on different pitches are a chord's two ties."""
-    index = arc.start if arc.start is not None else arc.stop
-    return None if index is None else notes[index].pitch
-
-
-def _is_tie(arc: WrittenArc, notes: list[XmlNote]) -> bool:
-    return (
-        arc.start is not None
-        and arc.stop is not None
-        and _tied(notes[arc.start], notes[arc.stop], notes)
-    )
-
-
-def _remove(arc: WrittenArc) -> None:
-    for note, mark in arc.marks:
-        for parent in note.iter():
-            if mark in list(parent):
-                parent.remove(mark)
-                break
-        if mark.tag == "tied":
-            for tie in note.findall("tie"):
-                if tie.get("type") == mark.get("type"):
-                    note.remove(tie)
-                    break
-        notations = note.find("notations")
-        if notations is not None and len(notations) == 0:
-            note.remove(notations)
-
-
-def _notations(note: ET.Element) -> ET.Element:
-    notations = note.find("notations")
-    if notations is None:
-        notations = ET.SubElement(note, "notations")
-    return notations
-
-
-_BEFORE_TIE = ("grace", "chord", "pitch", "unpitched", "rest", "duration")
-
-
-def _write(arc: PictureArc, notes: list[XmlNote], label: str) -> None:
-    for index, what in ((arc.start, "start"), (arc.stop, "stop")):
-        if index is None:
-            continue
-        note = notes[index].element
-        if arc.kind == "tie":
-            children = list(note)
-            at = 0
-            for i, child in enumerate(children):
-                if child.tag in _BEFORE_TIE or child.tag == "tie":
-                    at = i + 1
-            note.insert(at, ET.Element("tie", type=what))
-            mark = ET.SubElement(_notations(note), "tied", type=what)
-        else:
-            mark = ET.SubElement(_notations(note), "slur", type=what, number=label)
-            mark.set("placement", "above" if arc.over else "below")
-        if arc.unsure:
-            mark.set(UNSURE, "1")
-
-
-def _number_slurs(notes: list[XmlNote]) -> None:
-    """Give every slur of a part a number no other slur open at the same time has,
-    so a reader pairs each start with its own stop."""
-    by_part: dict[int, list[XmlNote]] = defaultdict(list)
-    for note in notes:
-        by_part[note.part].append(note)
-    for part_notes in by_part.values():
-        written = read_written_for_numbering(part_notes)
-        busy: list[tuple[tuple, tuple, int]] = []
-        for start, stop, marks in written:
-            used = {n for s, e, n in busy if not (e < start or stop < s)}
-            number = next(n for n in range(1, 64) if n not in used)
-            busy.append((start, stop, number))
-            for mark in marks:
-                mark.set("number", str(number))
-
-
-def read_written_for_numbering(notes: list[XmlNote]) -> list[tuple[tuple, tuple, list[ET.Element]]]:
-    """Slurs in time order as (start, stop, marks). A slur this module wrote pairs
-    with the next stop it wrote on the same staff; homr's pair by their number."""
-    result = []
-    pending: dict[tuple, list[tuple[tuple, ET.Element]]] = defaultdict(list)
-    order = sorted(range(len(notes)), key=lambda i: (notes[i].bar, notes[i].onset))
-    first = (-1, Fraction(0))
-    last = (10**6, Fraction(0))
-    for i in order:
-        note = notes[i]
-        place = (note.bar, note.onset)
-        slurs = sorted(note.element.iter("slur"), key=lambda s: s.get("type") != "stop")
-        for slur in slurs:
-            key = (note.staff, slur.get("number", "1"))
-            if slur.get("type") == "start":
-                pending[key].append((place, slur))
-            elif slur.get("type") == "stop":
-                if pending[key]:
-                    start, mark = pending[key].pop(0)
-                    result.append((start, place, [mark, slur]))
-                else:
-                    result.append((first, place, [slur]))
-    for waiting in pending.values():
-        for start, mark in waiting:
-            result.append((start, last, [mark]))
-    result.sort(key=lambda r: r[0])
-    return result
+def _flag(note: ET.Element, kind: str) -> None:
+    # a tie flag never hides a slur flag on the same note: both are words of the mark
+    kinds = set(filter(None, (note.get(ARC_DOUBT) or "").split(","))) | {kind}
+    note.set(ARC_DOUBT, ",".join(sorted(kinds)))
 
 
 # ----------------------------------------------------------------------------
@@ -1171,17 +938,17 @@ def invert(
     return back
 
 
-def correct(
+def mark_arcs(
     xml: ET.Element,
     predictions: InputPredictions,
     staffs: list[Staff],
     page_to_input: Callable[[tuple[float, float]], tuple[float, float]],
 ) -> Outcome | None:
-    """Make the slurs and ties in ``xml`` the ones printed on the page.
+    """Flag every slur and tie on the page that ``xml`` does not match.
 
     ``staffs`` are the printed staffs as detected, before grand staffs are joined.
-    Returns None, changing nothing, when the written staffs and the detected ones
-    do not line up: an arc hung on the wrong staff is worse than one left alone."""
+    Returns None, flagging nothing, when the written staffs and the detected ones
+    do not line up: a mark on the wrong staff sends a person to the wrong place."""
     printed = sorted(staffs, key=lambda s: float(np.mean([np.mean(p.y) for p in s.grid])))
     geometry = [staff_geometry(s) for s in printed]
     if any(len(g.lines[0]) != 5 for g in geometry):  # noqa: PLR2004
@@ -1215,11 +982,10 @@ def correct(
             if w.kind == "tie" and w.start is not None and w.stop is not None
         ],
     )
-    return apply(notes, arcs, curves, where, geometry, unplaced)
+    return mark(notes, arcs, unplaced)
 
 
 def forget(xml: ET.Element) -> None:
     """Take the working marks off: they are for --mark-doubt, not for the file."""
     for element in xml.iter():
-        element.attrib.pop(UNSURE, None)
-        element.attrib.pop(UNPLACED, None)
+        element.attrib.pop(ARC_DOUBT, None)

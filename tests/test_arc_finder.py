@@ -5,13 +5,12 @@ of `find_curves` is tested on the shape it is about; the comparison with what
 homr wrote is tested on small MusicXML documents."""
 
 import xml.etree.ElementTree as ET
-from fractions import Fraction
 
 import cv2
 import numpy as np
 
 from homr import arc_finder as A
-from homr.doubt import TIE_PICTURE, mark_words, picture_arc_doubts
+from homr.doubt import mark_words, picture_arc_doubts
 
 UNIT = 10.0
 TOP = 100
@@ -121,154 +120,111 @@ def _score(notes: str) -> ET.Element:
     )
 
 
-def _note(step: str, *marks: str, voice: str = "1", chord: bool = False) -> str:
+def _note(step: str, *marks: str, voice: str = "1", backup: bool = False) -> str:
+    back = "<backup><duration>2</duration></backup>" if backup else ""
     return (
-        f"<note>{'<chord/>' if chord else ''}<pitch><step>{step}</step><octave>4</octave>"
+        f"{back}<note><pitch><step>{step}</step><octave>4</octave>"
         f"</pitch><duration>1</duration><voice>{voice}</voice><staff>1</staff>"
         f"<notations>{''.join(marks)}</notations></note>"
     )
 
 
-def _arcs(xml: ET.Element) -> list[tuple[str, int | None, int | None]]:
-    notes = A.read_notes(xml)
-    return sorted((w.kind, w.start, w.stop) for w in A.read_written(notes))
+SLUR_START = "<slur type='start' number='1'/>"
+SLUR_STOP = "<slur type='stop' number='1'/>"
 
 
-def _apply(xml: ET.Element, picture: list[A.PictureArc], curves: list[A.Curve]) -> A.Outcome:
-    notes = A.read_notes(xml)
-    where = {i: (100.0 + 100 * i, 120.0) for i in range(len(notes))}
-    return A.apply(notes, picture, curves, where, [_staff()], cautious=False, marks_only=False)
+def _mark(
+    xml: ET.Element, picture: list[A.PictureArc], unplaced: list[int] | None = None
+) -> A.Outcome:
+    return A.mark(A.read_notes(xml), picture, unplaced or [])
 
 
-def _curve(x0: float, x1: float) -> A.Curve:
-    xs = np.linspace(x0, x1, 20)
-    return A.Curve(xs, 100 - 10 * np.sin(np.linspace(0, np.pi, 20)), over=True)
+def _words(xml: ET.Element) -> list[str]:
+    doubts = picture_arc_doubts(xml)
+    return sorted(word for reasons in doubts.values() for word in mark_words(reasons))
 
 
-def test_a_tie_on_the_page_that_homr_did_not_write_is_added() -> None:
+def test_a_tie_homr_missed_is_marked_tie_and_no_arc_is_written() -> None:
     xml = _score(_note("C") + _note("C"))
-    outcome = _apply(xml, [A.PictureArc("tie", 0, 1, 0, over=False)], [_curve(110, 190)])
-    assert outcome.added == 1
-    assert _arcs(xml) == [("tie", 0, 1)]
-    assert [t.get("type") for t in xml.iter("tie")] == ["start", "stop"]
+    before = ET.tostring(xml)
+    outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False)])
+    assert (outcome.agreed, outcome.marked) == (0, 1)
+    assert _words(xml) == ["tie?"]
+    assert xml.find(".//tied") is None
+    A.forget(xml)
+    assert ET.tostring(xml) == before
 
 
-def test_homr_s_arc_on_the_same_notes_is_kept_as_it_is() -> None:
+def test_an_arc_homr_wrote_on_the_same_notes_is_not_marked() -> None:
+    xml = _score(_note("C", SLUR_START) + _note("D", SLUR_STOP))
+    outcome = _mark(xml, [A.PictureArc("slur", 0, 1, 0, over=True)])
+    assert (outcome.agreed, outcome.marked) == (1, 0)
+    assert _words(xml) == []
+
+
+def test_a_slur_homr_hung_on_the_other_voice_is_marked_and_left_as_it_is() -> None:
     xml = _score(
-        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
-    )
-    outcome = _apply(xml, [A.PictureArc("slur", 0, 1, 0, over=True)], [_curve(110, 190)])
-    assert (outcome.kept, outcome.added) == (1, 0)
-    assert _arcs(xml) == [("slur", 0, 1)]
-
-
-def test_a_slur_homr_hung_on_the_other_voice_moves_to_the_page_s_voice() -> None:
-    xml = _score(
-        _note("E", "<slur type='start' number='1'/>")
-        + _note("C", voice="2", chord=False)
-        + _note("F", "<slur type='stop' number='1'/>")
+        _note("E", SLUR_START)
+        + _note("F", SLUR_STOP)
+        + _note("C", voice="2", backup=True)
         + _note("D", voice="2")
     )
-    notes = A.read_notes(xml)
-    for i, onset in enumerate([0, 0, 1, 1]):
-        notes[i].onset = Fraction(onset)
-    where = {i: (100.0 + 100 * (i // 2), 120.0) for i in range(len(notes))}
-    outcome = A.apply(
-        notes,
-        [A.PictureArc("slur", 1, 3, 0, over=False)],
-        [_curve(110, 190)],
-        where,
-        [_staff()],
-        cautious=False,
-        marks_only=False,
-    )
-    assert (outcome.moved, outcome.added) == (1, 1)
-    assert _arcs(xml) == [("slur", 1, 3)]
-
-
-def test_an_arc_with_no_curve_anywhere_near_it_is_taken_out() -> None:
-    xml = _score(
-        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
-    )
-    outcome = _apply(xml, [], [])
-    assert outcome.removed == 1
-    assert _arcs(xml) == []
-    assert xml.find(".//notations") is None
-
-
-def test_an_arc_the_picture_could_not_place_is_never_taken_out() -> None:
-    xml = _score(
-        _note("C", "<slur type='start' number='1'/>") + _note("D", "<slur type='stop' number='1'/>")
-    )
-    outcome = _apply(xml, [], [_curve(90, 210)])
-    assert outcome.kept == 1
-    assert _arcs(xml) == [("slur", 0, 1)]
-
-
-def test_nested_slurs_get_numbers_of_their_own() -> None:
-    xml = _score(_note("C") + _note("D") + _note("E") + _note("F"))
-    _apply(
-        xml,
-        [A.PictureArc("slur", 0, 3, 0, over=True), A.PictureArc("slur", 1, 2, 0, over=True)],
-        [_curve(90, 410), _curve(190, 310)],
-    )
-    numbers = {s.get("number") for s in xml.iter("slur")}
-    assert len(numbers) == 2  # noqa: PLR2004
-    assert _arcs(xml) == [("slur", 0, 3), ("slur", 1, 2)]
-
-
-def test_a_tie_the_picture_was_unsure_of_is_marked_tie() -> None:
-    xml = _score(_note("C") + _note("C"))
-    _apply(xml, [A.PictureArc("tie", 0, 1, 0, over=False, unsure=True)], [_curve(110, 190)])
-    doubts = picture_arc_doubts(xml)
-    assert doubts == {(0, 1, 1): {TIE_PICTURE}}
-    assert mark_words(doubts[(0, 1, 1)]) == ["tie?"]
+    before = ET.tostring(xml)
+    outcome = _mark(xml, [A.PictureArc("slur", 2, 3, 0, over=False)])
+    assert outcome.marked == 1
+    assert _words(xml) == ["slur?"]
     A.forget(xml)
-    assert not any(A.UNSURE in e.attrib for e in xml.iter())
+    assert ET.tostring(xml) == before
 
 
-def test_a_curve_nothing_could_be_hung_on_marks_the_note_beside_it() -> None:
+def test_homr_s_tie_to_its_own_chord_note_beats_the_picture_s_choice_of_note() -> None:
+    xml = _score(
+        _note("C", "<tied type='start'/>")
+        + "<note><chord/><pitch><step>A</step><octave>3</octave></pitch><duration>1</duration>"
+        "<voice>1</voice><staff>1</staff></note>" + _note("C", "<tied type='stop'/>")
+    )
+    outcome = _mark(xml, [A.PictureArc("slur", 1, 2, 0, over=True)])
+    assert (outcome.agreed, outcome.marked) == (1, 0)
+
+
+def test_a_curve_nothing_could_be_hung_on_marks_the_note_beside_it_slur() -> None:
     xml = _score(_note("C") + _note("D"))
-    notes = A.read_notes(xml)
-    A.apply(notes, [], [], {0: (100.0, 120.0), 1: (200.0, 120.0)}, [_staff()], unplaced=[1])
-    assert mark_words(picture_arc_doubts(xml)[(0, 1, 1)]) == ["slur?"]
+    _mark(xml, [], unplaced=[1])
+    assert _words(xml) == ["slur?"]
+
+
+def test_a_note_flagged_for_both_kinds_says_both() -> None:
+    xml = _score(_note("C") + _note("C") + _note("D"))
+    _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False), A.PictureArc("slur", 0, 2, 0, over=True)])
+    assert _words(xml) == ["slur?", "tie?"]
+
+
+def test_two_voices_slurs_sharing_a_number_are_left_exactly_as_written() -> None:
+    xml = _score(
+        _note("E", SLUR_START)
+        + _note("F", SLUR_STOP)
+        + _note("C", SLUR_START, voice="2", backup=True)
+        + _note("D", SLUR_STOP, voice="2")
+    )
+    before = ET.tostring(xml)
+    _mark(
+        xml, [A.PictureArc("slur", 0, 1, 0, over=True), A.PictureArc("slur", 2, 3, 0, over=False)]
+    )
+    A.forget(xml)
+    assert ET.tostring(xml) == before
+
+
+def test_a_failure_while_marking_never_costs_the_page(monkeypatch: object) -> None:
+    from homr import main
+
+    def broken(*_: object) -> None:
+        raise ValueError("boom")
+
+    monkeypatch.setattr(main, "mark_arcs", broken)  # type: ignore[attr-defined]
+    main._mark_arcs(_score(_note("C")), None, [], lambda p: p)  # type: ignore[arg-type]
 
 
 def test_a_slur_drawn_over_tied_notes_ends_on_the_last_of_them() -> None:
     arcs = [A.PictureArc("slur", 0, 2, 0, over=True)]
     A.extend_over_ties(arcs, [(2, 3), (3, 4)])
     assert arcs[0].stop == 4  # noqa: PLR2004
-
-
-def test_by_default_no_arc_is_changed_and_the_page_s_arc_is_marked() -> None:
-    xml = _score(
-        _note("C", "<slur type='start' number='1'/>")
-        + _note("D", "<slur type='stop' number='1'/>")
-        + _note("E")
-        + _note("E")
-    )
-    before = ET.tostring(xml)
-    notes = A.read_notes(xml)
-    where = {i: (100.0 + 100 * i, 120.0) for i in range(len(notes))}
-    outcome = A.apply(notes, [A.PictureArc("tie", 2, 3, 0, over=False)], [], where, [_staff()])
-    assert outcome.added == 0 and outcome.removed == 0 and outcome.moved == 0
-    assert mark_words(picture_arc_doubts(xml)[(0, 1, 1)]) == ["slur?"]
-    A.forget(xml)
-    assert ET.tostring(xml) == before
-
-
-def test_by_default_homr_s_arc_on_another_voice_stays_and_is_marked() -> None:
-    xml = _score(
-        _note("E", "<slur type='start' number='1'/>")
-        + _note("C", voice="2")
-        + _note("F", "<slur type='stop' number='1'/>")
-        + _note("D", voice="2")
-    )
-    notes = A.read_notes(xml)
-    for i, onset in enumerate([0, 0, 1, 1]):
-        notes[i].onset = Fraction(onset)
-    where = {i: (100.0 + 100 * (i // 2), 120.0) for i in range(len(notes))}
-    outcome = A.apply(notes, [A.PictureArc("slur", 1, 3, 0, over=False)], [], where, [_staff()])
-    assert outcome.moved == 0
-    assert _arcs(xml) == [("slur", 0, 2)]
-    assert picture_arc_doubts(xml)

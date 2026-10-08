@@ -38,7 +38,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from fractions import Fraction
 
-from homr.arc_finder import UNPLACED, UNSURE
+from homr.arc_finder import ARC_DOUBT
 from homr.slur_resolution import INFERRED
 from homr.transformer.vocabulary import EncodedSymbol
 
@@ -458,9 +458,10 @@ def _picture_arc_notes(xml: ET.Element) -> dict[tuple[int, int, int], dict[str, 
         for bar, measure in enumerate(part.findall("measure"), 1):
             for note in measure.findall("note"):
                 key = (part_index, int(note.findtext("staff", "1")), bar)
-                if any(slur.get(UNSURE) for slur in note.iter("slur")) or note.get(UNPLACED):
+                kinds = (note.get(ARC_DOUBT) or "").split(",")
+                if "slur" in kinds:
                     found[key][SLUR_PICTURE].append(note)
-                if any(tied.get(UNSURE) for tied in note.iter("tied")):
+                if "tie" in kinds:
                     found[key][TIE_PICTURE].append(note)
     return found
 
