@@ -110,6 +110,65 @@ def test_a_fermata_is_not_an_arc() -> None:
     assert _find(gray, heads) == []
 
 
+def test_a_short_deep_arc_with_no_dot_is_an_arc() -> None:
+    # a tie arriving from the line before, where it meets the system's first note
+    gray, heads = _page()
+    _arc(gray, 140, 160, TOP - 8, 9, over=True)  # the fermata below, without its dot
+    assert len(_find(gray, heads)) == 1
+
+
+def test_a_slur_and_a_tie_drawn_one_inside_the_other_and_touching_are_two_curves() -> None:
+    gray, heads = _page()
+    # both arrive at the note at the right, where they meet
+    t = np.linspace(0, 1, 31)
+    for depth, start in ((5, 0), (11, 8)):
+        ys = TOP + 65 + depth * 4 * t * (1 - t) + start * (1 - t)
+        points = np.stack([130 + 30 * t, ys], axis=1).astype(np.int32)
+        cv2.polylines(gray, [points], False, 0, 2)
+    curves = _find(gray, heads)
+    assert len(curves) == 2  # noqa: PLR2004
+    assert not any(c.over for c in curves)
+
+
+def test_an_arc_grazing_a_staff_line_keeps_its_top() -> None:
+    gray, heads = _page()
+    bottom = TOP + 40
+    _arc(gray, 140, 200, bottom + 9, 9, over=True)  # its apex on the bottom line
+    curves = _find(gray, heads)
+    assert len(curves) == 1
+    assert curves[0].width > 50  # noqa: PLR2004
+
+
+def test_a_tie_lying_along_a_staff_line_is_found() -> None:
+    gray, heads = _page()
+    gray[TOP + 41, 20 : WIDTH - 20] = 0  # a scanned line is two pixels thick
+    _arc(gray, 120, 190, TOP + 30, 10, over=False)  # its low middle on that line
+    curves = _find(gray, heads)
+    assert len(curves) == 1
+    assert curves[0].width > 60  # noqa: PLR2004
+
+
+def test_a_curve_the_network_calls_a_clef_is_not_an_arc() -> None:
+    gray, heads = _page()
+    _arc(gray, 30, 70, TOP + 52, 6, over=False)
+    clefs = np.zeros_like(heads)
+    clefs[TOP + 40 : TOP + 65, 25:75] = 1
+    empty = np.zeros_like(heads)
+    assert A.find_curves(gray, heads, empty, clefs, empty, [_staff()]) == []
+
+
+def test_a_speck_the_network_called_a_notehead_does_not_cut_an_arc_in_two() -> None:
+    gray, heads = _page()
+    _head(gray, heads, 150, TOP + 15)
+    _arc(gray, 155, 300, TOP - 8, 14, over=True)
+    heads[TOP - 25 : TOP - 18, 224:232] = 1  # on the arc, where no head was found
+    empty = np.zeros_like(heads)
+    found = [A.Head(150, TOP + 15, 12, 8, 0, 4)]
+    curves = A.find_curves(gray, heads, empty, empty, empty, [_staff()], heads=found)
+    assert len(curves) == 1
+    assert curves[0].width > 130  # noqa: PLR2004
+
+
 # --- what homr wrote against what the page shows ---------------------------------
 
 
@@ -185,6 +244,18 @@ def test_homr_s_tie_to_its_own_chord_note_beats_the_picture_s_choice_of_note() -
     )
     outcome = _mark(xml, [A.PictureArc("slur", 1, 2, 0, over=True)])
     assert (outcome.agreed, outcome.marked) == (1, 0)
+
+
+def test_a_second_arc_arriving_at_a_note_is_marked_though_homr_wrote_one() -> None:
+    # a slur and a tie both arrive from the line before; homr wrote the slur
+    xml = _score(_note("C", SLUR_STOP) + _note("D"))
+    arriving = [
+        A.PictureArc("slur", None, 0, 0, over=True),
+        A.PictureArc("slur", None, 0, 0, over=False),
+    ]
+    outcome = _mark(xml, arriving)
+    assert (outcome.agreed, outcome.marked) == (1, 1)
+    assert _words(xml) == ["slur?"]
 
 
 def test_a_curve_nothing_could_be_hung_on_marks_the_note_beside_it_slur() -> None:
