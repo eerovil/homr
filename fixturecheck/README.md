@@ -113,6 +113,26 @@ kind ([musescore-choir-plugins#319](https://github.com/eerovil/musescore-choir-p
 `volta N start` where a bracket opens and `volta N end` where it closes. Whether the
 far end is hooked (`stop`) or open (`discontinue`) is a drawing, so either is an end.
 
+## Slurs and ties, against their own answer key
+
+The references' slurs and ties came from homr and nobody checked them, so arcs are
+not compared against the reference. They have a key of their own,
+`homr-fixtures/slurs.json` in the private songs repository: every slur and tie the
+page prints on the cases it lists, each checked by the owner arc by arc against the
+page (eerovil/musescore-choir-plugins#318). It starts small on purpose: nine systems,
+four of them printing no arc at all, which is what catches an invented one. An arc
+is its kind, its staff, its voice and the bar and onset of each end, and a tie its
+pitch; an end that runs over the system edge is `null`. The voice is compared by its
+rank on the staff, the way the note score ranks voices, since the reference and homr
+number them differently; a slur read on the wrong voice is missed and invented. `fixturecheck/slurs.py` counts slurs
+and ties apart -- found, missed, invented -- and how many of the page's arc ends at
+a system edge homr kept. At the edge the kind is not asked: homr makes a pair into a
+tie only once it sees both ends, and over a line break it sees one.
+
+The run line and the run record carry them (`slurs` in `series.jsonl`). **They stay
+out of the note score and the gate**: every percentage here is quoted against a
+history that never counted arcs. A case the key does not list is not judged.
+
 ## When the two disagree about the staves
 
 Every note is matched on its staff, so if the reference and the parse hold a

@@ -52,6 +52,7 @@ from homr.resize import resize_image
 from homr.score_reconstruction import ReconstructionChange
 from homr.segmentation.config import segnet_path_onnx, segnet_path_onnx_fp16
 from homr.simple_logging import eprint
+from homr.slur_resolution import forget_inferred
 from homr.staff_detection import break_wide_fragments, detect_staff, make_lines_stronger
 from homr.staff_parsing import parse_staffs
 from homr.staff_position_save_load import load_staff_positions, save_staff_positions
@@ -284,6 +285,7 @@ def process_image(
             result_staffs,
             title,
             reconstruction_changes=reconstruction_changes,
+            keep_inferred=config.mark_doubt and not config.read_staff_positions,
         )
         if config.mark_doubt and config.read_staff_positions:
             eprint("--mark-doubt needs a second reading of the image; skipped with staff positions")
@@ -295,6 +297,7 @@ def process_image(
             again = second_readings(xml, second, doubts)
             spots, words = find_spots(result_staffs, xml, second, doubts)
             marked = mark_doubts(xml, doubts, spots, words)
+            forget_inferred(xml)
             embed_readings(xml, readings, notes, again)
             eprint(f"Marked {marked} bar(s) to check against the page")
             eprint(f"Offered other readings for {len(readings)} voice(s) of those bars")

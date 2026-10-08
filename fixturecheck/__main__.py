@@ -53,7 +53,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fixturecheck import cases, pod, quality, references, report, series  # noqa: E402
+from fixturecheck import cases, pod, quality, references, report, series, slurs  # noqa: E402
 from fixturecheck.compare import compare_output  # noqa: E402
 
 PARSES = cases.CACHE / "parses"
@@ -190,6 +190,8 @@ def run_cases(names: list[str], tier: str) -> int:
     entries: list[dict] = []
     records: list[series.CaseRecord] = []
     built: list = []
+    key = slurs.answer_key()
+    slur_results: dict[str, slurs.SlurResult] = {}
 
     for name in names:
         found = cases.resolve([name])
@@ -206,6 +208,9 @@ def run_cases(names: list[str], tier: str) -> int:
             continue
 
         result = compare_output(case.reference, parsed, case.name)
+        slur = slurs.judge(case.name, parsed, case.reference, key)
+        if slur is not None:
+            slur_results[case.name] = slur
         before = standing.get(case.name)
         page = report.case_page(case, parsed, result, before, memory.get(case.name))
         entries.append({"name": case.name, "page": page, "score": result.score,
@@ -253,9 +258,15 @@ def run_cases(names: list[str], tier: str) -> int:
         # the part that is missing, not the note. See `Result.warnings`.
         warned = (f", {result.warnings} unison(s) written as one voice"
                   if result.warnings else "")
+        # Arcs are said beside the notes and never folded into them: see
+        # `fixturecheck/slurs.py`.
+        slurred = (f", slurs {slur.slur.found}/{slur.slur.found + slur.slur.missed} "
+                   f"+{slur.slur.invented}, ties {slur.tie.found}/"
+                   f"{slur.tie.found + slur.tie.missed} +{slur.tie.invented}"
+                   if slur is not None else "")
         print(f"  {case.name}: {result.agree} agree, {result.voice} voice, "
               f"{result.pitch} pitch, {result.size} count, "
-              f"{result.timing} beat{meter}{warned}{staves}{moved}")
+              f"{result.timing} beat{meter}{warned}{staves}{slurred}{moved}")
 
     moved = references.drift(built)
     # Judged before anything is written back, and against the memory this run
@@ -270,6 +281,9 @@ def run_cases(names: list[str], tier: str) -> int:
     extra = {"committed": sorted(committed)}
     if moved["changed"]:
         extra["reference_drift"] = moved
+    if slur_results:
+        extra["slurs"] = {"total": slurs.total(list(slur_results.values())),
+                          "cases": {name: r.to_json() for name, r in slur_results.items()}}
     run = series.record_run("fixturecheck", tier, records,
                             references=references.stamp(built), gate=gate,
                             extra=extra, homr=shown)
@@ -282,6 +296,12 @@ def run_cases(names: list[str], tier: str) -> int:
     head = run["headline"]
     print(f"\n{head['percent']:.1f}% of {head['judged']} judged are right "
           f"(homr {run['homr']}, references {run['references']})")
+    if slur_results:
+        t = slurs.total(list(slur_results.values()))
+        said = "; ".join(f"{kind}s {t[kind]['found']} of {t[kind]['found'] + t[kind]['missed']} "
+                         f"found, {t[kind]['invented']} invented" for kind in slurs.KINDS)
+        print(f"arcs: {said}; ends at a system edge {t['edge_found']} of {t['edge']} "
+              f"({len(slur_results)} case(s) in the key {slurs.KEY})")
     lost = (run["outcomes"].get(series.UNREADABLE, 0)
             + run["outcomes"].get(series.UNBUILDABLE, 0))
     if lost:
