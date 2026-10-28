@@ -617,7 +617,6 @@ def download_weights(
     coreml_encoder: bool,
     include_transformer: bool = True,
 ) -> None:
-    base_url = "https://github.com/liebharc/homr/releases/download/onnx_checkpoints/"
     models = [segnet_path_onnx_fp16 if segnet_use_gpu else segnet_path_onnx]
     if include_transformer:
         if transformer_use_gpu:
@@ -633,27 +632,7 @@ def download_weights(
             else:
                 models.append(default_config.filepaths.encoder_path)
             models.append(default_config.filepaths.decoder_path)
-    missing_models = [model for model in models if not os.path.exists(model)]
-
-    if len(missing_models) == 0:
-        return
-
-    eprint("Downloading", len(missing_models), "models - this is only required once")
-    for model in missing_models:
-        if not os.path.exists(model):
-            base_name = os.path.basename(model).split(".")[0]
-            eprint(f"Downloading {base_name}")
-            try:
-                zip_name = base_name + ".zip"
-                download_url = base_url + zip_name
-                downloaded_zip = os.path.join(os.path.dirname(model), zip_name)
-                download_utils.download_file(download_url, downloaded_zip)
-
-                destination_dir = os.path.dirname(model)
-                download_utils.unzip_file(downloaded_zip, destination_dir)
-            finally:
-                if os.path.exists(downloaded_zip):
-                    os.remove(downloaded_zip)
+    download_utils.download_models(models)
 
 
 def run_homr(

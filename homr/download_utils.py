@@ -6,6 +6,29 @@ import requests
 
 from homr.simple_logging import eprint
 
+MODELS_URL = "https://github.com/liebharc/homr/releases/download/onnx_checkpoints/"
+
+
+def download_models(models: list[str]) -> None:
+    """Download the ONNX models in the list that are not on disk yet."""
+    missing_models = [model for model in models if not os.path.exists(model)]
+
+    if len(missing_models) == 0:
+        return
+
+    eprint("Downloading", len(missing_models), "models - this is only required once")
+    for model in missing_models:
+        base_name = os.path.basename(model).split(".")[0]
+        eprint(f"Downloading {base_name}")
+        zip_name = base_name + ".zip"
+        downloaded_zip = os.path.join(os.path.dirname(model), zip_name)
+        try:
+            download_file(MODELS_URL + zip_name, downloaded_zip)
+            unzip_file(downloaded_zip, os.path.dirname(model))
+        finally:
+            if os.path.exists(downloaded_zip):
+                os.remove(downloaded_zip)
+
 
 def download_file(url: str, filename: str) -> None:
     max_tries = 3
