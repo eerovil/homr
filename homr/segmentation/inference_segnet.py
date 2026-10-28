@@ -5,11 +5,13 @@ import os
 from pathlib import Path
 from threading import Lock
 from time import perf_counter
+from typing import Any
 
 import cv2
 import numpy as np
 import onnxruntime as ort
 
+from homr import download_utils
 from homr.onnx_providers import (
     coreml_available,
     coreml_mlprogram_providers,
@@ -30,6 +32,8 @@ from homr.type_definitions import NDArray
 class Segnet:
     def __init__(self, use_gpu_inference: bool) -> None:
         self.use_gpu = False
+        # The CUDA/ROCm providers of a GPU session, kept to reload it in fp32.
+        self.providers: list[Any] | None = None
         if use_gpu_inference and (cuda_available() or rocm_available()):
             try:
                 # I had this issue: https://github.com/microsoft/onnxruntime/issues/21684
@@ -40,6 +44,7 @@ class Segnet:
                 providers, _ = gpu_providers()
                 self.model = ort.InferenceSession(segnet_path_onnx_fp16, providers=providers)
                 self.fp16 = True
+                self.providers = providers
                 # Segnet always binds its output on the CPU, so use_gpu only needs to track
                 # that a GPU provider is active (used for logging/diagnostics).
                 self.use_gpu = True
@@ -99,7 +104,20 @@ class Segnet:
         self.io_binding.bind_output("output", "cpu")
         self.model.run_with_iobinding(self.io_binding)
         out = self.io_binding.get_outputs()[0].numpy()
+        if self.fp16 and self.providers and np.isnan(out).any():
+            self._use_fp32_on_gpu()
+            return self.run(input_data)
         return out
+
+    def _use_fp32_on_gpu(self) -> None:
+        """Some cards (GTX 16xx) give only NaN for the fp16 model on CUDA, while
+        the fp32 model on the same card matches the CPU. Switch for the rest of
+        this session's life, so later pages go straight to fp32."""
+        eprint("The GPU gave NaN with the fp16 segmentation model, using the fp32 model")
+        download_utils.download_models([segnet_path_onnx])
+        self.model = ort.InferenceSession(segnet_path_onnx, providers=self.providers)
+        self.fp16 = False
+        self.io_binding = self.model.io_binding()
 
 
 class ExtractResult:
