@@ -354,3 +354,27 @@ def test_the_picture_arc_carries_the_curve_s_dashes() -> None:
     for dashed in (False, True):
         arcs = A.attach([A.Curve(xs, ys, over=False, dashed=dashed)], notes, where, [_staff()])
         assert [a.dashed for a in arcs] == [dashed]
+
+
+def test_a_dashed_tie_on_a_head_two_voices_share_is_dashed_in_both_voices() -> None:
+    xml = _score(
+        _note("C", "<tied type='start'/>")
+        + _note("C", "<tied type='stop'/>")
+        + _note("C", "<tied type='start'/>", voice="2", backup=True)
+        + _note("C", "<tied type='stop'/>", voice="2")
+    )
+    outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False, dashed=True)])
+    assert (outcome.agreed, outcome.dashed) == (1, 1)
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed"] * 4
+
+
+def test_a_stroke_of_a_solid_curve_is_not_taken_for_a_dash() -> None:
+    unit = 10.0
+    xs = np.arange(0.0, 200.0)
+    ys = 100 - 15 * np.sin(np.linspace(0, np.pi, len(xs)))
+    dashes = [
+        A._Stroke(0, 0, xs[i : i + 6], ys[i : i + 6], 1.0, 0.0, 1.0) for i in range(0, 194, 12)
+    ]
+    settings = A.CurveFinderSettings()
+    assert len(A._dashed_curves(dashes, unit, settings, [])) == 1
+    assert A._dashed_curves(dashes, unit, settings, [A.Curve(xs, ys, over=True)]) == []

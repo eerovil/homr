@@ -24,7 +24,8 @@ themselves and points a person at every arc homr got wrong:
 - ``attach`` hangs each end of a curve on a notehead the detector found, and each
   notehead on the notes homr wrote for it.
 - ``mark`` compares those arcs with what homr wrote, one written arc for one
-  curve, and **changes no arc**: every
+  curve, and **adds, moves or removes no arc** (it only writes ``line-type="dashed"``
+  on an arc homr wrote that the page draws dashed): every
   place the page shows a slur or tie that homr wrote differently or not at all
   gets a flag, which ``--mark-doubt`` turns into a red ``⚠ slur?`` or ``⚠ tie?``.
   Writing the picture's arcs instead was measured on the owner-checked key and
@@ -552,11 +553,16 @@ def _solid_curves(
 def _dashed_curves(
     strokes: list[_Stroke], unit: float, settings: CurveFinderSettings, solid: list[Curve]
 ) -> list[Curve]:
-    """Chain short dashes lying along one smooth line into a curve."""
+    """Chain short dashes lying along one smooth line into a curve.
+
+    A stroke that already lies on a solid curve is not a dash: a short solid arc
+    must not be found a second time as a dashed one."""
     dashes = [
         s
         for s in strokes
-        if (s.gx[-1] - s.gx[0]) <= 2.0 * unit and s.thickness <= max(2.5, 0.3 * unit)
+        if (s.gx[-1] - s.gx[0]) <= 2.0 * unit
+        and s.thickness <= max(2.5, 0.3 * unit)
+        and not _on_solid(s, solid)
     ]
     dashes.sort(key=lambda s: s.gx[0])
     used: set[int] = set()
@@ -758,6 +764,15 @@ def anchors(
     return out
 
 
+def _on_solid(stroke: _Stroke, solid: list[Curve]) -> bool:
+    middle = len(stroke.xs) // 2
+    x, y = stroke.gx[middle], stroke.gy[middle]
+    return any(
+        bool(np.any((np.abs(c.xs - x) <= 0.5) & (np.abs(c.ys - y) <= 1.5)))  # noqa: PLR2004
+        for c in solid
+    )
+
+
 @dataclass
 class PictureArc:
     kind: str  # "slur" or "tie"
@@ -765,7 +780,7 @@ class PictureArc:
     stop: int | None  # None = into the next system
     staff: int
     over: bool
-    dashed: bool = False  # drawn dashed: the page's mark for an arc of a later verse only
+    dashed: bool = False  # drawn dashed: the page's mark for an arc not every verse sings
 
 
 @dataclass
@@ -1025,6 +1040,20 @@ def _agrees(notes: list[XmlNote], arc: PictureArc, written: WrittenArc) -> bool:
     )
 
 
+def _twin(notes: list[XmlNote], arc: WrittenArc, other: WrittenArc) -> bool:
+    """``other`` is ``arc`` written again in the other voice of a shared head."""
+    ends = ((arc.start, other.start), (arc.stop, other.stop))
+    return (
+        other.kind == arc.kind
+        and other.staff == arc.staff
+        and all(_place(notes, a) == _place(notes, b) for a, b in ends)
+        and all(
+            a is None or notes[a].pitch == notes[b].pitch  # type: ignore[index]
+            for a, b in ends
+        )
+    )
+
+
 @dataclass
 class Outcome:
     agreed: int = 0
@@ -1033,16 +1062,16 @@ class Outcome:
 
 
 def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -> Outcome:
-    """Flag every arc on the page that homr's output does not match, changing none.
+    """Flag every arc on the page that homr's output does not match, adding or moving none.
 
     The flag goes on the arc's first note and names the picture's kind, so a tie
     homr missed is marked ``tie?``. A curve that could not be hung on notes at all
     flags the note beside it as ``slur?``.
 
     The one thing written is how an arc homr wrote is drawn: where the page draws it
-    dashed, both halves get ``line-type="dashed"``. Strophic songs print a tie or slur
-    that belongs to a later verse only dashed, and the reader then decides whether
-    verse 1 sings it (eerovil/musescore-choir-plugins#482)."""
+    dashed, both halves get ``line-type="dashed"``. A page draws an arc dashed when not
+    every verse or singer takes it (a later verse's tie, a staggered breath), and the
+    reader then decides whether the line sings it (eerovil/musescore-choir-plugins#482)."""
     outcome = Outcome()
     written = read_written(notes)
     # each arc homr wrote answers for one arc on the page: a slur and a tie both
@@ -1055,9 +1084,15 @@ def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -
             unused.remove(match)
             outcome.agreed += 1
             if arc.dashed:
-                for element in (match.start_mark, match.stop_mark):
-                    if element is not None:
-                        element.set("line-type", "dashed")
+                # a head two voices share is written once per voice: both copies
+                # are the one arc the page draws
+                twins = [w for w in unused if _twin(notes, match, w)]
+                for w in twins:
+                    unused.remove(w)
+                for w in (match, *twins):
+                    for element in (w.start_mark, w.stop_mark):
+                        if element is not None:
+                            element.set("line-type", "dashed")
                 outcome.dashed += 1
             continue
         index = arc.start if arc.start is not None else arc.stop
@@ -1176,6 +1211,9 @@ def mark_page(
 
 
 def forget(xml: ET.Element) -> None:
-    """Take the working marks off: they are for --mark-doubt, not for the file."""
+    """Take the working marks off: they are for --mark-doubt, not for the file.
+
+    ``line-type="dashed"`` is not a working mark and stays: it is how the page draws
+    the arc."""
     for element in xml.iter():
         element.attrib.pop(ARC_DOUBT, None)

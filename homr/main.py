@@ -230,7 +230,8 @@ def _mark_arcs(
 ) -> None:
     """Flag the arcs the page shows that the reading does not match (homr/arc_finder.py).
 
-    It changes no arc, so a failure in it costs the marks and never the page."""
+    It adds or moves no arc (it only writes ``line-type`` on a dashed one), so a
+    failure in it costs the marks and never the page."""
     try:
         outcome = mark_arcs(xml, predictions, staffs, to_input_image)
     except Exception as error:  # noqa: BLE001 - the page must not be lost to a mark
