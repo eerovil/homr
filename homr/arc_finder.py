@@ -1048,8 +1048,7 @@ def _twin(notes: list[XmlNote], arc: WrittenArc, other: WrittenArc) -> bool:
         and other.staff == arc.staff
         and all(_place(notes, a) == _place(notes, b) for a, b in ends)
         and all(
-            a is None or notes[a].pitch == notes[b].pitch  # type: ignore[index]
-            for a, b in ends
+            a is None or notes[a].pitch == notes[b].pitch for a, b in ends  # type: ignore[index]
         )
     )
 
