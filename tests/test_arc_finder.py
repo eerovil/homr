@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 
 import cv2
 import numpy as np
+import pytest
 
 from homr import arc_finder as A
 from homr.doubt import mark_words, picture_arc_doubts
@@ -299,3 +300,98 @@ def test_a_slur_drawn_over_tied_notes_ends_on_the_last_of_them() -> None:
     arcs = [A.PictureArc("slur", 0, 2, 0, over=True)]
     A.extend_over_ties(arcs, [(2, 3), (3, 4)])
     assert arcs[0].stop == 4  # noqa: PLR2004
+
+
+def test_a_tie_the_page_draws_dashed_is_written_dashed_on_both_halves() -> None:
+    # eerovil/musescore-choir-plugins#482: a strophic song's later-verse tie
+    xml = _score(_note("C", "<tied type='start'/>") + _note("C", "<tied type='stop'/>"))
+    outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False, dashed=True)])
+    assert (outcome.agreed, outcome.marked, outcome.dashed) == (1, 0, 1)
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed", "dashed"]
+    assert _words(xml) == []
+
+
+def test_a_slur_the_page_draws_dashed_is_written_dashed_and_a_solid_one_is_not() -> None:
+    xml = _score(
+        _note("C", SLUR_START)
+        + _note("D", SLUR_STOP)
+        + _note("E", "<tied type='start'/>")
+        + _note("E", "<tied type='stop'/>")
+    )
+    outcome = _mark(
+        xml,
+        [
+            A.PictureArc("slur", 0, 1, 0, over=True, dashed=True),
+            A.PictureArc("tie", 2, 3, 0, over=False),
+        ],
+    )
+    assert (outcome.agreed, outcome.dashed) == (2, 1)
+    assert [s.get("line-type") for s in xml.iter("slur")] == ["dashed", "dashed"]
+    assert [t.get("line-type") for t in xml.iter("tied")] == [None, None]
+
+
+def test_a_dashed_tie_into_the_next_system_is_dashed_on_the_half_written() -> None:
+    xml = _score(_note("C") + _note("C", "<tied type='start'/>"))
+    _mark(xml, [A.PictureArc("tie", 1, None, 0, over=False, dashed=True)])
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed"]
+
+
+def test_a_dashed_arc_homr_did_not_write_is_marked_and_nothing_is_written() -> None:
+    xml = _score(_note("C") + _note("C"))
+    outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False, dashed=True)])
+    assert (outcome.marked, outcome.dashed) == (1, 0)
+    assert xml.find(".//tied") is None
+
+
+def test_the_picture_arc_carries_the_curve_s_dashes() -> None:
+    gray, heads = _page()
+    _head(gray, heads, 150, TOP + 15)
+    _head(gray, heads, 250, TOP + 15)
+    xml = _score(_note("C") + _note("C"))
+    notes = A.read_notes(xml)
+    where = {0: (150.0, TOP + 15.0), 1: (250.0, TOP + 15.0)}
+    xs = np.arange(152, 249, dtype=float)
+    ys = TOP + 27 - 0.002 * (xs - 200) ** 2
+    for dashed in (False, True):
+        arcs = A.attach([A.Curve(xs, ys, over=False, dashed=dashed)], notes, where, [_staff()])
+        assert [a.dashed for a in arcs] == [dashed]
+
+
+def test_a_dashed_tie_on_a_head_two_voices_share_is_dashed_in_both_voices() -> None:
+    xml = _score(
+        _note("C", "<tied type='start'/>")
+        + _note("C", "<tied type='stop'/>")
+        + _note("C", "<tied type='start'/>", voice="2", backup=True)
+        + _note("C", "<tied type='stop'/>", voice="2")
+    )
+    outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False, dashed=True)])
+    assert (outcome.agreed, outcome.dashed) == (1, 1)
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed"] * 4
+
+
+@pytest.mark.parametrize("dashed_first", [True, False])
+def test_two_voices_with_a_tie_each_keep_how_each_is_drawn(dashed_first: bool) -> None:
+    xml = _score(
+        _note("C", "<tied type='start'/>")
+        + _note("C", "<tied type='stop'/>")
+        + _note("C", "<tied type='start'/>", voice="2", backup=True)
+        + _note("C", "<tied type='stop'/>", voice="2")
+    )
+    dashed = A.PictureArc("tie", 0, 1, 0, over=True, dashed=True)
+    solid = A.PictureArc("tie", 2, 3, 0, over=False, dashed=False)
+    outcome = _mark(xml, [dashed, solid] if dashed_first else [solid, dashed])
+    assert (outcome.agreed, outcome.marked, outcome.dashed) == (2, 0, 1)
+    assert not any(n.get(A.ARC_DOUBT) for n in xml.iter("note"))
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed", "dashed", None, None]
+
+
+def test_a_stroke_of_a_solid_curve_is_not_taken_for_a_dash() -> None:
+    unit = 10.0
+    xs = np.arange(0.0, 200.0)
+    ys = 100 - 15 * np.sin(np.linspace(0, np.pi, len(xs)))
+    dashes = [
+        A._Stroke(0, 0, xs[i : i + 6], ys[i : i + 6], 1.0, 0.0, 1.0) for i in range(0, 194, 12)
+    ]
+    settings = A.CurveFinderSettings()
+    assert len(A._dashed_curves(dashes, unit, settings, [])) == 1
+    assert A._dashed_curves(dashes, unit, settings, [A.Curve(xs, ys, over=True)]) == []
