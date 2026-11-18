@@ -765,6 +765,7 @@ class PictureArc:
     stop: int | None  # None = into the next system
     staff: int
     over: bool
+    dashed: bool = False  # drawn dashed: the page's mark for an arc of a later verse only
 
 
 @dataclass
@@ -881,7 +882,7 @@ def attach(
         kind = "slur"
         if start is not None and stop is not None and _tied(notes[start], notes[stop], notes):
             kind = "tie"
-        arcs.append(PictureArc(kind, start, stop, staff, curve.over))
+        arcs.append(PictureArc(kind, start, stop, staff, curve.over, curve.dashed))
     return arcs
 
 
@@ -970,29 +971,32 @@ class WrittenArc:
     start: int | None
     stop: int | None
     staff: int
+    # the <slur>/<tied> elements written on the two notes, None past the system's edge
+    start_mark: ET.Element | None = None
+    stop_mark: ET.Element | None = None
 
 
 def read_written(notes: list[XmlNote]) -> list[WrittenArc]:
     """The slurs and ties homr wrote, paired the way a reader of the file pairs them:
     slurs per staff and number, ties per staff and pitch, in the order written."""
     arcs: list[WrittenArc] = []
-    open_: dict[tuple, list[int]] = defaultdict(list)
+    open_: dict[tuple, list[tuple[int, ET.Element]]] = defaultdict(list)
     for i, note in enumerate(notes):
-        marks: list[tuple[str, str, str]] = []
+        marks: list[tuple[str, str, str, ET.Element]] = []
         for slur in note.element.iter("slur"):
-            marks.append(("slur", slur.get("number", "1"), slur.get("type", "")))
+            marks.append(("slur", slur.get("number", "1"), slur.get("type", ""), slur))
         for tied in note.element.iter("tied"):
-            marks.append(("tie", str(note.pitch), tied.get("type", "")))
+            marks.append(("tie", str(note.pitch), tied.get("type", ""), tied))
         marks.sort(key=lambda m: m[2] != "stop")
-        for kind, label, what in marks:
+        for kind, label, what, element in marks:
             key = (kind, note.staff, label)
             if what == "start":
-                open_[key].append(i)
+                open_[key].append((i, element))
             elif what == "stop":
-                start = open_[key].pop(0) if open_[key] else None
-                arcs.append(WrittenArc(kind, start, i, note.staff))
+                start, mark_ = open_[key].pop(0) if open_[key] else (None, None)
+                arcs.append(WrittenArc(kind, start, i, note.staff, mark_, element))
     for (kind, staff, _), waiting in open_.items():
-        arcs.extend(WrittenArc(kind, start, None, staff) for start in waiting)
+        arcs.extend(WrittenArc(kind, start, None, staff, mark_) for start, mark_ in waiting)
     return arcs
 
 
@@ -1025,6 +1029,7 @@ def _agrees(notes: list[XmlNote], arc: PictureArc, written: WrittenArc) -> bool:
 class Outcome:
     agreed: int = 0
     marked: int = 0
+    dashed: int = 0
 
 
 def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -> Outcome:
@@ -1032,7 +1037,12 @@ def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -
 
     The flag goes on the arc's first note and names the picture's kind, so a tie
     homr missed is marked ``tie?``. A curve that could not be hung on notes at all
-    flags the note beside it as ``slur?``."""
+    flags the note beside it as ``slur?``.
+
+    The one thing written is how an arc homr wrote is drawn: where the page draws it
+    dashed, both halves get ``line-type="dashed"``. Strophic songs print a tie or slur
+    that belongs to a later verse only dashed, and the reader then decides whether
+    verse 1 sings it (eerovil/musescore-choir-plugins#482)."""
     outcome = Outcome()
     written = read_written(notes)
     # each arc homr wrote answers for one arc on the page: a slur and a tie both
@@ -1044,6 +1054,11 @@ def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -
         if match is not None:
             unused.remove(match)
             outcome.agreed += 1
+            if arc.dashed:
+                for element in (match.start_mark, match.stop_mark):
+                    if element is not None:
+                        element.set("line-type", "dashed")
+                outcome.dashed += 1
             continue
         index = arc.start if arc.start is not None else arc.stop
         if index is not None:

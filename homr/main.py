@@ -239,7 +239,10 @@ def _mark_arcs(
     if outcome is None:
         eprint("Arcs from the picture were not checked: the staffs did not line up")
     else:
-        eprint(f"Arcs from the picture: {outcome.agreed} agree, {outcome.marked} marked")
+        eprint(
+            f"Arcs from the picture: {outcome.agreed} agree, {outcome.marked} marked,"
+            f" {outcome.dashed} dashed"
+        )
 
 
 def process_image(
