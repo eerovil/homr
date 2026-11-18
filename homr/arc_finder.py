@@ -1077,27 +1077,52 @@ def mark(notes: list[XmlNote], picture: list[PictureArc], unplaced: list[int]) -
     # arriving at one note are two curves, and homr writing one of them leaves the
     # other to be marked
     unused = list(written)
-    for arc in picture:
-        match = next((w for w in unused if _agrees(notes, arc, w)), None)
+    # an arc homr wrote on exactly the picture's notes is that arc's first, so a
+    # looser match (a chord's tie hung on another of its notes, or a shared head's
+    # other voice) never takes the arc another curve on the page has drawn
+    exact: dict[int, WrittenArc] = {}
+    for i, arc in enumerate(picture):
+        same = next(
+            (
+                w
+                for w in unused
+                if w.kind == arc.kind and (w.start, w.stop) == (arc.start, arc.stop)
+            ),
+            None,
+        )
+        if same is not None:
+            unused.remove(same)
+            exact[i] = same
+    matched: list[tuple[PictureArc, WrittenArc]] = []
+    for i, arc in enumerate(picture):
+        match = exact.get(i)
+        if match is None:
+            match = next((w for w in unused if _agrees(notes, arc, w)), None)
+            if match is not None:
+                unused.remove(match)
         if match is not None:
-            unused.remove(match)
             outcome.agreed += 1
-            if arc.dashed:
-                # a head two voices share is written once per voice: both copies
-                # are the one arc the page draws
-                twins = [w for w in unused if _twin(notes, match, w)]
-                for w in twins:
-                    unused.remove(w)
-                for w in (match, *twins):
-                    for element in (w.start_mark, w.stop_mark):
-                        if element is not None:
-                            element.set("line-type", "dashed")
-                outcome.dashed += 1
+            matched.append((arc, match))
             continue
         index = arc.start if arc.start is not None else arc.stop
         if index is not None:
             _flag(notes[index].element, arc.kind)
             outcome.marked += 1
+    # only once every arc on the page has its match: a head two voices share is
+    # written once per voice, and a copy no arc on the page answers for is the one
+    # arc the page draws -- while a copy that has an arc of its own (one voice's tie
+    # dashed, the other's solid) keeps how that arc is drawn
+    for arc, match in matched:
+        if not arc.dashed:
+            continue
+        twins = [w for w in unused if _twin(notes, match, w)]
+        for w in twins:
+            unused.remove(w)
+        for w in (match, *twins):
+            for element in (w.start_mark, w.stop_mark):
+                if element is not None:
+                    element.set("line-type", "dashed")
+        outcome.dashed += 1
     for index in unplaced:
         _flag(notes[index].element, "slur")
         outcome.marked += 1

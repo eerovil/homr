@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 
 import cv2
 import numpy as np
+import pytest
 
 from homr import arc_finder as A
 from homr.doubt import mark_words, picture_arc_doubts
@@ -366,6 +367,22 @@ def test_a_dashed_tie_on_a_head_two_voices_share_is_dashed_in_both_voices() -> N
     outcome = _mark(xml, [A.PictureArc("tie", 0, 1, 0, over=False, dashed=True)])
     assert (outcome.agreed, outcome.dashed) == (1, 1)
     assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed"] * 4
+
+
+@pytest.mark.parametrize("dashed_first", [True, False])
+def test_two_voices_with_a_tie_each_keep_how_each_is_drawn(dashed_first: bool) -> None:
+    xml = _score(
+        _note("C", "<tied type='start'/>")
+        + _note("C", "<tied type='stop'/>")
+        + _note("C", "<tied type='start'/>", voice="2", backup=True)
+        + _note("C", "<tied type='stop'/>", voice="2")
+    )
+    dashed = A.PictureArc("tie", 0, 1, 0, over=True, dashed=True)
+    solid = A.PictureArc("tie", 2, 3, 0, over=False, dashed=False)
+    outcome = _mark(xml, [dashed, solid] if dashed_first else [solid, dashed])
+    assert (outcome.agreed, outcome.marked, outcome.dashed) == (2, 0, 1)
+    assert not any(n.get(A.ARC_DOUBT) for n in xml.iter("note"))
+    assert [t.get("line-type") for t in xml.iter("tied")] == ["dashed", "dashed", None, None]
 
 
 def test_a_stroke_of_a_solid_curve_is_not_taken_for_a_dash() -> None:
